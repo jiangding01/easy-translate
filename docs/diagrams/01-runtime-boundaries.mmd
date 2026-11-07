@@ -1,0 +1,66 @@
+flowchart TB
+  subgraph EXT["Chrome 扩展 · Manifest V3"]
+    direction TB
+    subgraph UI["扩展页面 · 各自独立上下文"]
+      P["Popup：当前页控制"]
+      O["Options：设置 / 专家 / 术语库"]
+      L["Onboarding / Login：引导与登录回调"]
+      U["共享 UI：配置 / 鉴权 / i18n / 翻译辅助副本"]
+      P --> U
+      O --> U
+      L --> U
+    end
+    subgraph ISO["内容脚本 · ISOLATED world"]
+      H["host：网页翻译 / 还原 / 10 站点适配"]
+      I["划词 / 悬停 / 输入 / 悬浮球 / 截图分享"]
+      T["TikTok：字幕提取与文稿面板"]
+      V["YouTube：字幕时间轴 / 覆盖层 / 阅读与文章模式"]
+      C["本地翻译辅助副本：语言 / Prompt / provider 路由"]
+      H --> C
+      I --> C
+      T --> C
+    end
+    M["扩展消息：runtime / tabs + 动态 CacheService 代理"]
+    subgraph SW["后台 · Service Worker"]
+      B["消息处理 / 配置广播 / tab 状态"]
+      Q["翻译入口 / 适配器 / 令牌桶调度"]
+      K["CacheService：IndexedDB"]
+      A["鉴权 / 订阅客户端 / TikTok fetch 代理"]
+      S["右键 / commands / badge / 截图 / 下载 / TTS / 反馈遥测"]
+      B --> Q
+      B --> K
+      B --> A
+      B --> S
+    end
+    U <--> M
+    H <--> M
+    I <--> M
+    T <-->|"原生 action"| M
+    V <-->|"字幕翻译 / 文章请求"| M
+    C <-->|"排队任务 / 缓存代理 / backgroundFetch"| M
+    M <--> B
+  end
+  subgraph MAIN["网页 · MAIN world / 宿主 DOM"]
+    Y["YouTube 注入：fetch / XHR / player API / 轨道"]
+    F["反馈注入：手写 DOM 对话框"]
+    D["页面 DOM / iframe / Shadow DOM / 视频元素"]
+  end
+  V <-->|"window.postMessage 字幕桥"| Y
+  H -->|"提取 / 渲染 / 还原"| D
+  I -->|"选区 / 输入 / 截图 / 分享"| D
+  T -->|"页面数据 / 视频联动"| D
+  I <-->|"CustomEvent 反馈桥，由 host 承接"| F
+  N["外部网络：翻译供应商 / 旧业务后端 / OAuth / 远程规则与字幕"]
+  C -->|"部分普通服务调用；跨域可转后台"| N
+  U -->|"引导演示 / 页面 API / 登录与业务客户端"| N
+  Q --> N
+  A --> N
+  S -->|"反馈 / Sentry"| N
+  classDef ui fill:#e9efff,stroke:#4869b1,color:#142b50
+  classDef content fill:#e7f5ee,stroke:#3d8865,color:#17462e
+  classDef worker fill:#fff1d9,stroke:#b78329,color:#65440c
+  classDef page fill:#f3eafb,stroke:#9564b5,color:#4a285f
+  class P,O,L,U ui
+  class H,I,T,V,C content
+  class B,Q,K,A,S worker
+  class Y,F,D page
