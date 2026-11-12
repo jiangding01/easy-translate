@@ -1,10 +1,10 @@
 # Easy Translate 技术方案设计
 
-本方案将旧插件1.0.109恢复出的功能与关键逻辑整理为现代TypeScript、WXT、React和Manifest V3的分模块实现依据。当前状态为设计稿、待实施，应用工程仍处于开发骨架阶段。
+本方案定义Easy Translate各功能模块的架构、接口、关键逻辑和验收条件，基于TypeScript、WXT、React和Manifest V3组织实施。当前状态为设计稿、待实施，应用工程仍处于开发骨架阶段。
 
 ## 阅读顺序
 
-先读[整体架构](00-architecture.md)，再读[通信与数据契约](13-protocols-and-data.md)，按功能进入模块，最后结合[实施与验收](14-implementation-and-validation.md)安排开发。每篇说明责任、输入输出、主要算法、配置、异常、生命周期、旧新行为差异和验收。
+先读[整体架构](00-architecture.md)，再读[通信与数据契约](13-protocols-and-data.md)，按功能进入模块，最后结合[实施与验收](14-implementation-and-validation.md)安排开发。每篇说明责任、输入输出、主要算法、配置、异常、生命周期、设计决策和验收。
 
 | 编号 | 设计文档 | 内容 |
 | --- | --- | --- |
@@ -16,26 +16,17 @@
 | 05 | [YouTube字幕](05-youtube-subtitles.md) | 双世界桥、捕获、选轨、JSON3、窗口翻译、覆盖层、源SRT |
 | 06 | [字幕阅读与文章模式](06-subtitle-reading.md) | 逐句调度、播放器恢复、50句/2并发文章、校验与回退、缓存 |
 | 07 | [TikTok字幕与文稿](07-tiktok-captions.md) | 页面数据、受限抓取、首轨VTT、列表翻译、播放跟随、TXT |
-| 08 | [配置与界面](08-configuration-and-ui.md) | 新schema、旧v18迁移、仓库、revision、popup/options/引导 |
+| 08 | [配置与界面](08-configuration-and-ui.md) | schema、配置导入、仓库、revision、popup/options/引导 |
 | 09 | [账户与业务服务](09-account-and-services.md) | OAuth、回调、刷新、订阅、短码、Coco/文章客户端契约 |
 | 10 | [专家、提示词与术语](10-experts-and-termbase.md) | 内置与自定义风格、Prompt组合、库/词条、URL匹配、JSON/CSV |
 | 11 | [浏览器平台与反馈](11-browser-platform.md) | worker、菜单、commands、badge、截图、下载、TTS、反馈遥测 |
 | 12 | [国际化与资源](12-i18n-and-assets.md) | 两套本地化、查词插值、语言映射、注入与资源、权限归属 |
 | 13 | [协议与共享数据](13-protocols-and-data.md) | request/session/generation、错误、配置补丁、缓存身份、cue |
 | 14 | [实施计划与验收](14-implementation-and-validation.md) | 批次依赖、完成门槛、测试层次、取消矩阵、待确认决策 |
-| 15 | [兼容行为与设计决策](15-compatibility-and-decisions.md) | 交叉复核后关键事实与修复设计的集中对照 |
+| 15 | [兼容行为与设计决策](15-compatibility-and-decisions.md) | 兼容策略和设计取舍的集中说明 |
 
-## 基线资料
+## 设计与实施约定
 
-- [旧默认配置](reference/legacy-default-config.json)保留schema18静态默认对象，供字段迁移核对。
-- [语言和功能枚举](reference/legacy-enums.json)保留语言、显示样式和触发器等完整值域。枚举中的服务不自动代表已实现适配器。
-- [十站点规则](reference/legacy-site-rules.json)保留完整内置选择器、强制渲染和属性规则，实施时逐站验证。
-- [资料来源和归档映射](reference/material-mapping.md)说明旧文档内容如何进入本方案，以及压缩包恢复方式。
+本方案为待实施设计，接口和伪代码用于指导分批开发。模块正文分别说明目标行为、兼容约束及需要浏览器或服务端验证的条件。
 
-参考JSON中的`$undefined`、`$expression`或`$unresolved`是静态材料标记，不能作为新配置直接导入。新数据契约以本方案正文为准。
-
-## 使用约定
-
-“兼容基线”指安装包可确认的客户端事实，“设计决策”指重构时拟采用的行为，“待验证”指仍需真实浏览器、站点或服务端确认的项目。方案中的接口和伪代码是实现说明，后续每批再落地为源码及测试。
-
-原始包、调查文档、交叉复核记录、证据、探针及分析脚本已统一备份到下载目录，校验信息见[归档记录](reference/archive.json)。本方案通过项目内相对链接查阅，关键逻辑和配置基线可直接使用。
+涉及跨模块的数据结构以[共享契约](13-protocols-and-data.md)为准，实施顺序与交付门槛以[验收计划](14-implementation-and-validation.md)为准。配置、枚举和站点规则等补充数据位于各模块引用的 reference 目录。

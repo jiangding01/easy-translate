@@ -1,71 +1,100 @@
 # Easy Translate
 
-基于椰子翻译安装包重新搭建的 Chrome 网页翻译扩展工程。技术栈为 WXT、React、TypeScript，目标为 Manifest V3。
+Easy Translate 是面向 Chrome 的网页翻译扩展，围绕网页双语阅读、划词翻译、输入翻译和视频字幕设计，使用 TypeScript、React、WXT 与 Manifest V3 开发。
 
-当前为开发骨架：包含弹窗、设置页、后台 Service Worker、Content Script、类型化消息和本地设置存储。**尚未接入翻译服务，不会生成译文，也不会向旧插件服务器发送内容。**
+项目当前版本为 `0.1.0`，处于基础工程阶段。已完成弹窗、设置页、后台 Service Worker、页面通信和本地偏好存储。翻译引擎及各业务模块将按技术方案分批接入。
 
-## 开始开发
+## 当前功能
 
-需要 Node.js 22.12 或更新版本及 npm，`.nvmrc` 推荐 Node.js 24。使用 nvm 时可先执行 `nvm use`。项目 `.npmrc` 固定使用 npm 官方源 `https://registry.npmjs.org/`，并清空项目作用域内的官方源令牌。
+- 在弹窗中检查当前网页，显示页面标题、HTML 声明的语言及通信状态。
+- 在设置页保存目标语言和双语对照／替换原文的显示偏好。
+- 在受限页面或页面脚本连接失败时显示操作提示。
+
+## 规划模块
+
+| 模块 | 规划能力 |
+| --- | --- |
+| 网页翻译 | 文本提取、双语／替换／混合显示、动态内容、站点适配和原文恢复 |
+| 页面交互 | 划词、悬停、输入翻译、悬浮球与快捷键 |
+| 翻译服务 | 多供应商适配、请求调度、取消、缓存、自定义提示词和术语库 |
+| 视频与阅读 | YouTube 字幕、字幕阅读与文章模式、TikTok 文稿 |
+| 截图与分享 | 选区截图、长图拼接、Markdown 编辑和图片导出 |
+| 配置与平台 | 设置引导、国际化、浏览器朗读、下载及可选账户服务 |
+
+各模块的接口、关键逻辑、实施顺序和验收条件见[技术方案设计](docs/design/README.md)。
+
+## 开发环境
+
+- Node.js 22.12 或更新版本，推荐使用 `.nvmrc` 指定的 Node.js 24。
+- npm，项目 `.npmrc` 固定使用官方源 `https://registry.npmjs.org/`。
+- Chrome，启用扩展开发者模式。
+
+## 快速开始
 
 ```sh
+nvm use
 npm ci
 npm run dev
 ```
 
-开发模式不会自动打开浏览器。打开 `chrome://extensions`，启用「开发者模式」，点击「加载已解压的扩展程序」，选择本项目的 `.output/chrome-mv3-dev`。
+使用其他 Node.js 管理工具时，确认版本满足要求后执行 npm 命令。
 
-WXT 监听源码变化并更新开发产物；修改 manifest 或后台逻辑后，如没有自动生效，在扩展管理页点击重新加载。重新加载扩展后，请刷新用于调试的网页。
+打开 `chrome://extensions`，启用「开发者模式」，点击「加载已解压的扩展程序」，选择 `.output/chrome-mv3-dev`。
+
+WXT 会监听源码并更新开发产物。修改 manifest 或后台逻辑后，可在扩展管理页重新加载扩展，并刷新用于调试的网页。
 
 ## 构建与检查
 
-```sh
-npm run typecheck  # TypeScript 严格检查
-npm run check      # 类型检查、生产构建、manifest 及入口文件校验
-npm run build      # 生产构建：.output/chrome-mv3
-npm run zip        # 生成可分发 ZIP，位于 .output
-```
+| 命令 | 用途 |
+| --- | --- |
+| `npm run dev` | 启动 Chrome 扩展开发构建 |
+| `npm run typecheck` | 执行 TypeScript 严格检查 |
+| `npm run check` | 执行类型检查、生产构建和 manifest 入口资源校验 |
+| `npm run build` | 生成 `.output/chrome-mv3` 生产产物 |
+| `npm run zip` | 在 `.output` 中生成扩展 ZIP 包 |
 
-正式本地体验时，加载 `.output/chrome-mv3`。ZIP 是打包产物，商店发布还需要后续准备。
+本地验证生产版本时，在扩展管理页加载 `.output/chrome-mv3`。
 
-## 目录
+## 项目结构
 
 ```text
 src/
   entrypoints/
-    background.ts       # 后台 Service Worker，后续承载翻译服务调用
-    content.ts          # 页面入口，后续承载提取、渲染与还原
+    background.ts       # 后台 Service Worker
+    content.ts          # 网页内容脚本
     popup/              # 工具栏弹窗
     options/            # 设置页
-  components/           # 共享 React 组件
-  lib/
-    messages.ts         # 消息协议与当前页面检查
-    settings.ts         # 设置类型、默认值及 storage.local 读写
-  styles/               # CSS Modules
-public/icon/            # 从旧包复用的图标
+  components/           # 共享界面组件
+  lib/                  # 消息协议、设置模型与存储
+  styles/               # CSS Modules 样式
+public/icon/            # 扩展图标
 scripts/check-build.mjs # 构建产物校验
-docs/design/           # 分模块技术方案、架构、协议与验收设计
-wxt.config.ts          # Manifest 配置，入口项由 WXT 生成
+docs/design/            # 分模块技术方案与验收计划
+DESIGN.md               # 界面设计与组件规范
+wxt.config.ts           # WXT 与 Manifest V3 配置
 ```
 
-## 手动验收
+## 文档导航
 
-1. 加载扩展，在普通 HTTP/HTTPS 页面中打开弹窗。
-2. 点击「检查当前页面」，应显示页面标题、HTML 声明的语言及通信成功提示。
-3. 打开「翻译设置」，修改目标语言和显示模式，保存后重新打开弹窗，确认设置保留。
-4. 在 `chrome://extensions` 等受限页面中检查，应显示可理解的提示。
-5. 在扩展管理页检查 Service Worker 和弹窗，确认没有未处理的运行错误。
+| 文档 | 内容 |
+| --- | --- |
+| [文档中心](docs/README.md) | 按功能查阅设计文档 |
+| [技术方案总入口](docs/design/README.md) | 完整的模块索引及阅读顺序 |
+| [整体架构](docs/design/00-architecture.md) | 执行环境、模块职责和架构图 |
+| [通信与数据契约](docs/design/13-protocols-and-data.md) | 消息、任务会话、配置和缓存契约 |
+| [实施与验收计划](docs/design/14-implementation-and-validation.md) | 开发批次、依赖和完成门槛 |
+| [界面规范](DESIGN.md) | 视觉、组件、布局和交互约定 |
 
-页面检查只读取标题和 HTML 的 `lang`，不是语言自动识别。Chrome 内部页、Chrome 网上应用店、PDF 阅读器等受限页面不能注入脚本；已有网页在安装或重载扩展后需刷新。
+## 本地验收
 
-## 后续迁移
+1. 加载扩展，在普通 HTTP/HTTPS 页面打开弹窗。
+2. 点击「检查当前页面」，确认显示页面标题和声明语言。
+3. 打开「翻译设置」，修改并保存偏好，重新打开弹窗确认持久化。
+4. 在 Chrome 内部页等受限页面验证错误提示。
+5. 在扩展管理页检查 Service Worker 和弹窗的运行错误。
 
-技术方案从 [docs/design/README.md](docs/design/README.md) 开始，按模块提供架构、接口、数据模型、关键逻辑、兼容差异及分批验收。方案使用项目内相对链接，默认配置、枚举与完整站点规则位于方案的 reference 目录。
+安装或重新加载扩展后，请刷新已有网页，使内容脚本生效。Chrome 内部页、网上应用店和内置 PDF 阅读器等页面受浏览器注入限制。
 
-整理前的旧安装包、文档、分析快照、证据和专用脚本已完整备份到下载目录。归档名称、SHA-256和恢复方法见[材料来源与恢复](docs/design/reference/material-mapping.md)。本地 `evidence/` 作为原始证据保留，并由 Git 忽略。
+## 开发约定
 
-先接入一个明确的翻译服务，再实现文本提取、双语对照/替换原文、恢复原文及动态页面处理。当前设置会保存，但需要翻译管线接入后才影响译文。
-
-不要把服务密钥写入源码、`public` 或前端环境变量。浏览器扩展产物对用户可见，`.env` 不会使打包后的密钥保密。
-
-框架入口与 manifest 生成方式参考 [WXT 官方文档](https://wxt.dev/guide/essentials/entrypoints)。
+配置密钥通过对应服务的设置流程管理，避免写入源码、静态资源、日志和版本库。新增功能按方案划分责任，并同时覆盖失败、取消和资源清理路径。
