@@ -1,0 +1,18 @@
+{
+  "archiveFile": "easy-translate-逆向资料备份-2026-11-12.zip",
+  "location": "用户下载目录",
+  "sha256": "5b98eecdefec7a5a3a81cddc70211368d7b9204af067692523d2d503db57ca88",
+  "files": 714,
+  "bytes": 160754630,
+  "verified": "全部归档成员CRC和逐文件SHA-256验证通过",
+  "manifestInsideArchive": "BACKUP-MANIFEST.json",
+  "roots": [
+    "easy-translate/docs",
+    "easy-translate/evidence",
+    "easy-translate/scripts/reverse-engineering",
+    "easy-translate/README.md",
+    "easy-translate/DESIGN.md",
+    "easy-translate/.gitignore",
+    "yezi"
+  ]
+}

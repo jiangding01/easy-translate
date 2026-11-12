@@ -44,7 +44,7 @@ src/
   styles/               # CSS Modules
 public/icon/            # 从旧包复用的图标
 scripts/check-build.mjs # 构建产物校验
-docs/                  # 旧插件功能文档、架构图与重构路线
+docs/design/           # 分模块技术方案、架构、协议与验收设计
 wxt.config.ts          # Manifest 配置，入口项由 WXT 生成
 ```
 
@@ -60,9 +60,9 @@ wxt.config.ts          # Manifest 配置，入口项由 WXT 生成
 
 ## 后续迁移
 
-旧包逆向与重构方案从 [docs/README.md](docs/README.md) 开始。模块文档涵盖调用链、关键旧代码、协议、缺口和分批验收。
+技术方案从 [docs/design/README.md](docs/design/README.md) 开始，按模块提供架构、接口、数据模型、关键逻辑、兼容差异及分批验收。方案使用项目内相对链接，默认配置、枚举与完整站点规则位于方案的 reference 目录。
 
-旧安装包、源码摘录、分析快照和工具结果保存在本地 `evidence/legacy/`。Git 忽略整个 `evidence/` 目录。需要查看证据链接或运行 `node scripts/reverse-engineering/validate.mjs` 时，请先把完整的 `evidence/` 资料放到项目根目录。日常安装依赖、开发和构建可直接使用仓库中的文件。
+整理前的旧安装包、文档、分析快照、证据和专用脚本已完整备份到下载目录。归档名称、SHA-256和恢复方法见[材料来源与恢复](docs/design/reference/material-mapping.md)。本地 `evidence/` 作为原始证据保留，并由 Git 忽略。
 
 先接入一个明确的翻译服务，再实现文本提取、双语对照/替换原文、恢复原文及动态页面处理。当前设置会保存，但需要翻译管线接入后才影响译文。
 

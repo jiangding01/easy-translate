@@ -1,0 +1,49 @@
+flowchart TB
+  subgraph UI[扩展页面]
+    Popup[Popup 当前页控制]
+    Options[Options 设置 专家 术语]
+    Login[引导 登录回调]
+  end
+  subgraph Content[内容脚本]
+    Page[网页提取 渲染 还原]
+    Interaction[划词 悬停 输入 浮球]
+    Capture[截图 分享编辑]
+    Video[YouTube字幕 阅读文章]
+    TikTok[TikTok文稿]
+  end
+  Messages[带类型及运行时校验的消息层]
+  subgraph Worker[Service Worker]
+    Config[配置与仓库服务]
+    Translation[语言 Prompt 翻译服务]
+    Queue[去重 并发 速率 取消 重试]
+    Providers[供应商与受限网络适配]
+    Platform[浏览器能力与tab状态]
+    Account[鉴权 订阅 文章接口]
+    Cache[缓存仓库]
+  end
+  Main[页面注入 字幕窄协议]
+  Local[(storage.local)]
+  DB[(IndexedDB)]
+  Remote[翻译供应商 业务API 视频端点]
+  Popup --> Messages
+  Options --> Messages
+  Login --> Messages
+  Page --> Messages
+  Interaction --> Messages
+  Capture --> Messages
+  Video --> Messages
+  TikTok --> Messages
+  Video <--> Main
+  Messages --> Config
+  Messages --> Translation
+  Messages --> Platform
+  Messages --> Account
+  Translation --> Queue
+  Translation --> Cache
+  Translation --> Config
+  Queue --> Providers
+  Providers --> Remote
+  Account --> Remote
+  Config --> Local
+  Account --> Local
+  Cache --> DB

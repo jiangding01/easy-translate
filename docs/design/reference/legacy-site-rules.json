@@ -1,0 +1,232 @@
+{
+  "description": "旧版十站点内置fallback基线。选择器需在目标站点重新验收。$unresolved表示尚未求值的原表达式。",
+  "rules": {
+    "site-google": {
+      "excludeSelectors": [
+        ".google-symbols",
+        ".feature-icon"
+      ]
+    },
+    "site-github": {
+      "includeSelectors": [
+        ".BorderGrid.about-margin .f4.my-3"
+      ],
+      "excludeSelectors": [
+        "deferred-diff-lines",
+        "#pr-conversation-sidebar",
+        "#repository-container-header",
+        "[class*=\"OverviewContent-module__Box_1--\"]",
+        "table[class*=\"Table-module__Box--\"]",
+        "[class*=\"OverviewRepoFiles-module__Box_3--\"]",
+        "article[id^=\"feed-item-\"] div[data-view-component=\"true\"] div.px-3 header",
+        "[class*=\"dashboard-changelog-timestamp\"]",
+        "#org-repositories ul li.Box-row div.d-md-flex.flex-justify-between a[data-hovercard-type=\"repository\"]",
+        "#org-repositories ul li.Box-row div.d-md-flex.flex-justify-between span.Label.Label--secondary.v-align-middle.ml-1.mb-1",
+        "#org-repositories ul li.Box-row  div.color-fg-muted.f6",
+        "#user-repositories-list ul li > div:first-child > div:nth-child(3)",
+        ".pinned-item-list-item-content > p:nth-of-type(2)",
+        "header[role=\"banner\"]",
+        "a[data-hovercard-type=\"repository\"]",
+        "div[id=\"js-issues-toolbar\"]"
+      ],
+      "replaceSelectors": [
+        "aside h2",
+        "aside ul.list-style-none li a"
+      ]
+    },
+    "site-instagram": {
+      "includeSelectors": [],
+      "excludeSelectors": [
+        "#efluns-info-app-root",
+        ".x98rzlu.xeuugli>div:nth-child(1)",
+        ".x6s0dn4.xfex06f.xrvj5dj.x1wdtju6.xf7dkkf.xv54qhq"
+      ],
+      "replaceSelectors": [
+        "button > div:first-child > div:first-child"
+      ]
+    },
+    "site-linkedin": {
+      "excludeSelectors": [
+        ".lt-line-clamp__ellipsis",
+        ".lt-line-clamp__more",
+        ".org-module-card__footer-hoverable"
+      ],
+      "forceWholeSelectors": [
+        ".organization-about-module__content-consistant-cards-description"
+      ],
+      "replaceSelectors": [
+        ".organization-about-module__content-consistant-cards-description"
+      ]
+    },
+    "site-reddit": {
+      "excludeSelectors": [
+        "div#flex-nav-buttons",
+        "rpl-dropdown",
+        "reddit-header-action-items header",
+        ".no-decoration",
+        "div[slot='post-flair']",
+        "div[data-testid='action-row']",
+        "span[id*='feed-post-credit-bar'] span[slot='authorName']",
+        "span[id*='feed-post-credit-bar'] faceplate-timeago",
+        "shreddit-comments-sort-dropdown"
+      ],
+      "forceBlockSelectors": [
+        "#subgrid-container search-dynamic-id-cache-controller faceplate-tracker"
+      ]
+    },
+    "site-telegram": {
+      "excludeSelectors": [
+        "#LeftColumn"
+      ]
+    },
+    "site-tiktok": {
+      "includeSelectors": [
+        "[class*=\"--DivTabItem\"]",
+        "[data-e2e=\"comment-reply-1\"]",
+        "[class*=\"comment-login-bar\"]",
+        "[class*=\"--DivTabItem\"]",
+        "[class*=\"--DivTitle\"]",
+        "[data-e2e=\"user-bio\"]"
+      ],
+      "excludeSelectors": [
+        "[class*=\"--ButtonExpand\"]",
+        "[class*=\"--PCopyLinkText\"]",
+        "[data-e2e=\"comment-username-1\"]",
+        "[class*=\"--DivLoginBar\"]",
+        "[class*=\"--SpanUniqueId\"]",
+        "[data-e2e=\"explore-card-user-unique-id\"]",
+        "[data-e2e=\"search-card-user-unique-id\"]",
+        "[data-e2e=\"browser-nickname\"]",
+        "[data-e2e=\"user-post-item\"]",
+        "#efluns-info-app-root",
+        "[class*=\"--DivUserIdentifierWrapper\"]",
+        "[data-e2e=\"user-title\"]",
+        "#efluns-easy-dm-list-container button"
+      ],
+      "forceInlineSelectors": [
+        "[data-e2e=\"comment-reply-1\"]"
+      ],
+      "forceBlockSelectors": [
+        "[data-e2e=\"new-desc-span\"]",
+        "[data-e2e=\"comment-level-1\"] span"
+      ],
+      "replaceSelectors": [
+        "[class*=\"comment-login-bar\"]",
+        "[class*=\"--DivTabItem\"]",
+        "[class*=\"--DivTitle\"]",
+        "[class*=\"--DivScrollToButtonContainer\"] [class*=\"--DivTextContainer\"]",
+        "[class*=\"--PPlaylistName\"]",
+        "[class*=\"--DivTextWrapper\"]"
+      ]
+    },
+    "site-youtube": {
+      "forceWholeSelectors": [
+        "h1.style-scope.ytd-watch-metadata .style-scope.ytd-watch-metadata"
+      ],
+      "includeSelectors": [
+        "button.ytChipShapeButtonReset",
+        "h3.style-scope.ytd-grid-video-renderer",
+        "a#video-title-link yt-formatted-string#video-title",
+        "#content #paid-comment-chip",
+        "#content-text span:first-child",
+        "h1.style-scope.ytd-watch-metadata .style-scope.ytd-watch-metadata",
+        "yt-attributed-string#content-text.style-scope.ytd-comment-view-model",
+        "yt-formatted-string#subtitle",
+        "yt-formatted-string#video-title",
+        "#video-title",
+        ".yt-lockup-metadata-view-model__title",
+        ".ytChipShapeButtonReset .ytChipShapeChip.ytChipShapeActive.ytChipShapeOnlyTextPadding",
+        ".yt-core-attributed-string.yt-core-attributed-string--white-space-pre-wrap"
+      ],
+      "excludeSelectors": [
+        "#efluns-info-anchor",
+        ".ytp-caption-window-container",
+        "#ytp-caption-window-container",
+        "ytd-text-inline-expander#description-inline-expander tp-yt-paper-button#expand",
+        "#description-inner #ytd-watch-info-text",
+        "ytd-item-section-renderer[section-identifier='comment-item-section'] #header",
+        "ytd-logo.style-scope.ytd-topbar-logo-renderer",
+        "div[slot='extra-content'] #social-links",
+        "div[slot='extra-content'] #button-container",
+        "div[slot='extra-content'] #sub-header",
+        "div[slot='extra-content'] #header",
+        "div[slot='extra-content'] #dismissible #header-container",
+        "div[slot='extra-content'] #info-container #info",
+        "div[slot='extra-content'] ytd-text-inline-expander#description-inline-expander",
+        "ytd-banner-promo-renderer",
+        "#logo-icon",
+        "#logo",
+        "#voice-search-button",
+        "div#metadata-line",
+        "ytd-engagement-panel-section-list-renderer",
+        "yt-page-header-renderer",
+        "#sections ytd-guide-section-renderer:nth-child(2)",
+        "#rendering-content",
+        "ytd-pinned-comment-badge-renderer",
+        "#top-row",
+        "#author-text span:first-child",
+        "yt-content-metadata-view-model",
+        "yt-formatted-string#info.style-scope.ytd-watch-info-text",
+        ".yt-simple-endpoint.style-scope.yt-formatted-string",
+        "ytd-watch-info-text#style-scope ytd-watch-metadata.yt-simple-endpoint.style-scope.yt-formatted-string",
+        "yt-button-shape>a.yt-spec-button-shape-next.yt-spec-button-shape-next--text.yt-spec-button-shape-next--mono.yt-spec-button-shape-next--size-m.yt-spec-button-shape-next--icon-leading.yt-spec-button-shape-next--enable-backdrop-filter-experiment"
+      ],
+      "replaceSelectors": [
+        "#post-text",
+        "#subtitle",
+        "h3.style-scope.ytd-grid-video-renderer",
+        ".yt-simple-endpoint.style-scope.ytd-shelf-renderer span:first-child",
+        "#video-title",
+        ".yt-lockup-metadata-view-model__title span:first-child",
+        "[role=\"presentation\"] a:first-child span:first-child",
+        "div[slot='extra-content'] #dismissible #scroll-container #details h4"
+      ],
+      "forceBlockSelectors": [
+        "ytm-shorts-lockup-view-model",
+        "ytm-shorts-lockup-view-model-v2",
+        "ytd-grid-video-renderer",
+        "#content #paid-comment-chip",
+        "h1.style-scope.ytd-watch-metadata .style-scope.ytd-watch-metadata",
+        "yt-attributed-string#content-text.style-scope.ytd-comment-view-model",
+        "yt-chip-cloud-chip-renderer",
+        ".ytChipShapeButtonReset .ytChipShapeChip.ytChipShapeActive.ytChipShapeOnlyTextPadding",
+        "div[slot='extra-content'] #dismissible #scroll-container ytd-macro-markers-list-item-renderer"
+      ]
+    },
+    "site-x": {
+      "forceWholeSelectors": [
+        "[data-testid=\"tweetText\"]"
+      ],
+      "forceInlineSelectors": [
+        "[data-testid=\"tweetText\"] a",
+        "[data-testid=\"tweetText\"] .css-175oi2r.r-xoduu5"
+      ],
+      "includeSelectors": [
+        "section[role=\"region\"] [data-testid=\"tweetText\"]"
+      ],
+      "excludeSelectors": [
+        "ul[role=\"list\"] li[role=\"listitem\"][data-testid=\"UserCell\"]",
+        "h2[role=\"heading\"]",
+        "[data-testid=\"socialContext\"]",
+        "[data-testid=\"UserName\"]",
+        "[data-testid=\"User-Name\"]",
+        ".css-175oi2r.r-1d09ksm.r-18u37iz.r-1wbh5a2.r-1471scf",
+        ".css-175oi2r.r-3pj75a.r-ttdzmv.r-1ifxtd0 > *:nth-child(4)",
+        ".css-175oi2r.r-3pj75a.r-ttdzmv.r-1ifxtd0 > *:nth-child(5)",
+        ".css-175oi2r.r-3pj75a.r-ttdzmv.r-1ifxtd0 > *:nth-child(6)",
+        "[data-testid=\"verified_profile_visitor_upsell\"]"
+      ]
+    },
+    "site-whatsapp": {
+      "excludeSelectors": [
+        "#side",
+        "._aigw._as6h.x9f619.x1n2onr6.x5yr21d.x17dzmu4.x1i1dayz.x2ipvbc.xjdofhw.x78zum5.xdt5ytf.x12xzxwr.x1plvlek.xryxfnj.x570efc.x18dvir5.xxljpkc.xwfak60.x18pi947"
+      ]
+    }
+  },
+  "features": {
+    "googleTranslatePaEnabled": {
+      "$unresolved": "!0"
+    }
+  }
+}

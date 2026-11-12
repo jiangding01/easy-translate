@@ -1,0 +1,197 @@
+{
+  "description": "旧版1.0.109主配置v18的静态默认值。$undefined和$expression是材料标记，导入时需按新schema转换。",
+  "value": {
+    "version": 18,
+    "textRange": {
+      "minLength": 10,
+      "minWordCount": 2,
+      "maxLength": 5000
+    },
+    "language": {
+      "sourceCode": "auto",
+      "targetCode": "zh-CN",
+      "systemCode": "zh-CN"
+    },
+    "pageTranslation": {
+      "enabled": true,
+      "range": "all",
+      "translateFullPage": false,
+      "initialTranslateChars": 4999,
+      "autoTranslatePatterns": [
+        "*.tiktok.com",
+        "*.instagram.com",
+        "*.youtube.com"
+      ],
+      "neverTranslatePatterns": [],
+      "languagePatterns": {
+        "alwaysTranslate": [
+          "en",
+          "ja"
+        ],
+        "neverTranslate": [
+          "zh-TW",
+          "zh-HK"
+        ]
+      },
+      "showOriginal": true,
+      "translationStyle": {
+        "showBorder": true,
+        "opacity": 1,
+        "fontSize": {
+          "$undefined": true
+        },
+        "color": {
+          "$undefined": true
+        }
+      },
+      "lineBreak": "alwaysNewLine",
+      "lineBreakLength": 50
+    },
+    "displaySettings": {
+      "mode": "mixed",
+      "characterThreshold": 15,
+      "shortTextMode": "original",
+      "stylePreset": "none",
+      "fontFamily": "default",
+      "backgroundColor": "#fff7cc",
+      "backgroundOpacity": 60,
+      "isItalic": false,
+      "textColor": "#333333",
+      "similarLanguageHighlight": true,
+      "langTextAutoLineBreak": true
+    },
+    "hoverTranslation": {
+      "enabled": true,
+      "hotkey": "Control",
+      "delay": 0
+    },
+    "selectionTranslation": {
+      "enabled": true,
+      "trigger": "icon",
+      "minLength": 2,
+      "noTriggerLanguages": [
+        "zh-CN"
+      ]
+    },
+    "inputTranslation": {
+      "enabled": true,
+      "firstLanguage": "en",
+      "triggerChar": "space"
+    },
+    "provider": {
+      "provider": "google",
+      "apiKey": {
+        "$undefined": true
+      },
+      "baseURL": {
+        "$undefined": true
+      },
+      "customHeaders": {
+        "$undefined": true
+      }
+    },
+    "requestQueue": {
+      "maxConcurrent": 10,
+      "requestDelay": 0,
+      "retryTimes": 1,
+      "timeout": 30000
+    },
+    "cache": {
+      "enabled": true,
+      "maxSize": 100,
+      "ttl": 7
+    },
+    "shortcuts": {
+      "togglePageTranslation": "Alt+X",
+      "toggleHoverTranslation": "Control",
+      "startScreenshot": "Ctrl+Shift+Z",
+      "doubleTapTranslate": {
+        "enabled": true,
+        "key": "1",
+        "tapCount": 2
+      }
+    },
+    "generalRule": {
+      "subtitleRule.add": {
+        "autoEnableSubtitle": false,
+        "backgroundColor": "#080808",
+        "backgroundOpacity": "39",
+        "filterAmbientSounds": true,
+        "humanPreferred": false,
+        "meetingAutoEnableSubtitle": true,
+        "preTranslation": true,
+        "showQuickButton": true,
+        "sourceFontFamily": "PingFang SC",
+        "sourceFontSize": "16",
+        "sourceFontWeight": "700",
+        "sourceTextColor": "#FFFFFF",
+        "textShadowType": "none",
+        "translationFontFamily": "Lantinghei SC",
+        "translationFontSize": "20",
+        "translationFontWeight": "700",
+        "translationPosition": "top",
+        "translationTextColor": "#FFFF00",
+        "youtubeAutoEnableSubtitle": true,
+        "translationMode": "dual",
+        "disabled": false,
+        "enableSubtitleDrag": false,
+        "sourceSubtitlePosition": 85,
+        "translationSubtitlePosition": 90,
+        "sourceLang": "auto",
+        "targetLang": "zh-Hans",
+        "hideSourceSubtitle": false,
+        "hideTranslationSubtitle": false
+      }
+    },
+    "userTranslationServices": {
+      "subtitleTranslateService": "inherit"
+    },
+    "floatingBall": {
+      "position": {
+        "top": 120,
+        "side": "right"
+      },
+      "mountFloatSite": {
+        "$expression": "Nl.map(e => ({ site: e, hasBan: !0 }))"
+      },
+      "hasBanAllSiteMountFloat": false
+    },
+    "ai": {
+      "style": "builtin-general",
+      "contextEnhancement": true
+    },
+    "aiProviders": {
+      "openai": {
+        "baseURL": "https://api.openai.com/v1",
+        "apiKey": ""
+      },
+      "deepseek": {
+        "baseURL": "https://api.deepseek.com",
+        "apiKey": ""
+      },
+      "gemini": {
+        "baseURL": "https://generativelanguage.googleapis.com/v1beta",
+        "apiKey": ""
+      },
+      "aihubmix": {
+        "baseURL": "https://aihubmix.com/v1",
+        "apiKey": ""
+      }
+    },
+    "aiTranslate": {
+      "enabled": false,
+      "provider": "openai",
+      "model": "gpt-5-mini",
+      "promptsConfig": {
+        "prompt": "congcong_translate_default_prompt",
+        "patterns": [
+          {
+            "id": "congcong_translate_default_prompt",
+            "name": "congcong_translate_default_prompt",
+            "prompt": "Translate the input into {{targetLang}}. Output translation ONLY.\n\nRules:\n1. Preserve all HTML tags (like <strong>, <em>, <a>, <code>) in the output\n2. Only translate the text content, keep tag structure unchanged\n3. If content inside tags shouldn't be translated (e.g. code, proper nouns), keep it as-is\n4. NO explanations. NO notes.\n\nInput:\n{{input}}\n"
+          }
+        ]
+      }
+    }
+  }
+}
