@@ -78,6 +78,10 @@ wxt.config.ts           # WXT 与 Manifest V3 配置
 
 | 文档 | 内容 |
 | --- | --- |
+| [交接文档](HANDOFF.md) | 当前进度、已拍板决策和下一步，**接手开发先读这里** |
+| [最终技术方案](docs/reviews/2026-11-13-final-plan.md) | 权威架构、选型和 M0–M8 交付批次 |
+| [UI/UX 设计规范](docs/reviews/2026-11-13-ui-ux-design.md) | 权威视觉、交互和性能预算 |
+| [更新日志](CHANGELOG.md) | 功能迭代记录 |
 | [文档中心](docs/README.md) | 按功能查阅设计文档 |
 | [技术方案总入口](docs/design/README.md) | 完整的模块索引及阅读顺序 |
 | [整体架构](docs/design/00-architecture.md) | 执行环境、模块职责和架构图 |
