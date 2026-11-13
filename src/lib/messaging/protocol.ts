@@ -1,6 +1,7 @@
 import { defineExtensionMessaging } from '@webext-core/messaging';
 import type { ConfigChange, ConfigPath, ConfigSnapshot } from '@/lib/config/types';
-import type { Result } from '@/lib/errors';
+import type { AppError, Result } from '@/lib/errors';
+import type { LanguageCode } from '@/lib/languages';
 
 export interface PageInfo {
   title: string;
@@ -23,3 +24,40 @@ export interface ProtocolMap {
 }
 
 export const { sendMessage, onMessage } = defineExtensionMessaging<ProtocolMap>();
+
+// ---------------------------------------------------------------- Port et-translate
+
+/** Long-lived Port served by the background: req → chunk* → done (see lib/messaging/port). */
+export const TRANSLATE_PORT_NAME = 'et-translate';
+
+/** Larger payloads are rejected with `validation/payload-too-large`. */
+export const TRANSLATE_PAYLOAD_LIMITS = { maxItems: 200, maxChars: 50_000 } as const;
+
+export interface TranslateItem {
+  id: string;
+  text: string;
+}
+
+export interface TranslateRequest {
+  items: TranslateItem[];
+  /** Defaults to the configured source / target language. */
+  source?: LanguageCode | 'auto';
+  target?: LanguageCode;
+}
+
+/**
+ * - `translated`: `text` is the translation.
+ * - `unchanged`: nothing to translate (blank input) or the translation equals the source.
+ * - `same-language`: detected as already in the target language; `text` is the source.
+ */
+export type TranslateDisposition = 'translated' | 'unchanged' | 'same-language';
+
+/** One per item, in completion order. */
+export type TranslateChunk =
+  | { id: string; text: string; disposition: TranslateDisposition; cached: boolean }
+  | { id: string; error: AppError };
+
+export interface TranslateDone {
+  total: number;
+  failed: number;
+}
