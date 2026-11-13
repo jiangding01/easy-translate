@@ -54,6 +54,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+/** Reading lastError in onDisconnect marks it checked, avoiding "Unchecked runtime.lastError" noise. */
+function consumeLastError(): void {
+  try {
+    void browser.runtime.lastError;
+  } catch {
+    // Not available outside an extension context.
+  }
+}
+
 // ---------------------------------------------------------------- server
 
 /** Serves one port: one AbortController per request; disconnect aborts them all. */
@@ -67,6 +76,7 @@ export function servePort<P, C, D>(port: PortLike, handler: PortHandler<P, C, D>
   }
 
   function handleDisconnect() {
+    consumeLastError();
     connected = false;
     abortAll();
   }
@@ -231,6 +241,7 @@ export function createPortClient<P, C, D>(
       if (port === next) onFrame(frame);
     });
     next.onDisconnect.addListener(() => {
+      consumeLastError();
       if (port !== next) return;
       port = undefined;
       settleAll({ status: 'error', error: portDisconnected() });
