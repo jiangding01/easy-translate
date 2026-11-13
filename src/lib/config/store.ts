@@ -45,15 +45,16 @@ export function createConfigStore(deps: ConfigStoreDeps): ConfigStore {
   }
 
   function start() {
-    if (unwatch) return;
-    unwatch = deps.watch((snapshot) => setState({ status: 'ready', snapshot }));
+    // A running watch is enough, except after a failed read: retry that read.
+    if (unwatch && state.status !== 'error') return;
+    unwatch ??= deps.watch((snapshot) => setState({ status: 'ready', snapshot }));
     deps.read().then(
       (snapshot) => {
         // A watch event may already have delivered something newer.
         if (state.status !== 'ready') setState({ status: 'ready', snapshot });
       },
       (error: unknown) => {
-        if (state.status === 'loading') setState({ status: 'error', error: toAppError(error) });
+        if (state.status !== 'ready') setState({ status: 'error', error: toAppError(error) });
       },
     );
   }
@@ -73,6 +74,7 @@ export function createConfigStore(deps: ConfigStoreDeps): ConfigStore {
       unwatch?.();
       unwatch = undefined;
       listeners.clear();
+      state = { status: 'loading' };
     },
   };
 }

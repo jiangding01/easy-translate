@@ -3,13 +3,27 @@ import { isPlainObject } from './merge';
 import { configSchema } from './schema';
 import type { ConfigPath } from './types';
 
+/** Strips optional/default/nullable wrappers so wrapped objects still expand. */
+function unwrap(schema: z.ZodType): z.ZodType {
+  let current = schema;
+  while (
+    current instanceof z.ZodOptional ||
+    current instanceof z.ZodDefault ||
+    current instanceof z.ZodNullable
+  ) {
+    current = current.unwrap() as z.ZodType;
+  }
+  return current;
+}
+
 /**
  * Walks object shapes and stops at anything else (leaf, array, record), so
  * the whitelist is derived from the schema instead of maintained by hand.
  */
 export function derivePaths(schema: z.ZodType, prefix = ''): string[] {
-  if (!(schema instanceof z.ZodObject)) return prefix ? [prefix] : [];
-  return Object.entries(schema.shape as Record<string, z.ZodType>).flatMap(([key, child]) =>
+  const inner = unwrap(schema);
+  if (!(inner instanceof z.ZodObject)) return prefix ? [prefix] : [];
+  return Object.entries(inner.shape as Record<string, z.ZodType>).flatMap(([key, child]) =>
     derivePaths(child, prefix ? `${prefix}.${key}` : key),
   );
 }

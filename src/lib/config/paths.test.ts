@@ -38,6 +38,15 @@ describe('whitelist', () => {
     expect(derivePaths(schema)).toEqual(['a.b', 'a.list', 'map']);
   });
 
+  it('unwraps optional, default and nullable objects before expanding', () => {
+    const schema = z.object({
+      a: z.object({ b: z.string() }).optional(),
+      c: z.object({ d: z.string() }).default({ d: 'x' }),
+      e: z.object({ f: z.string() }).nullable(),
+    });
+    expect(derivePaths(schema)).toEqual(['a.b', 'c.d', 'e.f']);
+  });
+
   it('rejects paths outside the whitelist', () => {
     expect(isConfigPath('ui.theme')).toBe(true);
     expect(isConfigPath('ui')).toBe(false);

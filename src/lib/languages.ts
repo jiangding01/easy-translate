@@ -37,6 +37,8 @@ export function normalizeLanguage(tag: string): LanguageCode | undefined {
   const [primary, ...rest] = parts;
   if (!primary) return undefined;
   if (primary === 'zh') {
+    // An explicit Hans script wins over a Traditional-leaning region (zh-Hans-HK).
+    if (rest.includes('hans')) return 'zh-CN';
     return rest.some((part) => TRADITIONAL_CHINESE.has(part)) ? 'zh-TW' : 'zh-CN';
   }
   return LANGUAGE_CODES.find((code) => code.toLowerCase() === primary);

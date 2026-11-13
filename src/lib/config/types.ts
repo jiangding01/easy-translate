@@ -30,9 +30,9 @@ type StopsHere<T> = T extends Primitive
       : false;
 
 export type DotPath<T, Prefix extends string = ''> = {
-  [K in keyof T & string]: StopsHere<T[K]> extends true
+  [K in keyof T & string]: StopsHere<NonNullable<T[K]>> extends true
     ? `${Prefix}${K}`
-    : DotPath<T[K], `${Prefix}${K}.`>;
+    : DotPath<NonNullable<T[K]>, `${Prefix}${K}.`>;
 }[keyof T & string];
 
 export type PathValue<T, P extends string> = P extends `${infer Head}.${infer Rest}`

@@ -1,4 +1,3 @@
-import type { z } from 'zod';
 import { appError, isAppError } from '@/lib/errors';
 import { createDefaultConfig } from './defaults';
 import { parseStoredConfig } from './parse';
@@ -21,8 +20,6 @@ export interface KeyValueStore {
 export interface ConfigRepositoryDeps {
   store: KeyValueStore;
   uiLanguage: string;
-  /** Injectable for tests; defaults to the real config schema. */
-  schema?: z.ZodType;
 }
 
 export interface ConfigRepository {
@@ -42,7 +39,6 @@ export interface ConfigRepository {
  */
 export function createConfigRepository(deps: ConfigRepositoryDeps): ConfigRepository {
   const { store, uiLanguage } = deps;
-  const schema = deps.schema ?? configSchema;
   let queue: Promise<unknown> = Promise.resolve();
 
   function enqueue<T>(task: () => Promise<T>): Promise<T> {
@@ -58,11 +54,11 @@ export function createConfigRepository(deps: ConfigRepositoryDeps): ConfigReposi
     } catch (error) {
       throw appError('config', 'config/read-failed', describe(error), { retryable: true });
     }
-    return parseStoredConfig(raw, { uiLanguage, schema });
+    return parseStoredConfig(raw, { uiLanguage, schema: configSchema });
   }
 
   async function write(data: unknown): Promise<ConfigSnapshot> {
-    const parsed = schema.safeParse(data);
+    const parsed = configSchema.safeParse(data);
     if (!parsed.success) {
       const paths = parsed.error.issues.map((issue) => issue.path.map(String).join('.'));
       throw appError('config', 'config/invalid-value', `Invalid config at: ${paths.join(', ')}`);

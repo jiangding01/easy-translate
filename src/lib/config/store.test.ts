@@ -82,4 +82,37 @@ describe('config store', () => {
     store.dispose();
     expect(unwatch).toHaveBeenCalledOnce();
   });
+
+  it('re-reads on subscribe after a failed read, even though the watch is still running', async () => {
+    const read = vi
+      .fn<() => Promise<ConfigSnapshot>>()
+      .mockRejectedValueOnce(appError('config', 'config/read-failed', 'nope'))
+      .mockResolvedValue(snapshot('light'));
+    const { store } = setup(read);
+    const unsubscribe = store.subscribe(() => undefined);
+    await vi.waitFor(() => expect(store.getSnapshot().status).toBe('error'));
+    unsubscribe();
+
+    store.subscribe(() => undefined);
+    await vi.waitFor(() => expect(store.getSnapshot().status).toBe('ready'));
+    expect(store.getSnapshot()).toEqual({ status: 'ready', snapshot: snapshot('light') });
+  });
+
+  it('resets to loading on dispose so a later subscribe picks up fresh data', async () => {
+    const read = vi
+      .fn<() => Promise<ConfigSnapshot>>()
+      .mockResolvedValueOnce(snapshot('light'))
+      .mockResolvedValue(snapshot('dark'));
+    const { store } = setup(read);
+    store.subscribe(() => undefined);
+    await vi.waitFor(() => expect(store.getSnapshot().status).toBe('ready'));
+
+    store.dispose();
+    expect(store.getSnapshot()).toEqual({ status: 'loading' });
+
+    store.subscribe(() => undefined);
+    await vi.waitFor(() =>
+      expect(store.getSnapshot()).toEqual({ status: 'ready', snapshot: snapshot('dark') }),
+    );
+  });
 });
