@@ -123,3 +123,112 @@ describe('translation cache', () => {
     expect((await restarted.getMany(['a'])).get('a')).toBe('A');
   });
 });
+
+// ------------------------------------------------------------ hardening
+
+/** Wraps a real connection: counts opens / closes and can fail the next transaction. */
+function instrumented(name: string) {
+  const state = { opened: 0, closed: 0, failNext: undefined as string | undefined };
+  const open = async () => {
+    const db = await openCacheDb(name);
+    state.opened += 1;
+    return new Proxy(db, {
+      get(target, prop) {
+        if (prop === 'close') {
+          return () => {
+            state.closed += 1;
+            target.close();
+          };
+        }
+        if (prop === 'transaction') {
+          return (...args: Parameters<typeof target.transaction>) => {
+            const failure = state.failNext;
+            if (failure && args[2] === undefined && args[1] === 'readwrite') {
+              state.failNext = undefined;
+              throw new DOMException('injected', failure);
+            }
+            return target.transaction(...args);
+          };
+        }
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+  };
+  return { state, open };
+}
+
+describe('translation cache: hardening', () => {
+  it('keeps serving reads while a large eviction runs in batches', async () => {
+    const name = `test-${dbName++}`;
+    const filler = createTranslationCache({ open: open(name), now: () => 1 });
+    await filler.put(
+      Array.from({ length: 6000 }, (_, i) => ({
+        key: `k${String(i).padStart(4, '0')}`,
+        text: 'x',
+      })),
+    );
+    const cache = createTranslationCache({
+      open: open(name),
+      now: () => 2,
+      maxBytes: 30_000,
+      targetBytes: 600,
+      readTimeoutMs: 100,
+    });
+    await cache.getMany(['warm-up']);
+    const evicting = cache.put([{ key: 'fresh', text: 'F' }]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const hits = await cache.getMany(['fresh']);
+    expect(hits.get('fresh')).toBe('F');
+    await evicting;
+    const stats = await cache.stats();
+    expect(stats.totalBytes).toBeLessThanOrEqual(600);
+    expect(stats.totalBytes).toBe(stats.count * 6); // every entry is 6 bytes
+  });
+
+  it('does not delete a record rewritten after an expired read', async () => {
+    let time = 1_000;
+    const { cache } = setup({ now: () => time, ttlMs: 100 });
+    await cache.put([{ key: 'a', text: 'old' }]);
+    time += 101;
+    // The read sees the expired record; the put lands before the TTL delete runs.
+    const read = cache.getMany(['a']);
+    const write = cache.put([{ key: 'a', text: 'new' }]);
+    expect((await read).size).toBe(0);
+    await write;
+    expect((await cache.getMany(['a'])).get('a')).toBe('new');
+    expect(await cache.stats()).toEqual({ count: 1, totalBytes: 4 });
+  });
+
+  it('evicts and drops the write when the quota is exceeded', async () => {
+    let time = 1;
+    const { state, open: openDb } = instrumented(`test-${dbName++}`);
+    const cache = createTranslationCache({ open: openDb, now: () => time });
+    for (const key of ['a', 'b', 'c']) {
+      time += 1;
+      await cache.put([{ key, text: 'x'.repeat(9) }]);
+    }
+    state.failNext = 'QuotaExceededError';
+    await cache.put([{ key: 'd', text: 'x'.repeat(9) }]);
+    const hits = await cache.getMany(['a', 'b', 'c', 'd']);
+    expect(hits.has('d')).toBe(false);
+    expect(hits.has('a')).toBe(false); // least recently used went first
+    const stats = await cache.stats();
+    expect(stats.totalBytes).toBe(stats.count * 10);
+    expect(console.warn).toHaveBeenCalledWith('[cache] put failed', 'QuotaExceededError');
+    expect(state.opened).toBe(1);
+  });
+
+  it('closes the old connection before reopening after a failure', async () => {
+    const { state, open: openDb } = instrumented(`test-${dbName++}`);
+    const cache = createTranslationCache({ open: openDb });
+    for (let i = 0; i < 5; i += 1) {
+      state.failNext = 'InvalidStateError';
+      await cache.put([{ key: `k${i}`, text: 'x' }]);
+      await cache.put([{ key: `ok${i}`, text: 'x' }]);
+    }
+    expect(state.opened).toBe(6);
+    expect(state.opened - state.closed).toBe(1);
+    expect((await cache.getMany(['ok4'])).get('ok4')).toBe('x');
+  });
+});
