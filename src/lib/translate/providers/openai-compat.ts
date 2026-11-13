@@ -2,7 +2,14 @@ import { appError } from '@/lib/errors';
 import { decodeLlmOutput, renderUserMessage } from '../codec';
 import { readSse } from '../sse';
 import type { ProviderAdapter, ProviderContext, ProviderEvent } from '../types';
-import { errorFromResponse, interruptedError, modelRequiredError, safeFetch } from './errors';
+import {
+  contentBlockedError,
+  errorFromResponse,
+  interruptedError,
+  modelRequiredError,
+  outputTruncatedError,
+  safeFetch,
+} from './errors';
 
 const LIMITS = { maxItems: 20, maxChars: 3000 };
 
@@ -52,6 +59,8 @@ async function* translate(batch: string[], ctx: ProviderContext): AsyncGenerator
     }
     const choice = chunk.choices?.[0];
     if (typeof choice?.delta?.content === 'string') text += choice.delta.content;
+    if (choice?.finish_reason === 'length') throw outputTruncatedError();
+    if (choice?.finish_reason === 'content_filter') throw contentBlockedError();
     if (choice?.finish_reason) finished = true;
   }
   if (!finished) throw interruptedError();

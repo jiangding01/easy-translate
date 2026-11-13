@@ -11,7 +11,8 @@ const MESSAGES: Record<string, string> = {
   'validation/empty-translation': '翻译服务返回了空结果。请重试，或换一个翻译服务。',
   'validation/invalid-payload': '请求格式不正确。请刷新页面后重试。',
   'validation/forbidden-sender': '该操作只能在设置页中进行。请从设置页重试。',
-  'validation/invalid-secret': '密钥包含不可见字符。请重新复制后再粘贴。',
+  'validation/invalid-secret':
+    '密钥格式不正确：只能包含英文字母、数字和符号，不能有空格，且不超过 512 个字符。请重新复制后再粘贴。',
   'config/invalid-base-url':
     '接口地址不正确。请填写 https 开头的地址，本地模型可用 http://localhost。',
   'config/model-required': '尚未填写模型名称。请填写模型后重试。',
@@ -20,6 +21,8 @@ const MESSAGES: Record<string, string> = {
   'provider/not-found': '接口地址或模型不存在。请检查接口地址和模型名称。',
   'provider/quota-exceeded': '该服务的额度已用完。请充值，或换一个翻译服务。',
   'provider/server-error': '翻译服务暂时出错。请稍后重试，或换一个翻译服务。',
+  'provider/output-truncated': '译文超出模型的输出长度，被截断了。请缩小翻译范围，或换一个模型。',
+  'provider/content-blocked': '这段内容被翻译服务的安全策略拦截，无法翻译。',
   'rate-limit/too-many-requests': '请求过于频繁，服务暂时限流。请稍等片刻后重试。',
   'rate-limit/port-busy': '当前页面同时进行的翻译请求过多。请稍等片刻后重试。',
   'network/fetch-failed': '无法连接翻译服务。请检查网络后重试。',

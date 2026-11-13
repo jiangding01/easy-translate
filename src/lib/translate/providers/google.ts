@@ -16,10 +16,10 @@ function query(ctx: ProviderContext): string {
 /** Reads the shapes translate_a/t returns; undefined when unrecognizable. */
 function readRows(json: unknown, count: number): string[] | undefined {
   if (typeof json === 'string') return [json];
-  if (!Array.isArray(json)) return undefined;
-  if (json.every((row) => typeof row === 'string')) {
+  if (!Array.isArray(json) || json.length === 0) return undefined;
+  if (json.every((row): row is string => typeof row === 'string')) {
     // One item may come back as ["text", "detected-lang"].
-    return count === 1 ? [json[0] as string] : (json as string[]);
+    return count === 1 ? json.slice(0, 1) : json;
   }
   const rows: string[] = [];
   for (const row of json) {

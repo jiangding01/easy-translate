@@ -130,4 +130,13 @@ describe('openai-compat adapter', () => {
       expect(text).not.toContain('hello');
     }
   });
+
+  it.each([
+    ['length', 'provider/output-truncated'],
+    ['content_filter', 'provider/content-blocked'],
+  ])('maps finish_reason %s to %s, not retryable', async (reason, code) => {
+    const end = `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: reason }] })}\n\n`;
+    const fn = mockFetch(sseResponse([delta(OUTPUT), end, 'data: [DONE]\n\n']));
+    await expect(run(fn)).rejects.toMatchObject({ code, retryable: false });
+  });
 });

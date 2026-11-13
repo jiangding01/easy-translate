@@ -27,6 +27,16 @@ export function badResponseError(detail = 'Unexpected response shape'): AppError
   return appError('validation', 'validation/bad-response', detail);
 }
 
+/** The model stopped at its output limit; a smaller batch may fit. Not retryable as is. */
+export function outputTruncatedError(): AppError {
+  return appError('provider', 'provider/output-truncated', 'Model output was truncated');
+}
+
+/** The provider's safety filter blocked the prompt or the output. Not retryable as is. */
+export function contentBlockedError(): AppError {
+  return appError('provider', 'provider/content-blocked', 'Content was blocked by the provider');
+}
+
 export function modelRequiredError(): AppError {
   return appError('config', 'config/model-required', 'A model must be configured');
 }

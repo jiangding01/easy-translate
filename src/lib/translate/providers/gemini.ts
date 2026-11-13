@@ -2,14 +2,34 @@ import { appError } from '@/lib/errors';
 import { decodeLlmOutput, renderUserMessage } from '../codec';
 import { readSse } from '../sse';
 import type { ProviderAdapter, ProviderContext, ProviderEvent } from '../types';
-import { errorFromResponse, modelRequiredError, safeFetch } from './errors';
+import {
+  contentBlockedError,
+  errorFromResponse,
+  modelRequiredError,
+  outputTruncatedError,
+  safeFetch,
+} from './errors';
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 const LIMITS = { maxItems: 20, maxChars: 3000 };
 
 interface GeminiChunk {
-  candidates?: { content?: { parts?: { text?: unknown; thought?: unknown }[] } }[];
+  error?: unknown;
+  promptFeedback?: { blockReason?: unknown };
+  candidates?: {
+    content?: { parts?: { text?: unknown; thought?: unknown }[] };
+    finishReason?: unknown;
+  }[];
 }
+
+/** finishReason values that mean the safety system stopped the output. */
+const BLOCKED_FINISH_REASONS: ReadonlySet<unknown> = new Set([
+  'SAFETY',
+  'RECITATION',
+  'BLOCKLIST',
+  'PROHIBITED_CONTENT',
+  'SPII',
+]);
 
 async function* translate(batch: string[], ctx: ProviderContext): AsyncGenerator<ProviderEvent> {
   const { prompt, settings } = ctx;
@@ -42,7 +62,16 @@ async function* translate(batch: string[], ctx: ProviderContext): AsyncGenerator
     } catch {
       continue;
     }
-    for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
+    if (chunk.error) {
+      throw appError('provider', 'provider/server-error', 'Provider reported a stream error', {
+        retryable: true,
+      });
+    }
+    if (chunk.promptFeedback?.blockReason) throw contentBlockedError();
+    const candidate = chunk.candidates?.[0];
+    if (BLOCKED_FINISH_REASONS.has(candidate?.finishReason)) throw contentBlockedError();
+    if (candidate?.finishReason === 'MAX_TOKENS') throw outputTruncatedError();
+    for (const part of candidate?.content?.parts ?? []) {
       if (typeof part.text === 'string' && part.thought !== true) text += part.text;
     }
   }

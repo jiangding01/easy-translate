@@ -116,3 +116,36 @@ describe('splitInHalf / settleWithSplit', () => {
     expect(outcomes.every((o) => !o.ok && o.error.code === 'provider/unauthorized')).toBe(true);
   });
 });
+
+describe('decodeLlmOutput: raw JSON first', () => {
+  it('parses a valid array whose translation contains a code fence', () => {
+    const raw = JSON.stringify([{ i: 0, t: 'Use ```[1, 2]``` here' }]);
+    expect(decodeLlmOutput(raw, 1)).toEqual(['Use ```[1, 2]``` here']);
+  });
+
+  it('still reads fenced and noisy outputs', () => {
+    expect(decodeLlmOutput('```json\n[{"i":0,"t":"a"}]\n```', 1)).toEqual(['a']);
+    expect(decodeLlmOutput('Sure: [{"i":0,"t":"a"}] done', 1)).toEqual(['a']);
+  });
+});
+
+describe('settleWithSplit: truncated and blocked batches', () => {
+  it.each(['provider/output-truncated', 'provider/content-blocked'] as const)(
+    'halves on %s and ends single items with the real code',
+    async (code) => {
+      const calls: number[][] = [];
+      const outcomes = await settleWithSplit([1, 2, 3, 4], async (items) => {
+        calls.push([...items]);
+        if (items.includes(3)) throw appError('provider', code, 'x');
+        return items.map(String);
+      });
+      expect(outcomes).toEqual([
+        { ok: true, text: '1' },
+        { ok: true, text: '2' },
+        { ok: false, error: expect.objectContaining({ code }) },
+        { ok: true, text: '4' },
+      ]);
+      expect(calls).toEqual([[1, 2, 3, 4], [1, 2], [3, 4], [3], [4]]);
+    },
+  );
+});
