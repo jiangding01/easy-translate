@@ -9,7 +9,22 @@ assert.ok(manifest.background?.service_worker, 'Missing service worker');
 assert.ok(manifest.action?.default_popup, 'Missing popup');
 assert.ok(manifest.options_ui?.page, 'Missing options page');
 assert.ok(manifest.content_scripts?.length, 'Missing content script');
-assert.deepEqual([...manifest.permissions].sort(), ['activeTab', 'storage']);
+// Exact sets: any widening of permissions must fail the build.
+const sorted = (list) => [...(list ?? [])].sort();
+assert.deepEqual(sorted(manifest.permissions), ['activeTab', 'storage']);
+assert.deepEqual(
+  sorted(manifest.host_permissions),
+  [
+    'https://api.deepseek.com/*',
+    'https://api.openai.com/*',
+    'https://generativelanguage.googleapis.com/*',
+    'https://translate.googleapis.com/*',
+  ].sort(),
+);
+assert.deepEqual(
+  sorted(manifest.optional_host_permissions),
+  ['http://127.0.0.1/*', 'http://localhost/*', 'https://*/*'].sort(),
+);
 assert.ok(!manifest.key && !manifest.update_url, 'Legacy extension identity must not be copied');
 
 const files = [
