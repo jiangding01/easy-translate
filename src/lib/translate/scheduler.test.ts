@@ -127,6 +127,7 @@ interface SubmitOptions {
   caller?: string;
   adapter?: ProviderAdapter;
   engine?: string;
+  cooldownKey?: string;
 }
 
 function setup(
@@ -149,6 +150,7 @@ function setup(
       caller: submitOptions.caller ?? 'A',
       signal: controller.signal,
       engine: submitOptions.engine ?? 'google',
+      cooldownKey: submitOptions.cooldownKey,
       adapter: submitOptions.adapter ?? MT,
       context: CONTEXT,
       segments: texts.map((text) => ({ key: `k:${text}`, text })),
@@ -495,6 +497,60 @@ describe('scheduler: rate-limit cooldown', () => {
     expect(net.bodies()).toEqual([['a'], ['b'], ['a']]);
     await at(4000);
     expect(net.calls).toHaveLength(3);
+  });
+});
+
+describe('scheduler: cooldown hardening', () => {
+  it('caps an oversized retry-after at 60s and does not spin the wake timer', async () => {
+    const { net, submit } = setup();
+    submit(['a', 'b'], { adapter: LLM, engine: 'openai' });
+    await at(0);
+    expect(net.calls).toHaveLength(1);
+    net.calls[0]?.reply({ status: 429, retryAfterMs: 10 ** 10 });
+    await at(1000);
+    const timers = vi.spyOn(globalThis, 'setTimeout');
+    await at(30_000);
+    expect(timers.mock.calls.length).toBeLessThan(5);
+    timers.mockRestore();
+    await at(59_999);
+    expect(net.calls).toHaveLength(1);
+    await at(60_000);
+    expect(net.bodies()).toEqual([['a'], ['b']]);
+  });
+
+  it('keeps cooldowns of different cooldown keys apart', async () => {
+    const { net, submit } = setup();
+    submit(['t'], { caller: 'test', engine: 'openai', cooldownKey: 'test:1' });
+    await at(0);
+    net.calls[0]?.reply({ status: 429, retryAfterMs: 30_000 });
+    await at(10);
+    const real = submit(['a', 'b'], {
+      engine: 'openai',
+      cooldownKey: 'openai|https://api.openai.com',
+    });
+    await at(200);
+    expect(net.bodies()).toEqual([['t'], ['a'], ['b']]);
+    net.calls[1]?.echo();
+    await at(250);
+    expect(real.results[0]).toEqual(ok('T:a'));
+  });
+
+  it.each([401, 503])('stays in recovery when the probe answers %i', async (status) => {
+    const { net, submit } = setup();
+    submit(['a', 'b', 'c', 'd']);
+    await at(0);
+    net.calls[0]?.reply({ status: 429 }); // 2s cooldown; a retries as the probe
+    await at(2000);
+    expect(net.bodies()).toEqual([['a'], ['a']]);
+    net.calls[1]?.reply({ status }); // a has used its retry
+    await at(2100);
+    // Still recovering: only the next probe goes out.
+    expect(net.bodies()).toEqual([['a'], ['a'], ['b']]);
+    await at(5000);
+    expect(net.calls).toHaveLength(3);
+    net.calls[2]?.echo(); // a successful probe ends recovery
+    await at(5200);
+    expect(net.bodies().slice(3)).toEqual([['c'], ['d']]);
   });
 });
 

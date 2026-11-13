@@ -21,6 +21,7 @@ const MESSAGES: Record<string, string> = {
   'provider/quota-exceeded': '该服务的额度已用完。请充值，或换一个翻译服务。',
   'provider/server-error': '翻译服务暂时出错。请稍后重试，或换一个翻译服务。',
   'rate-limit/too-many-requests': '请求过于频繁，服务暂时限流。请稍等片刻后重试。',
+  'rate-limit/port-busy': '当前页面同时进行的翻译请求过多。请稍等片刻后重试。',
   'network/fetch-failed': '无法连接翻译服务。请检查网络后重试。',
   'network/timeout': '翻译服务响应超时。请检查网络后重试。',
   'network/stream-interrupted': '翻译过程中连接中断。请重试。',

@@ -442,6 +442,53 @@ describe('translate service: endpoint checks', () => {
   });
 });
 
+describe('translate service: per-port limit and cooldown scope', () => {
+  it('rejects a ninth in-flight request on the same port with port-busy', async () => {
+    const { providers, run, request } = setup();
+    providers.handlers.google = (texts, call) =>
+      texts.some((text) => text.startsWith('hang')) ? hang(texts, call) : googleOk(texts, call);
+    // Finished and failed requests free their slot.
+    for (let i = 0; i < 8; i += 1) await run({ items: items(`done${i}`) });
+    for (let i = 0; i < 8; i += 1) {
+      expect((await run({ items: [{ id: 'x', text: 1 as never }] })).outcome).toMatchObject({
+        status: 'error',
+      });
+    }
+    const hanging = Array.from({ length: 8 }, (_, i) => request({ items: items(`hang${i}`) }));
+    await vi.waitFor(() => expect(providers.calls.length).toBeGreaterThanOrEqual(8 + 6));
+    const callsBefore = providers.calls.length;
+    const busy = await run({ items: items('extra') });
+    expect(busy.outcome).toMatchObject({
+      status: 'error',
+      error: { code: 'rate-limit/port-busy', retryable: true },
+    });
+    expect(providers.calls).toHaveLength(callsBefore);
+    // A cancelled request frees its slot as well.
+    hanging[0]?.cancel();
+    expect(await hanging[0]?.outcome).toEqual({ status: 'cancelled' });
+    await vi.waitFor(() => expect(providers.aborts()).toBe(1));
+    await flush();
+    const after = request({ items: items('after') });
+    for (const handle of hanging.slice(1)) handle.cancel();
+    expect(await after.outcome).toEqual({ status: 'done', data: { total: 1, failed: 0 } });
+    expect(after.chunks).toEqual([
+      { id: 'i0', text: 'G:after', disposition: 'translated', cached: false },
+    ]);
+  });
+
+  it('scopes cooldowns by engine and endpoint origin', async () => {
+    const { service, config, run } = setup();
+    const submit = vi.spyOn(service.scheduler, 'submit');
+    await run({ items: items('Hello') });
+    config.translation.engine = 'openai';
+    await run({ items: items('Hello'), source: 'en' });
+    expect(submit.mock.calls.map((call) => call[0].cooldownKey)).toEqual([
+      'google',
+      'openai|https://api.openai.com',
+    ]);
+  });
+});
+
 describe('translate service: preprocessing and results', () => {
   it('strips zero-width characters before translating', async () => {
     const { run } = setup();

@@ -31,13 +31,21 @@ export function modelRequiredError(): AppError {
   return appError('config', 'config/model-required', 'A model must be configured');
 }
 
-/** `retry-after` is either delta-seconds or an HTTP date. */
+/** Upper bound for a server-requested wait; larger values are clamped. */
+export const MAX_RETRY_AFTER_MS = 60_000;
+
+/** `retry-after` is either delta-seconds or an HTTP date; capped at MAX_RETRY_AFTER_MS. */
 export function parseRetryAfter(value: string | null, now = Date.now()): number | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();
-  if (/^\d+(\.\d+)?$/.test(trimmed)) return Math.round(Number(trimmed) * 1000);
-  const date = Date.parse(trimmed);
-  return Number.isNaN(date) ? undefined : Math.max(0, date - now);
+  let ms: number;
+  if (/^\d+(\.\d+)?$/.test(trimmed)) ms = Math.round(Number(trimmed) * 1000);
+  else {
+    const date = Date.parse(trimmed);
+    if (Number.isNaN(date)) return undefined;
+    ms = Math.max(0, date - now);
+  }
+  return Math.min(ms, MAX_RETRY_AFTER_MS);
 }
 
 async function readBodyText(response: Response): Promise<string> {
