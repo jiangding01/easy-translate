@@ -1,4 +1,4 @@
-import { type DBSchema, type IDBPDatabase, openDB } from 'idb';
+import { type DBSchema, type IDBPDatabase, type IDBPTransaction, openDB } from 'idb';
 
 const DB_NAME = 'easy-translate';
 const DB_VERSION = 1;
@@ -10,6 +10,8 @@ export const CACHE_DEFAULTS = {
   targetBytes: 80 * 1024 * 1024,
   maxEntryBytes: 256 * 1024,
   readTimeoutMs: 1000,
+  /** Records deleted per eviction transaction; reads can run between batches. */
+  evictBatchSize: 500,
 };
 
 interface CacheRecord {
@@ -50,6 +52,7 @@ export interface CacheOptions {
   targetBytes?: number;
   maxEntryBytes?: number;
   readTimeoutMs?: number;
+  evictBatchSize?: number;
 }
 
 export function openCacheDb(name = DB_NAME): Promise<Db> {
@@ -66,11 +69,22 @@ function byteLength(text: string): number {
   return new TextEncoder().encode(text).length;
 }
 
+function errorName(error: unknown): string {
+  return error instanceof Error || error instanceof DOMException ? error.name : 'unknown';
+}
+
+/** Lets other transactions (reads above all) start between eviction batches. */
+function yieldToOthers(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 /**
  * IndexedDB translation cache. Every mutation updates `translations` and the
  * `meta` byte total inside one readwrite transaction; overlapping readwrite
  * transactions run in order, so concurrent writers cannot skew the total.
- * Failures degrade to "no cache" and the database is reopened on the next call.
+ * Eviction runs after the write, in small transactions with a yield between
+ * them, so reads are never stuck behind it. Failures degrade to "no cache":
+ * the connection is closed and reopened on the next call.
  */
 export function createTranslationCache(options: CacheOptions = {}): TranslationCache {
   const open = options.open ?? (() => openCacheDb());
@@ -80,8 +94,11 @@ export function createTranslationCache(options: CacheOptions = {}): TranslationC
   const targetBytes = options.targetBytes ?? CACHE_DEFAULTS.targetBytes;
   const maxEntryBytes = options.maxEntryBytes ?? CACHE_DEFAULTS.maxEntryBytes;
   const readTimeoutMs = options.readTimeoutMs ?? CACHE_DEFAULTS.readTimeoutMs;
+  const evictBatchSize = options.evictBatchSize ?? CACHE_DEFAULTS.evictBatchSize;
 
   let dbPromise: Promise<Db> | undefined;
+  let evicting: Promise<void> | undefined;
+  let evictAgain = false;
 
   function getDb(): Promise<Db> {
     if (!dbPromise) {
@@ -106,19 +123,26 @@ export function createTranslationCache(options: CacheOptions = {}): TranslationC
     try {
       return await task(await getDb());
     } catch (error) {
-      console.warn('[cache] unavailable', error instanceof Error ? error.name : 'unknown');
+      console.warn('[cache] unavailable', errorName(error));
+      // Close the connection being dropped, so failures do not pile up open ones.
+      const stale = dbPromise;
       dbPromise = undefined;
+      stale?.then(
+        (db) => db.close(),
+        () => undefined,
+      );
       return fallback;
     }
   }
 
-  async function removeKeys(db: Db, keys: readonly string[]): Promise<void> {
+  /** Deletes the records that are still expired; a record rewritten meanwhile is kept. */
+  async function removeExpired(db: Db, keys: readonly string[], cutoff: number): Promise<void> {
     const tx = db.transaction(['translations', 'meta'], 'readwrite');
     const store = tx.objectStore('translations');
     let freed = 0;
     for (const key of keys) {
       const record = await store.get(key);
-      if (!record) continue;
+      if (!record || record.createdAt >= cutoff) continue;
       freed += record.bytes;
       await store.delete(key);
     }
@@ -141,8 +165,56 @@ export function createTranslationCache(options: CacheOptions = {}): TranslationC
       else hits.set(key, record.text);
     }
     await tx.done;
-    if (expired.length > 0) await removeKeys(db, expired);
+    if (expired.length > 0) await removeExpired(db, expired, cutoff);
     return hits;
+  }
+
+  /**
+   * One eviction transaction: deletes up to `evictBatchSize` least recently used
+   * records while above the low-water mark (`force`: regardless of it), and
+   * updates the byte total in the same transaction. Returns whether to go on.
+   */
+  async function evictBatch(db: Db, force: boolean): Promise<boolean> {
+    const tx = db.transaction(['translations', 'meta'], 'readwrite');
+    const meta = tx.objectStore('meta');
+    let total = (await meta.get(META_TOTAL)) ?? 0;
+    let removed = 0;
+    if (force || total > targetBytes) {
+      let cursor = await tx.objectStore('translations').index('lastUsedAt').openCursor();
+      while (cursor && removed < evictBatchSize && (force || total > targetBytes)) {
+        total -= cursor.value.bytes;
+        removed += 1;
+        await cursor.delete();
+        cursor = await cursor.continue();
+      }
+    }
+    if (removed > 0) await meta.put(Math.max(0, total), META_TOTAL);
+    await tx.done;
+    return removed === evictBatchSize && total > targetBytes;
+  }
+
+  /** Evicts batch by batch down to the low-water mark; concurrent calls share one run. */
+  function evict(force = false): Promise<void> {
+    if (evicting) {
+      evictAgain = true;
+      return evicting;
+    }
+    const run = (async () => {
+      let first = force;
+      do {
+        evictAgain = false;
+        for (;;) {
+          const more = await guarded((db) => evictBatch(db, first), false);
+          first = false;
+          if (!more) break;
+          await yieldToOthers();
+        }
+      } while (evictAgain);
+    })().finally(() => {
+      evicting = undefined;
+    });
+    evicting = run;
+    return run;
   }
 
   return {
@@ -181,33 +253,40 @@ export function createTranslationCache(options: CacheOptions = {}): TranslationC
         .filter((entry) => entry.bytes <= maxEntryBytes);
       if (accepted.length === 0) return Promise.resolve();
       return guarded(async (db) => {
-        const tx = db.transaction(['translations', 'meta'], 'readwrite');
-        const store = tx.objectStore('translations');
-        const meta = tx.objectStore('meta');
-        let total = (await meta.get(META_TOTAL)) ?? 0;
-        const stamp = now();
-        for (const entry of accepted) {
-          const previous = await store.get(entry.key);
-          total += entry.bytes - (previous?.bytes ?? 0);
-          await store.put({
-            key: entry.key,
-            text: entry.text,
-            createdAt: stamp,
-            lastUsedAt: stamp,
-            bytes: entry.bytes,
-          });
-        }
-        if (total > maxBytes) {
-          // Evict least recently used until under the low-water mark.
-          let cursor = await store.index('lastUsedAt').openCursor();
-          while (cursor && total > targetBytes) {
-            total -= cursor.value.bytes;
-            await cursor.delete();
-            cursor = await cursor.continue();
+        let total = 0;
+        let tx: IDBPTransaction<CacheDB, ('translations' | 'meta')[], 'readwrite'> | undefined;
+        try {
+          tx = db.transaction(['translations', 'meta'], 'readwrite');
+          const store = tx.objectStore('translations');
+          const meta = tx.objectStore('meta');
+          total = (await meta.get(META_TOTAL)) ?? 0;
+          const stamp = now();
+          for (const entry of accepted) {
+            const previous = await store.get(entry.key);
+            total += entry.bytes - (previous?.bytes ?? 0);
+            await store.put({
+              key: entry.key,
+              text: entry.text,
+              createdAt: stamp,
+              lastUsedAt: stamp,
+              bytes: entry.bytes,
+            });
           }
+          await meta.put(Math.max(0, total), META_TOTAL);
+          await tx.done;
+        } catch (error) {
+          const quota = [error, tx?.error].some(
+            (cause) => errorName(cause) === 'QuotaExceededError',
+          );
+          if (!quota) throw error;
+          tx?.done.catch(() => undefined);
+          // Storage is full: make room once and give up on this write.
+          console.warn('[cache] put failed', 'QuotaExceededError');
+          await evict(true);
+          return;
         }
-        await meta.put(Math.max(0, total), META_TOTAL);
-        await tx.done;
+        // Evict least recently used down to the low-water mark, outside the write.
+        if (total > maxBytes) await evict();
       }, undefined);
     },
 
