@@ -3,6 +3,7 @@ import { SettingsFields } from '@/components/SettingsFields';
 import type { ConfigChange } from '@/lib/config/types';
 import { useConfig } from '@/lib/config/use-config';
 import { describeError } from '@/lib/error-messages';
+import { useTheme } from '@/styles/theme';
 import styles from '@/styles/ui.module.css';
 
 const SAVED_VISIBLE_MS = 2000;
@@ -12,6 +13,7 @@ type Feedback = { kind: 'saved' } | { kind: 'error'; text: string };
 export function App() {
   const { state, patch } = useConfig();
   const [feedback, setFeedback] = useState<Feedback>();
+  useTheme(state.status === 'ready' ? state.snapshot.data.ui.theme : undefined);
 
   useEffect(() => {
     if (feedback?.kind !== 'saved') return;

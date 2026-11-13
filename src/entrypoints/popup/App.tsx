@@ -5,6 +5,7 @@ import { describeError } from '@/lib/error-messages';
 import { languageName } from '@/lib/languages';
 import { call } from '@/lib/messaging/handle';
 import { type PageInfo, sendMessage } from '@/lib/messaging/protocol';
+import { useTheme } from '@/styles/theme';
 import styles from '@/styles/ui.module.css';
 import { inspectActivePage } from './inspect-page';
 
@@ -18,6 +19,7 @@ export function App() {
   const [page, setPage] = useState<PageInfo>();
   const [status, setStatus] = useState<Status>({ text: '正在连接扩展…' });
   const [busy, setBusy] = useState(false);
+  useTheme(state.status === 'ready' ? state.snapshot.data.ui.theme : undefined);
 
   useEffect(() => {
     void call(() => sendMessage('app.getStatus', undefined)).then((result) =>
