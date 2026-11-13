@@ -12,23 +12,25 @@ export interface SecretStatus {
   last4: string;
 }
 
-// Zero-width and bidi marks, line/paragraph separators, BOM and control characters.
-// Pasted keys most often carry a stray newline.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
-const INVISIBLE = /[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202F\u2060-\u2064\uFEFF]/;
+/** API keys are printable ASCII without spaces (0x21–0x7E). */
+const VISIBLE_ASCII = /^[\x21-\x7E]*$/;
+export const MAX_SECRET_LENGTH = 512;
 
 export function invalidSecretError(): AppError {
   return appError(
     'validation',
     'validation/invalid-secret',
-    'API key contains invisible characters',
+    'API key must be visible ASCII, at most 512 characters',
   );
 }
 
-/** Trims; rejects invisible characters. Never echoes the value. */
+/**
+ * Trims; then accepts visible ASCII only (no inner spaces, invisible marks,
+ * curly quotes or CJK), at most 512 characters. Never echoes the value.
+ */
 export function cleanApiKey(raw: string): string {
   const key = raw.trim();
-  if (INVISIBLE.test(key)) throw invalidSecretError();
+  if (key.length > MAX_SECRET_LENGTH || !VISIBLE_ASCII.test(key)) throw invalidSecretError();
   return key;
 }
 

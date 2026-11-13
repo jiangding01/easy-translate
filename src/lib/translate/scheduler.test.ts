@@ -554,6 +554,30 @@ describe('scheduler: cooldown hardening', () => {
   });
 });
 
+describe('scheduler: truncated and blocked batches', () => {
+  it.each(['provider/output-truncated', 'provider/content-blocked'] as const)(
+    'splits a batch failing with %s down to the offending item, without retrying',
+    async (code) => {
+      const calls: string[][] = [];
+      const adapter: ProviderAdapter = {
+        kind: 'mt',
+        limits: { maxItems: 4, maxChars: 100_000 },
+        async *translate(batch) {
+          calls.push([...batch]);
+          if (batch.includes('c')) throw appError('provider', code, 'x');
+          for (const [index, text] of batch.entries())
+            yield { type: 'item', index, text: `T:${text}` };
+        },
+      };
+      const { submit } = setup();
+      const { results } = submit(['a', 'b', 'c', 'd'], { adapter });
+      await at(1000);
+      expect(results).toEqual([ok('T:a'), ok('T:b'), err(code), ok('T:d')]);
+      expect(calls).toEqual([['a', 'b', 'c', 'd'], ['a', 'b'], ['c', 'd'], ['c'], ['d']]);
+    },
+  );
+});
+
 describe('scheduler: fairness', () => {
   it('rotates between callers', async () => {
     const { net, submit } = setup();

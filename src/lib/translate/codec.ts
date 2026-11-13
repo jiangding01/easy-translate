@@ -27,13 +27,18 @@ function parseArray(text: string): unknown[] | undefined {
   }
 }
 
-/** Tolerates Markdown fences and prose around the array. */
+/**
+ * Tolerates Markdown fences and prose around the array. The whole output is
+ * tried first, so a translation that itself contains a fence still parses.
+ */
 function extractArray(raw: string): unknown[] | undefined {
+  const direct = parseArray(raw.trim());
+  if (direct) return direct;
   const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(raw)?.[1];
+  const inFence = fenced === undefined ? undefined : parseArray(fenced.trim());
+  if (inFence) return inFence;
   for (const candidate of [fenced, raw]) {
     if (candidate === undefined) continue;
-    const direct = parseArray(candidate.trim());
-    if (direct) return direct;
     const start = candidate.indexOf('[');
     const end = candidate.lastIndexOf(']');
     if (start !== -1 && end > start) {
@@ -100,10 +105,24 @@ export function splitInHalf<T>(items: readonly T[]): [T[], T[]] | undefined {
 
 export type ItemOutcome = { ok: true; text: string } | { ok: false; error: AppError };
 
+const SPLITTABLE: ReadonlySet<string> = new Set([
+  'validation/bad-response',
+  'provider/output-truncated',
+  'provider/content-blocked',
+]);
+
 /**
- * Runs `run` on the batch; when the result is malformed (`validation/bad-response`),
- * halves the batch and retries each half down to single items. Other errors apply
- * to every item in the batch. Pure helper: callers route `run` through the scheduler.
+ * Errors worth halving the batch for: a malformed answer, an output cut at the
+ * token limit (a smaller batch may fit) and a safety block (isolates the item).
+ */
+export function isSplittableError(error: AppError): boolean {
+  return SPLITTABLE.has(error.code);
+}
+
+/**
+ * Runs `run` on the batch; on a splittable error (see isSplittableError) halves
+ * the batch and retries each half down to single items, which end with the real
+ * error. Other errors apply to every item in the batch. Pure helper: callers route `run` through the scheduler.
  */
 export async function settleWithSplit<T>(
   items: readonly T[],
@@ -115,7 +134,7 @@ export async function settleWithSplit<T>(
     return texts.map((text) => ({ ok: true, text }));
   } catch (error) {
     const appErr = isAppError(error) ? error : badResponseError();
-    const halves = appErr.code === 'validation/bad-response' ? splitInHalf(items) : undefined;
+    const halves = isSplittableError(appErr) ? splitInHalf(items) : undefined;
     if (!halves) return items.map(() => ({ ok: false, error: appErr }));
     const left = await settleWithSplit(halves[0], run);
     const right = await settleWithSplit(halves[1], run);

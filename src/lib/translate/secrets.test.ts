@@ -92,3 +92,23 @@ describe('secret store', () => {
     expect((await store.status()).openai.configured).toBe(false);
   });
 });
+
+describe('cleanApiKey: visible ASCII only', () => {
+  it.each([
+    ['Chinese characters', 'sk-密钥abcdef'],
+    ['curly quotes', '“sk-abcdef”'],
+    ['an inner space', 'sk-abc def'],
+    ['more than 512 characters', `sk-${'a'.repeat(510)}`],
+  ])('rejects %s', (_name, key) => {
+    expect(() => cleanApiKey(key)).toThrow(
+      expect.objectContaining({ code: 'validation/invalid-secret' }),
+    );
+  });
+
+  it('accepts printable ASCII up to 512 characters, trimming the ends', () => {
+    const key = `sk-${'a'.repeat(509)}`;
+    expect(cleanApiKey(`  ${key}\n`)).toBe(key);
+    expect(cleanApiKey('sk-A1_b2.c3~!@#$%^&*()')).toBe('sk-A1_b2.c3~!@#$%^&*()');
+    expect(cleanApiKey('   ')).toBe('');
+  });
+});

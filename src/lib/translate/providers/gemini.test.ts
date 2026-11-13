@@ -61,4 +61,58 @@ describe('gemini adapter', () => {
     });
     expect(fn).not.toHaveBeenCalled();
   });
+
+  const chunk = (body: unknown) => `data: ${JSON.stringify(body)}\n\n`;
+
+  it('maps promptFeedback.blockReason to content-blocked', async () => {
+    const fn = mockFetch(sseResponse([chunk({ promptFeedback: { blockReason: 'SAFETY' } })]));
+    await expect(run(fn)).rejects.toMatchObject({
+      code: 'provider/content-blocked',
+      retryable: false,
+    });
+  });
+
+  it.each(['SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII'])(
+    'maps finishReason %s to content-blocked',
+    async (finishReason) => {
+      const fn = mockFetch(
+        sseResponse([
+          part(OUTPUT),
+          chunk({ candidates: [{ content: { parts: [] }, finishReason }] }),
+        ]),
+      );
+      await expect(run(fn)).rejects.toMatchObject({
+        code: 'provider/content-blocked',
+        retryable: false,
+      });
+    },
+  );
+
+  it('maps finishReason MAX_TOKENS to output-truncated', async () => {
+    const fn = mockFetch(
+      sseResponse([
+        chunk({
+          candidates: [{ content: { parts: [{ text: '[{"i":0' }] }, finishReason: 'MAX_TOKENS' }],
+        }),
+      ]),
+    );
+    await expect(run(fn)).rejects.toMatchObject({
+      code: 'provider/output-truncated',
+      retryable: false,
+    });
+  });
+
+  it('accepts finishReason STOP', async () => {
+    const fn = mockFetch(
+      sseResponse([
+        chunk({ candidates: [{ content: { parts: [{ text: OUTPUT }] }, finishReason: 'STOP' }] }),
+      ]),
+    );
+    expect(await run(fn)).toEqual([{ type: 'item', index: 0, text: '你好' }]);
+  });
+
+  it('maps an error object in the stream to server-error', async () => {
+    const fn = mockFetch(sseResponse([part('[{"i":0'), chunk({ error: { code: 500 } })]));
+    await expect(run(fn)).rejects.toMatchObject({ code: 'provider/server-error' });
+  });
 });

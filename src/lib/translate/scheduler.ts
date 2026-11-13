@@ -1,5 +1,5 @@
 import { type AppError, appError, type Result, toAppError } from '@/lib/errors';
-import { chunkByLimits, type ItemOutcome, splitInHalf } from './codec';
+import { chunkByLimits, type ItemOutcome, isSplittableError, splitInHalf } from './codec';
 import {
   abortedError,
   badResponseError,
@@ -514,7 +514,7 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
       }, delay);
       return;
     }
-    const halves = error.code === 'validation/bad-response' ? splitInHalf(job.segments) : undefined;
+    const halves = isSplittableError(error) ? splitInHalf(job.segments) : undefined;
     if (halves) {
       split(job, halves);
       return;

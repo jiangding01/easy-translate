@@ -109,4 +109,16 @@ describe('google adapter', () => {
     await expect(run(['a', 'b'], fn)).rejects.toMatchObject({ code: 'validation/bad-response' });
     expect(fn).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ['empty array', []],
+    ['array with null', [null]],
+    ['array of non-string rows', [[null, 'en']]],
+  ])('treats an odd primary response as malformed: %s', async (_name, body) => {
+    const fn = mockFetch(jsonResponse(body), jsonResponse([[['ok', 'x']]]));
+    const events = await run(['x'], fn);
+    // Not taken as a result: the single endpoint answered instead.
+    expect(events).toEqual([{ type: 'item', index: 0, text: 'ok' }]);
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
 });
