@@ -52,9 +52,12 @@ export interface TranslateService {
 
 const ZERO_WIDTH = /[​-‍﻿]/g;
 
-/** Drops zero-width characters (U+200B–U+200D, U+FEFF), then trims. */
+/**
+ * Replaces lone surrogates with U+FFFD (they break encodeURIComponent and
+ * hashing), drops zero-width characters (U+200B–U+200D, U+FEFF), then trims.
+ */
 export function preprocessText(text: string): string {
-  return text.replace(ZERO_WIDTH, '').trim();
+  return text.toWellFormed().replace(ZERO_WIDTH, '').trim();
 }
 
 function comparable(text: string): string {
@@ -111,11 +114,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function parseTranslateRequest(payload: unknown): TranslateRequest {
   if (!isRecord(payload) || !Array.isArray(payload.items)) throw invalidPayloadError();
   const items: TranslateItem[] = [];
+  const ids = new Set<string>();
   let chars = 0;
   for (const item of payload.items) {
     if (!isRecord(item) || typeof item.id !== 'string' || typeof item.text !== 'string') {
       throw invalidPayloadError();
     }
+    // Chunks are matched to items by id: duplicates would be ambiguous.
+    if (ids.has(item.id)) throw invalidPayloadError();
+    ids.add(item.id);
     chars += item.text.length;
     items.push({ id: item.id, text: item.text });
   }

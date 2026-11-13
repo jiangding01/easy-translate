@@ -106,3 +106,31 @@ describe('same-language check', () => {
     expect(await result).toBe(false);
   });
 });
+
+describe('same-language check: dominance threshold', () => {
+  it('still translates when the target language is only 51% of the text', async () => {
+    const check = createSameLanguageCheck(
+      detector({
+        isReliable: true,
+        languages: [
+          { language: 'zh', percentage: 51 },
+          { language: 'en', percentage: 49 },
+        ],
+      }),
+    );
+    expect(await check(`${ZH} and some English words here`, 'zh-CN')).toBe(false);
+  });
+
+  it('skips at 80% and above', async () => {
+    const check = createSameLanguageCheck(
+      detector({
+        isReliable: true,
+        languages: [
+          { language: 'zh', percentage: 80 },
+          { language: 'en', percentage: 20 },
+        ],
+      }),
+    );
+    expect(await check(ZH, 'zh-CN')).toBe(true);
+  });
+});

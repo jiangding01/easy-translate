@@ -12,6 +12,8 @@ export type DetectLanguage = (text: string) => Promise<DetectedLanguages>;
 export const DETECT_TIMEOUT_MS = 200;
 /** Shorter texts are too ambiguous to skip on. */
 export const DETECT_MIN_LENGTH = 10;
+/** The top language must cover at least this share of the text to skip it. */
+export const DETECT_MIN_PERCENTAGE = 80;
 
 /**
  * `chrome.i18n.detectLanguage`, looked up at call time. Whether it exists in a
@@ -35,8 +37,9 @@ export function stripForDetection(text: string): string {
 export type SameLanguageCheck = (text: string, target: LanguageCode) => Promise<boolean>;
 
 /**
- * True only when detection is reliable and its top language equals the target
- * after normalization (Simplified and Traditional Chinese stay distinct).
+ * True only when detection is reliable, its top language covers at least 80% of
+ * the text and equals the target after normalization (Simplified and
+ * Traditional Chinese stay distinct). Mixed-language text is translated.
  * Short texts, timeouts, a missing API and errors all mean "translate".
  */
 export function createSameLanguageCheck(
@@ -58,7 +61,11 @@ export function createSameLanguageCheck(
       for (const candidate of result.languages ?? []) {
         if (!top || candidate.percentage > top.percentage) top = candidate;
       }
-      return top !== undefined && normalizeLanguage(top.language) === target;
+      return (
+        top !== undefined &&
+        top.percentage >= DETECT_MIN_PERCENTAGE &&
+        normalizeLanguage(top.language) === target
+      );
     } catch {
       return false;
     } finally {

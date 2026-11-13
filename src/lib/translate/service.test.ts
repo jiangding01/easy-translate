@@ -226,6 +226,21 @@ describe('preprocessing and classification', () => {
       expect.objectContaining({ code: 'validation/invalid-payload' }),
     );
   });
+
+  it('rejects a payload with duplicate item ids', () => {
+    expect(() =>
+      parseTranslateRequest({
+        items: [
+          { id: 'a', text: 'one' },
+          { id: 'a', text: 'two' },
+        ],
+      }),
+    ).toThrow(expect.objectContaining({ code: 'validation/invalid-payload' }));
+  });
+
+  it('repairs lone surrogates', () => {
+    expect(preprocessText('a\uD800b\uDC00')).toBe('a\uFFFDb\uFFFD');
+  });
 });
 
 // ------------------------------------------------------------ integration
@@ -532,6 +547,17 @@ describe('translate service: preprocessing and results', () => {
     await cached(cache, 1);
     const again = await run({ items: items('GitHub  API') });
     expect(again.byId.i0).toMatchObject({ disposition: 'unchanged', cached: true });
+  });
+
+  it('translates text with a lone surrogate through the Google single fallback', async () => {
+    const { providers, run } = setup();
+    providers.handlers.google = () => {
+      throw new TypeError('Failed to fetch');
+    };
+    const result = await run({ items: items('Hello \uD800world') });
+    expect(result.outcome).toEqual({ status: 'done', data: { total: 1, failed: 0 } });
+    expect(result.byId.i0).toMatchObject({ text: 'S:Hello \uFFFDworld' });
+    expect(providers.calls.map((call) => call.method)).toEqual(['POST', 'GET']);
   });
 
   it('falls back to the per-item Google endpoint on a network error', async () => {
