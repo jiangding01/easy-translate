@@ -11,6 +11,9 @@ import {
   type ConfigChange,
   type ConfigPath,
   type ConfigSnapshot,
+  type ConfigV1,
+  ENGINES,
+  type Engine,
   THEMES,
   type Theme,
 } from './types';
@@ -25,6 +28,10 @@ function isTheme(value: unknown): value is Theme {
   return typeof value === 'string' && (THEMES as readonly string[]).includes(value);
 }
 
+function isEngine(value: unknown): value is Engine {
+  return typeof value === 'string' && (ENGINES as readonly string[]).includes(value);
+}
+
 /** Structural merge with defaults plus enum guards. Pure; exported for tests. */
 export function normalizeConfig(raw: unknown, uiLanguage: string): ConfigSnapshot {
   const defaults = createDefaultSnapshot(uiLanguage);
@@ -34,6 +41,7 @@ export function normalizeConfig(raw: unknown, uiLanguage: string): ConfigSnapsho
   if (!isPlainObject(merged)) return defaults;
   const ui = isPlainObject(merged.ui) ? merged.ui : {};
   const language = isPlainObject(merged.language) ? merged.language : {};
+  const translation = isPlainObject(merged.translation) ? merged.translation : {};
   return {
     schemaVersion: CONFIG_SCHEMA_VERSION,
     data: {
@@ -42,6 +50,17 @@ export function normalizeConfig(raw: unknown, uiLanguage: string): ConfigSnapsho
       language: {
         ...language,
         target: isLanguageCode(language.target) ? language.target : defaults.data.language.target,
+        source:
+          language.source === 'auto' || isLanguageCode(language.source)
+            ? language.source
+            : defaults.data.language.source,
+      },
+      providers: merged.providers as ConfigV1['providers'],
+      translation: {
+        ...translation,
+        engine: isEngine(translation.engine)
+          ? translation.engine
+          : defaults.data.translation.engine,
       },
     },
   };

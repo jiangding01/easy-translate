@@ -5,12 +5,22 @@ import type { LanguageCode } from '@/lib/languages';
 export const THEMES = ['system', 'light', 'dark'] as const;
 export type Theme = (typeof THEMES)[number];
 
+export const ENGINES = ['google', 'openai', 'deepseek', 'gemini', 'custom'] as const;
+export type Engine = (typeof ENGINES)[number];
+
 export const CONFIG_SCHEMA_VERSION = 1;
 export const CONFIG_STORAGE_KEY = 'config';
 
 export interface ConfigV1 {
   ui: { theme: Theme };
-  language: { target: LanguageCode };
+  language: { target: LanguageCode; source: 'auto' | LanguageCode };
+  translation: { engine: Engine };
+  providers: {
+    openai: { baseURL: string; model: string };
+    deepseek: { model: string };
+    gemini: { model: string };
+    custom: { baseURL: string; model: string };
+  };
 }
 
 export interface ConfigSnapshot {

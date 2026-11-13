@@ -2,9 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { MAX_REPAIR_ROUNDS, parseStoredConfig } from './parse';
 import { configSchema } from './schema';
+import { EXTRA_DEFAULTS } from './test-fixtures';
 
 const uiLanguage = 'ja-JP';
-const defaults = { ui: { theme: 'system' }, language: { target: 'ja' } };
+const defaults = {
+  ui: { theme: 'system' },
+  language: { target: 'ja', source: 'auto' },
+  ...EXTRA_DEFAULTS,
+};
 const stored = (data: unknown) => ({ schemaVersion: 1, data });
 const parse = (raw: unknown) => parseStoredConfig(raw, { uiLanguage });
 
@@ -17,7 +22,12 @@ describe('parseStoredConfig', () => {
   });
 
   it('keeps valid data as-is without marking repaired', () => {
-    const data = { ui: { theme: 'dark' }, language: { target: 'ko' } };
+    const data = {
+      ui: { theme: 'dark' },
+      language: { target: 'ko', source: 'ja' },
+      translation: { engine: 'openai' },
+      providers: { ...EXTRA_DEFAULTS.providers, gemini: { model: 'm' } },
+    };
     const result = parse(stored(data));
     expect(result.snapshot.data).toEqual(data);
     expect(result.repaired).toBe(false);
@@ -27,7 +37,8 @@ describe('parseStoredConfig', () => {
   it('preserves unknown keys at every level', () => {
     const data = {
       ui: { theme: 'dark', density: 'compact' },
-      language: { target: 'en' },
+      language: { target: 'en', source: 'auto' },
+      ...EXTRA_DEFAULTS,
       future: 1,
     };
     const result = parse(stored(data));
@@ -37,15 +48,50 @@ describe('parseStoredConfig', () => {
 
   it('fills missing fields with defaults and marks repaired', () => {
     const result = parse(stored({ ui: { theme: 'dark' } }));
-    expect(result.snapshot.data).toEqual({ ui: { theme: 'dark' }, language: { target: 'ja' } });
+    expect(result.snapshot.data).toEqual({ ...defaults, ui: { theme: 'dark' } });
     expect(result.repaired).toBe(true);
+  });
+
+  it('fills the fields added after M0 into an old stored config', () => {
+    const result = parse(stored({ ui: { theme: 'dark' }, language: { target: 'ko' } }));
+    expect(result.snapshot.data).toEqual({
+      ...defaults,
+      ui: { theme: 'dark' },
+      language: { target: 'ko', source: 'auto' },
+    });
+    expect(result.repaired).toBe(true);
+  });
+
+  it('resets an invalid engine, source language and provider field independently', () => {
+    const result = parse(
+      stored({
+        ...defaults,
+        language: { target: 'ko', source: 'xx' },
+        translation: { engine: 'bing' },
+        providers: { ...defaults.providers, openai: { baseURL: 1, model: 'm' } },
+      }),
+    );
+    expect(result.snapshot.data).toEqual({
+      ...defaults,
+      language: { target: 'ko', source: 'auto' },
+      providers: {
+        ...defaults.providers,
+        openai: { baseURL: 'https://api.openai.com/v1', model: 'm' },
+      },
+    });
+    expect(result.resetPaths.sort()).toEqual([
+      'language.source',
+      'providers.openai.baseURL',
+      'translation.engine',
+    ]);
   });
 
   it('resets only the invalid leaf', () => {
     const result = parse(stored({ ui: { theme: 'neon', keep: true }, language: { target: 'ko' } }));
     expect(result.snapshot.data).toEqual({
+      ...defaults,
       ui: { theme: 'system', keep: true },
-      language: { target: 'ko' },
+      language: { target: 'ko', source: 'auto' },
     });
     expect(result.repaired).toBe(true);
     expect(result.resetPaths).toEqual(['ui.theme']);
@@ -54,15 +100,18 @@ describe('parseStoredConfig', () => {
   it('resets several invalid leaves independently', () => {
     const result = parse(stored({ ui: { theme: 1 }, language: { target: 'xx', keep: 'y' } }));
     expect(result.snapshot.data).toEqual({
-      ui: { theme: 'system' },
-      language: { target: 'ja', keep: 'y' },
+      ...defaults,
+      language: { target: 'ja', source: 'auto', keep: 'y' },
     });
     expect(result.resetPaths.sort()).toEqual(['language.target', 'ui.theme']);
   });
 
   it('replaces a parent of the wrong type with its default subtree', () => {
     const result = parse(stored({ ui: 'x', language: { target: 'ko' } }));
-    expect(result.snapshot.data).toEqual({ ui: { theme: 'system' }, language: { target: 'ko' } });
+    expect(result.snapshot.data).toEqual({
+      ...defaults,
+      language: { target: 'ko', source: 'auto' },
+    });
     expect(result.resetPaths).toEqual(['ui']);
   });
 
@@ -108,7 +157,11 @@ describe('parseStoredConfig', () => {
 
   it('treats a missing schemaVersion as needing a write-back', () => {
     const result = parse({ data: { ui: { theme: 'dark' }, language: { target: 'en' } } });
-    expect(result.snapshot.data).toEqual({ ui: { theme: 'dark' }, language: { target: 'en' } });
+    expect(result.snapshot.data).toEqual({
+      ...defaults,
+      ui: { theme: 'dark' },
+      language: { target: 'en', source: 'auto' },
+    });
     expect(result.repaired).toBe(true);
   });
 });
