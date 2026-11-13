@@ -180,6 +180,9 @@ describe('provider.test', () => {
     await handlers['provider.test'](options, draft());
     const [a, b] = submit.mock.calls.map((call) => call[0]);
     expect(a?.caller).not.toBe(b?.caller);
+    // Own cooldown scope: a rate-limited test never cools down real translations.
+    expect(a?.cooldownKey).toMatch(/^test:/);
+    expect(a?.cooldownKey).not.toBe(b?.cooldownKey);
     expect(a?.segments[0]?.key).not.toBe(b?.segments[0]?.key);
   });
 

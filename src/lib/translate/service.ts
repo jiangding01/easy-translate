@@ -73,6 +73,32 @@ function invalidPayloadError(): AppError {
   return appError('validation', 'validation/invalid-payload', 'Malformed translate request');
 }
 
+/** In-flight translate requests allowed per caller (one Port). */
+export const MAX_REQUESTS_PER_CALLER = 8;
+
+export function portBusyError(): AppError {
+  return appError(
+    'rate-limit',
+    'rate-limit/port-busy',
+    'Too many requests in flight on this port',
+    {
+      retryable: true,
+    },
+  );
+}
+
+/** Cooldown scope: one per engine and endpoint origin; Google has a fixed endpoint. */
+export function cooldownKeyFor(engine: Engine, baseURL: string): string {
+  if (engine === 'google') return 'google';
+  let origin = baseURL;
+  try {
+    origin = new URL(baseURL).origin;
+  } catch {
+    // Unparsable endpoints were already rejected by the endpoint gate.
+  }
+  return `${engine}|${origin}`;
+}
+
 export function payloadTooLargeError(): AppError {
   return appError('validation', 'validation/payload-too-large', 'Too many items or characters');
 }
@@ -133,11 +159,26 @@ export function createTranslateService(deps: TranslateServiceDeps): TranslateSer
   const checkPermission = deps.checkPermission ?? checkEngineEndpoint;
   const { cache } = deps;
   let sequence = 0;
+  /** In-flight requests per caller; an entry is removed when it drops to zero. */
+  const inflight = new Map<string, number>();
 
   async function translate(payload: TranslateRequest, ctx: TranslateContext) {
+    const caller = ctx.caller ?? `request-${++sequence}`;
+    const count = inflight.get(caller) ?? 0;
+    if (count >= MAX_REQUESTS_PER_CALLER) throw portBusyError();
+    inflight.set(caller, count + 1);
+    try {
+      return await run(payload, ctx, caller);
+    } finally {
+      const left = (inflight.get(caller) ?? 1) - 1;
+      if (left > 0) inflight.set(caller, left);
+      else inflight.delete(caller);
+    }
+  }
+
+  async function run(payload: TranslateRequest, ctx: TranslateContext, caller: string) {
     const request = parseTranslateRequest(payload);
     const { signal } = ctx;
-    const caller = ctx.caller ?? `request-${++sequence}`;
     throwIfAborted(signal);
 
     let failed = 0;
@@ -236,6 +277,7 @@ export function createTranslateService(deps: TranslateServiceDeps): TranslateSer
         caller,
         signal,
         engine,
+        cooldownKey: cooldownKeyFor(engine, settings.baseURL),
         adapter,
         context: { source, target, settings, apiKey, prompt },
         segments: misses.map((item) => ({ key: item.key, text: item.text })),

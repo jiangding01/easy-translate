@@ -121,6 +121,8 @@ export function createAdminHandlers(deps: AdminDeps) {
       caller: `provider-test-${randomId()}`,
       signal: new AbortController().signal,
       engine,
+      // Own cooldown and probe scope: a rate-limited test never pauses real translations.
+      cooldownKey: `test:${randomId()}`,
       adapter,
       context: { source: 'auto', target: config.language.target, settings, apiKey, prompt },
       segments: [{ key: `test:${randomId()}`, text: TEST_SAMPLE }],

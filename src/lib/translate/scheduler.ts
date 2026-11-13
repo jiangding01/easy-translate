@@ -1,6 +1,11 @@
 import { type AppError, appError, type Result, toAppError } from '@/lib/errors';
 import { chunkByLimits, type ItemOutcome, splitInHalf } from './codec';
-import { abortedError, badResponseError, timeoutError } from './providers/errors';
+import {
+  abortedError,
+  badResponseError,
+  MAX_RETRY_AFTER_MS,
+  timeoutError,
+} from './providers/errors';
 import type { ProviderAdapter, ProviderContext, ProviderEvent } from './types';
 
 // Background-only request scheduler. Everything lives in memory: a new instance
@@ -41,8 +46,10 @@ export const SCHEDULER_LIMITS: Readonly<Record<Kind, KindLimits>> = {
 export const MAX_RETRIES = 1;
 export const RETRY_BASE_MS = 1000;
 export const RETRY_JITTER = 0.1;
-/** Engine cooldown after a 429 without `retry-after`. */
+/** Cooldown after a 429 without `retry-after`. */
 export const DEFAULT_COOLDOWN_MS = 2000;
+/** Defensive ceiling for any cooldown, whatever the error says. */
+export const MAX_COOLDOWN_MS = MAX_RETRY_AFTER_MS;
 
 /** Provider context minus what the scheduler owns per attempt. */
 export type TaskContext = Omit<ProviderContext, 'signal' | 'fetch' | 'idleTimeoutMs'>;
@@ -57,8 +64,12 @@ export interface ScheduleRequest {
   caller: string;
   /** Aborting unsubscribes this caller from every segment it requested. */
   signal: AbortSignal;
-  /** Cooldown scope. */
   engine: string;
+  /**
+   * Cooldown and probe scope; defaults to `engine`. The service passes
+   * `engine|origin` (Google: `google`), connection tests a key of their own.
+   */
+  cooldownKey?: string;
   adapter: ProviderAdapter;
   context: TaskContext;
   /** `key` is the cache key: equal keys share one translation. */
@@ -110,7 +121,7 @@ interface Segment {
 /** Shared by every job (batch, retry, split half) derived from one submission. */
 interface Task {
   caller: string;
-  engine: string;
+  cooldownKey: string;
   adapter: ProviderAdapter;
   context: TaskContext;
   persist: ScheduleRequest['persist'];
@@ -129,9 +140,9 @@ interface Job {
   retryTimer: ReturnType<typeof setTimeout> | undefined;
 }
 
-interface EngineState {
+interface CooldownState {
   cooldownUntil: number;
-  /** Set by a 429; cleared only by a probe started after the latest 429 that came back healthy. */
+  /** Set by a 429; cleared only by a successful probe started after the latest 429. */
   recovering: boolean;
   probeInFlight: boolean;
   /** Bumped on every 429, so an older request's late success cannot end recovery. */
@@ -150,11 +161,6 @@ function isBlank(text: string): boolean {
 
 function failure(error: AppError): ItemOutcome {
   return { ok: false, error };
-}
-
-/** A rate-limit answer or a failure to get any answer says nothing about recovery. */
-function isHealthy(result: Result<string[]>): boolean {
-  return result.ok || (result.error.kind !== 'rate-limit' && result.error.kind !== 'network');
 }
 
 async function collectItems(events: AsyncIterable<ProviderEvent>, count: number) {
@@ -219,7 +225,8 @@ function createAttemptFetch(
  * - header timeout per fetch, idle timeout for LLM streams, and a per-segment
  *   deadline shared by retries, splits and Google's per-item fallback;
  * - at most one retry of retryable errors (1s × 2^n + 0–10% jitter, or retryAfterMs);
- * - per-engine cooldown after a 429, then a single probe before resuming;
+ * - per-cooldown-key pause after a 429 (at most 60s), then one probe at a time
+ *   until a probe succeeds;
  * - round-robin across callers;
  * - segment-level dedupe by cache key, subscriptions counted per segment.
  */
@@ -236,17 +243,17 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
   let cursor = 0;
   const active: Record<Kind, number> = { mt: 0, llm: 0 };
   const nextStartAt: Record<Kind, number> = { mt: 0, llm: 0 };
-  const engines = new Map<string, EngineState>();
+  const cooldowns = new Map<string, CooldownState>();
   let waiting = 0;
   let wakeTimer: ReturnType<typeof setTimeout> | undefined;
   let pumping = false;
   let pumpAgain = false;
 
-  function engineState(engine: string): EngineState {
-    let state = engines.get(engine);
+  function cooldownState(key: string): CooldownState {
+    let state = cooldowns.get(key);
     if (!state) {
       state = { cooldownUntil: 0, recovering: false, probeInFlight: false, epoch: 0 };
-      engines.set(engine, state);
+      cooldowns.set(key, state);
     }
     return state;
   }
@@ -284,9 +291,9 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
   /** `true` when the job may start now; otherwise the time to look again (Infinity: on release). */
   function gate(job: Job, time: number): true | number {
     const kind = job.task.adapter.kind;
-    const engine = engineState(job.task.engine);
-    if (engine.cooldownUntil > time) return engine.cooldownUntil;
-    if (engine.recovering && engine.probeInFlight) return Number.POSITIVE_INFINITY;
+    const cooldown = cooldownState(job.task.cooldownKey);
+    if (cooldown.cooldownUntil > time) return cooldown.cooldownUntil;
+    if (cooldown.recovering && cooldown.probeInFlight) return Number.POSITIVE_INFINITY;
     if (active[kind] >= SCHEDULER_LIMITS[kind].concurrency) return Number.POSITIVE_INFINITY;
     if (nextStartAt[kind] > time) return nextStartAt[kind];
     return true;
@@ -426,10 +433,10 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
     const kind = job.task.adapter.kind;
     active[kind] += 1;
     nextStartAt[kind] = now() + SCHEDULER_LIMITS[kind].intervalMs;
-    const engine = engineState(job.task.engine);
-    job.probe = engine.recovering;
-    if (job.probe) engine.probeInFlight = true;
-    job.epoch = engine.epoch;
+    const cooldown = cooldownState(job.task.cooldownKey);
+    job.probe = cooldown.recovering;
+    if (job.probe) cooldown.probeInFlight = true;
+    job.epoch = cooldown.epoch;
     job.state = 'running';
     void execute(job);
   }
@@ -458,7 +465,7 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
       result = { ok: false, error: toAppError(error) };
     }
 
-    observeEngine(job, result);
+    observeCooldown(job, result);
     if (job.state === 'running') handleResult(job, result);
     // Aborting does not end a fetch at once: keep the slot until it really has.
     await Promise.all(requests);
@@ -466,19 +473,18 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
     pump();
   }
 
-  function observeEngine(job: Job, result: Result<string[]>) {
-    const engine = engineState(job.task.engine);
+  function observeCooldown(job: Job, result: Result<string[]>) {
+    const cooldown = cooldownState(job.task.cooldownKey);
     if (!result.ok && result.error.kind === 'rate-limit') {
-      engine.epoch += 1;
-      engine.recovering = true;
-      engine.cooldownUntil = Math.max(
-        engine.cooldownUntil,
-        now() + (result.error.retryAfterMs ?? DEFAULT_COOLDOWN_MS),
-      );
+      cooldown.epoch += 1;
+      cooldown.recovering = true;
+      const pause = Math.min(result.error.retryAfterMs ?? DEFAULT_COOLDOWN_MS, MAX_COOLDOWN_MS);
+      cooldown.cooldownUntil = Math.max(cooldown.cooldownUntil, now() + pause);
     }
     if (job.probe) {
-      engine.probeInFlight = false;
-      if (isHealthy(result) && job.epoch === engine.epoch) engine.recovering = false;
+      cooldown.probeInFlight = false;
+      // Only a success proves recovery; any other failure lets the next probe through.
+      if (result.ok && job.epoch === cooldown.epoch) cooldown.recovering = false;
     }
   }
 
@@ -556,7 +562,7 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
     }
     const task: Task = {
       caller: request.caller,
-      engine: request.engine,
+      cooldownKey: request.cooldownKey ?? request.engine,
       adapter,
       context: request.context,
       persist: request.persist,
