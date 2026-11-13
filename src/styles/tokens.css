@@ -1,0 +1,170 @@
+/*
+ * Design tokens: the single source, copied from the UI/UX spec section 2
+ * (docs/reviews/2026-11-13-ui-ux-design.md). `:root` serves extension pages,
+ * `:host` serves Shadow DOM UI (M2+). Sizes are px only: rem would follow the
+ * host page's `html` font-size inside injected UI.
+ *
+ * Theme: `data-et-theme="light" | "dark"` forces a theme; without it the
+ * system preference applies.
+ */
+
+:root,
+:host {
+  color-scheme: light;
+
+  /* 2.1 Color */
+  --et-color-primary: #2b6e6a;
+  --et-color-primary-hover: #245d5a;
+  --et-color-primary-soft: #e6f0ee;
+  --et-color-on-primary: #ffffff;
+  --et-color-bg: #ffffff;
+  --et-color-surface: #f7f7f5;
+  --et-color-elevated: #ffffff;
+  --et-color-border: #e6e6e3;
+  --et-color-border-strong: #d2d2ce;
+  --et-color-text: #1c1d1f;
+  --et-color-text-secondary: #5e6166;
+  --et-color-text-tertiary: #8a8d93;
+  --et-color-success: #2e7d4f;
+  --et-color-warning: #a86200;
+  --et-color-danger: #c4352b;
+  --et-color-danger-soft: #fbecea;
+  --et-color-focus: #2b6e6a;
+  --et-color-scrim: rgba(20, 21, 23, 0.32);
+  --et-subtitle-bg: rgba(8, 8, 8, 0.72);
+
+  /* 2.2 Typography */
+  --et-font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --et-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --et-fw-regular: 400;
+  --et-fw-medium: 500;
+  --et-fw-semibold: 600;
+
+  /* Injected UI (Shadow DOM) */
+  --et-fs-inject-xs: 11px;
+  --et-lh-inject-xs: 16px;
+  --et-fs-inject-sm: 12px;
+  --et-lh-inject-sm: 18px;
+  --et-fs-inject-md: 13px;
+  --et-lh-inject-md: 20px;
+  --et-fs-inject-lg: 15px;
+  --et-lh-inject-lg: 24px;
+  --et-fs-inject-xl: 17px;
+  --et-lh-inject-xl: 26px;
+
+  /* Extension pages (popup / options / onboarding) */
+  --et-fs-page-xs: 12px;
+  --et-lh-page-xs: 16px;
+  --et-fs-page-sm: 13px;
+  --et-lh-page-sm: 20px;
+  --et-fs-page-md: 14px;
+  --et-lh-page-md: 22px;
+  --et-fs-page-lg: 16px;
+  --et-lh-page-lg: 24px;
+  --et-fs-page-xl: 20px;
+  --et-lh-page-xl: 28px;
+  --et-fs-page-2xl: 24px;
+  --et-lh-page-2xl: 32px;
+
+  /* 2.3 Spacing (4px grid) */
+  --et-space-1: 4px;
+  --et-space-2: 8px;
+  --et-space-3: 12px;
+  --et-space-4: 16px;
+  --et-space-5: 20px;
+  --et-space-6: 24px;
+  --et-space-8: 32px;
+  --et-space-10: 40px;
+
+  /* 2.4 Radius */
+  --et-radius-xs: 4px;
+  --et-radius-sm: 6px;
+  --et-radius-md: 8px;
+  --et-radius-lg: 12px;
+  --et-radius-full: 999px;
+
+  /* 2.5 Shadow (each carries a 1px ring so edges show on any host) */
+  --et-shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06), 0 0 0 1px rgba(16, 24, 40, 0.06);
+  --et-shadow-2: 0 4px 12px rgba(16, 24, 40, 0.08), 0 0 0 1px rgba(16, 24, 40, 0.06);
+  --et-shadow-3: 0 12px 32px rgba(16, 24, 40, 0.12), 0 0 0 1px rgba(16, 24, 40, 0.06);
+
+  /* 2.6 Motion */
+  --et-dur-fast: 120ms;
+  --et-dur-base: 180ms;
+  --et-dur-slow: 240ms;
+  --et-dur-spring: 280ms;
+  --et-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --et-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --et-ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+}
+
+[data-et-theme="dark"],
+:host([data-et-theme="dark"]) {
+  color-scheme: dark;
+
+  --et-color-primary: #5fb3a9;
+  --et-color-primary-hover: #78c2b9;
+  --et-color-primary-soft: #1c3532;
+  --et-color-on-primary: #0e1f1d;
+  --et-color-bg: #141517;
+  --et-color-surface: #1c1d20;
+  --et-color-elevated: #232428;
+  --et-color-border: #2e3034;
+  --et-color-border-strong: #3d4045;
+  --et-color-text: #ecedee;
+  --et-color-text-secondary: #a1a4aa;
+  --et-color-text-tertiary: #6e7177;
+  --et-color-success: #5bc48a;
+  --et-color-warning: #e3a447;
+  --et-color-danger: #f07167;
+  --et-color-danger-soft: #3a1f1d;
+  --et-color-focus: #5fb3a9;
+  --et-color-scrim: rgba(0, 0, 0, 0.56);
+
+  --et-shadow-1: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --et-shadow-2: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --et-shadow-3: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-et-theme="light"]),
+  :host(:not([data-et-theme="light"])) {
+    color-scheme: dark;
+
+    --et-color-primary: #5fb3a9;
+    --et-color-primary-hover: #78c2b9;
+    --et-color-primary-soft: #1c3532;
+    --et-color-on-primary: #0e1f1d;
+    --et-color-bg: #141517;
+    --et-color-surface: #1c1d20;
+    --et-color-elevated: #232428;
+    --et-color-border: #2e3034;
+    --et-color-border-strong: #3d4045;
+    --et-color-text: #ecedee;
+    --et-color-text-secondary: #a1a4aa;
+    --et-color-text-tertiary: #6e7177;
+    --et-color-success: #5bc48a;
+    --et-color-warning: #e3a447;
+    --et-color-danger: #f07167;
+    --et-color-danger-soft: #3a1f1d;
+    --et-color-focus: #5fb3a9;
+    --et-color-scrim: rgba(0, 0, 0, 0.56);
+
+    --et-shadow-1: 0 0 0 1px rgba(255, 255, 255, 0.08);
+    --et-shadow-2: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    --et-shadow-3: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* Reduced motion: no positional animation, opacity changes stay within 120ms. */
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  :host {
+    --et-dur-base: var(--et-dur-fast);
+    --et-dur-slow: var(--et-dur-fast);
+    --et-dur-spring: 0ms;
+  }
+}
