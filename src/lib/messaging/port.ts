@@ -54,6 +54,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function isSerializable(value: unknown): boolean {
+  try {
+    JSON.stringify(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Reading lastError in onDisconnect marks it checked, avoiding "Unchecked runtime.lastError" noise. */
 function consumeLastError(): void {
   try {
@@ -83,9 +92,30 @@ export function servePort<P, C, D>(port: PortLike, handler: PortHandler<P, C, D>
 
   function send(frame: DownFrame<C, D>) {
     if (!connected) return;
+    // Extension messages are JSON-serialized: pre-check so one bad value fails only its request.
+    if ((frame.t === 'done' || frame.t === 'chunk') && !isSerializable(frame)) {
+      inflight.get(frame.id)?.abort();
+      inflight.delete(frame.id);
+      send({
+        t: 'error',
+        id: frame.id,
+        error: appError(
+          'internal',
+          'internal/unserializable-response',
+          'Response could not be serialized',
+        ),
+      });
+      return;
+    }
     try {
       port.postMessage(frame);
     } catch {
+      // The port is unusable: really disconnect so the client sees onDisconnect.
+      try {
+        port.disconnect();
+      } catch {
+        // Already gone.
+      }
       handleDisconnect();
     }
   }
@@ -124,7 +154,7 @@ export function servePort<P, C, D>(port: PortLike, handler: PortHandler<P, C, D>
       if (typeof frame.id === 'string') {
         inflight.get(frame.id)?.abort();
         inflight.delete(frame.id);
-      } else {
+      } else if (frame.id === undefined) {
         abortAll();
       }
     }
@@ -227,8 +257,21 @@ export function createPortClient<P, C, D>(
     if (!isRecord(frame) || typeof frame.id !== 'string') return;
     const entry = pending.get(frame.id);
     if (!entry) return; // Late frame for a finished/cancelled or unknown id.
-    if (frame.t === 'chunk') entry.onChunk?.(frame.data as C);
-    else if (frame.t === 'done') settle(frame.id, { status: 'done', data: frame.data as D });
+    if (frame.t === 'chunk') {
+      try {
+        entry.onChunk?.(frame.data as C);
+      } catch {
+        // A consumer bug must not escape the listener: end this request and stop the server side.
+        if (
+          settle(frame.id, {
+            status: 'error',
+            error: appError('internal', 'internal/chunk-handler-failed', 'Chunk handler threw'),
+          })
+        ) {
+          post({ t: 'cancel', id: frame.id });
+        }
+      }
+    } else if (frame.t === 'done') settle(frame.id, { status: 'done', data: frame.data as D });
     else if (frame.t === 'error') {
       settle(frame.id, { status: 'error', error: toAppError(frame.error) });
     }
@@ -262,13 +305,28 @@ export function createPortClient<P, C, D>(
   return {
     request(payload, onChunk) {
       const id = createRequestId();
+      const frame: UpFrame<P> = { t: 'req', id, payload };
+      if (!isSerializable(frame)) {
+        return {
+          id,
+          outcome: Promise.resolve<Outcome<D>>({
+            status: 'error',
+            error: appError(
+              'validation',
+              'validation/unserializable-payload',
+              'Payload could not be serialized',
+            ),
+          }),
+          cancel() {},
+        };
+      }
       let resolve: (outcome: Outcome<D>) => void = () => undefined;
       const outcome = new Promise<Outcome<D>>((r) => {
         resolve = r;
       });
       pending.set(id, { onChunk, resolve });
       syncPing();
-      post({ t: 'req', id, payload }, true);
+      post(frame, true);
       return {
         id,
         outcome,

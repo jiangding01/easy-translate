@@ -60,6 +60,10 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
   - 新增配置字段时，在 `schema.ts` 和 `defaults.ts` 中追加并给出默认值，不需要提升版本号。只有破坏性变更才提升 `schemaVersion` 并编写迁移。
   - Port 的调用方在切换会话前必须先 `cancelAll()`。
   - popup 的 gzip 体积已用到 74/80KB，往 popup 新增依赖之前要先评估。
+  - **M1 开工前必须决定（来自 M0 深度审查）**：
+    - 配置路径对数组和 Record 只支持整体替换。如果 provider 设置按 id 存成 Record，两个页面同时修改不同的 provider 时，后写入的会覆盖先写入的。二选一：改成固定键的对象（每个 provider 一个分支），或者给 `ConfigChange` 增加按记录合并或删除的操作。
+    - Port 客户端本身没有超时，请求超时和中止由 M1 的调度器负责。否则 handler 不返回时，请求会一直挂起，ping 也会让 SW 一直保活。
+    - `call()` 把所有发送失败都归为「后台不可达」。M1 新增的写操作应当保持幂等，因为可能出现「实际已写入、但回包丢失」的情况。
 - **下一步：M1 翻译核心**：范围和验收标准见 final-plan 第 7 节。开工前先用 think skill 写出 `docs/plans/m1-*.md`。
 
 M1 和 M2（整页翻译）完成后即构成 MVP。

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { appError } from '@/lib/errors';
 import {
   createPortClient,
+  type Outcome,
   PING_INTERVAL_MS,
   type PortContext,
   type PortLike,
@@ -296,6 +297,119 @@ describe('port transport', () => {
     await flush();
     expect(ctx?.signal.aborted).toBe(true);
     expect(frames).toEqual([]);
+  });
+
+  it('server ends an unserializable response with a non-retryable internal error', async () => {
+    const pair = createPortPair();
+    servePort<string, string, unknown>(pair.server, async (payload) => {
+      if (payload === 'cycle') {
+        const loop: Record<string, unknown> = {};
+        loop.self = loop;
+        return loop;
+      }
+      return payload;
+    });
+    const frames: Record<string, unknown>[] = [];
+    pair.client.onMessage.addListener((frame) => frames.push(frame as Record<string, unknown>));
+    pair.client.postMessage({ t: 'req', id: 'bad', payload: 'cycle' });
+    pair.client.postMessage({ t: 'req', id: 'good', payload: 'fine' });
+    await flush();
+    expect(frames).toContainEqual({ t: 'done', id: 'good', data: 'fine' });
+    expect(frames).toContainEqual({
+      t: 'error',
+      id: 'bad',
+      error: expect.objectContaining({
+        kind: 'internal',
+        code: 'internal/unserializable-response',
+        retryable: false,
+      }),
+    });
+  });
+
+  it('server disconnects the port when postMessage throws, so clients do not hang', async () => {
+    const pair = createPortPair();
+    const server: PortLike = {
+      ...pair.server,
+      postMessage: () => {
+        throw new Error('port is broken');
+      },
+    };
+    servePort<string, string, string>(server, async (payload) => payload);
+    const client = createPortClient<string, string, string>(() => pair.client);
+    const first = client.request('a');
+    const second = client.request('b');
+    const outcomes = await Promise.race([
+      Promise.all([first.outcome, second.outcome]),
+      new Promise<'hung'>((resolve) => setTimeout(() => resolve('hung'), 50)),
+    ]);
+    expect(outcomes).not.toBe('hung');
+    for (const outcome of outcomes as Outcome<string>[]) {
+      expect(outcome).toEqual({
+        status: 'error',
+        error: expect.objectContaining({ code: 'network/port-disconnected' }),
+      });
+    }
+  });
+
+  it('client rejects an unserializable payload without affecting in-flight requests', async () => {
+    const gate = deferred<string>();
+    const { client, connect } = connected((payload) =>
+      payload === 'slow' ? gate.promise : Promise.resolve(payload),
+    );
+    const first = client.request('slow');
+    await flush();
+    const bad = client.request(10n as unknown as string);
+    expect(await bad.outcome).toEqual({
+      status: 'error',
+      error: expect.objectContaining({
+        kind: 'validation',
+        code: 'validation/unserializable-payload',
+        retryable: false,
+      }),
+    });
+    expect(connect).toHaveBeenCalledTimes(1);
+    gate.resolve('slow-result');
+    expect(await first.outcome).toEqual({ status: 'done', data: 'slow-result' });
+  });
+
+  it('client does not connect for an unserializable payload', async () => {
+    const connect = vi.fn<() => PortLike>(() => recordingPort().port);
+    const client = createPortClient<string, string, string>(connect);
+    const outcome = await client.request(10n as unknown as string).outcome;
+    expect(outcome.status).toBe('error');
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it('a throwing onChunk fails only that request with chunk-handler-failed and cancels it', async () => {
+    const { port, sent, deliver } = recordingPort();
+    const client = createPortClient<string, string, string>(() => port);
+    const request = client.request('x', () => {
+      throw new Error('boom');
+    });
+    expect(() => deliver({ t: 'chunk', id: request.id, data: 'c' })).not.toThrow();
+    expect(await request.outcome).toEqual({
+      status: 'error',
+      error: expect.objectContaining({ code: 'internal/chunk-handler-failed', retryable: false }),
+    });
+    expect(sent).toContainEqual({ t: 'cancel', id: request.id });
+  });
+
+  it('server ignores a cancel frame whose id is not a string', async () => {
+    const pair = createPortPair();
+    const gate = deferred<string>();
+    let ctx: PortContext<string> | undefined;
+    servePort<string, string, string>(pair.server, (_payload, context) => {
+      ctx = context;
+      return gate.promise;
+    });
+    pair.client.postMessage({ t: 'req', id: 'r1', payload: 'x' });
+    await flush();
+    pair.client.postMessage({ t: 'cancel', id: 123 });
+    await flush();
+    expect(ctx?.signal.aborted).toBe(false);
+    pair.client.postMessage({ t: 'cancel' });
+    await flush();
+    expect(ctx?.signal.aborted).toBe(true);
   });
 
   it('pings every 20s while requests are in flight and stops when idle', async () => {

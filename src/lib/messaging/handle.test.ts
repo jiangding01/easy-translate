@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appError, ok } from '@/lib/errors';
+import { appError, ok, type Result } from '@/lib/errors';
 import { call, handle } from './handle';
 
 describe('handle', () => {
@@ -50,5 +50,11 @@ describe('call', () => {
   it('rejects a malformed reply', async () => {
     const result = await call(async () => undefined as never);
     expect(result).toMatchObject({ ok: false, error: { code: 'internal/invalid-response' } });
+  });
+
+  it('accepts an ok result whose data key was dropped by serialization', async () => {
+    expect(await call(() => Promise.resolve({ ok: true } as unknown as Result<void>))).toEqual({
+      ok: true,
+    });
   });
 });

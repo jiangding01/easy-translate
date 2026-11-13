@@ -27,7 +27,8 @@ export function handle<A extends unknown[], T>(
 function isResult(value: unknown): value is Result<unknown> {
   if (typeof value !== 'object' || value === null) return false;
   const result = value as Record<string, unknown>;
-  return result.ok === true ? 'data' in result : result.ok === false && isAppError(result.error);
+  // A handler returning undefined loses its `data` key in JSON serialization.
+  return result.ok === true || (result.ok === false && isAppError(result.error));
 }
 
 /**
