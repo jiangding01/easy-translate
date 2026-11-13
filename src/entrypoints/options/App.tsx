@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SettingsFields } from '@/components/SettingsFields';
 import type { ConfigChange } from '@/lib/config/types';
 import { useConfig } from '@/lib/config/use-config';
@@ -13,6 +13,7 @@ type Feedback = { kind: 'saved' } | { kind: 'error'; text: string };
 export function App() {
   const { state, patch } = useConfig();
   const [feedback, setFeedback] = useState<Feedback>();
+  const latestPatch = useRef(0);
   useTheme(state.status === 'ready' ? state.snapshot.data.ui.theme : undefined);
 
   useEffect(() => {
@@ -24,7 +25,10 @@ export function App() {
   // Save on select. No rollback logic: the control always shows the storage
   // snapshot, so a failed patch simply leaves the old value in place.
   async function change(next: ConfigChange) {
+    const sequence = ++latestPatch.current;
     const result = await patch([next]);
+    // Only the newest patch may set feedback; an older, slower result is stale.
+    if (sequence !== latestPatch.current) return;
     setFeedback(
       result.ok
         ? { kind: 'saved' }

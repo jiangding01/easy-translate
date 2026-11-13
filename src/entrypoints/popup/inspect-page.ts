@@ -12,8 +12,9 @@ export async function inspectActivePage(): Promise<Result<PageInfo>> {
   const tabId = tab.id;
   return call(
     () => sendMessage('page.getInfo', undefined, { tabId, frameId: 0 }),
+    // Retrying cannot help: the user has to reload the page to get a content script.
     appError('network', 'network/page-unreachable', 'Content script is unreachable', {
-      retryable: true,
+      retryable: false,
     }),
   );
 }
