@@ -1,6 +1,6 @@
 # M0 地基：技术方案
 
-> 状态：**已批准，实施中**（已吸收独立审查的 2 条阻断、5 条重要、6 条建议） · 2026-11-13 · 依据：`HANDOFF.md` 第 3/5/6/8 节、`docs/reviews/2026-11-13-final-plan.md`、`docs/reviews/2026-11-13-ui-ux-design.md` 第 2 节与 6.3 节
+> 状态：**已实现，待合并**（已吸收独立审查的 2 条阻断、5 条重要、6 条建议） · 2026-11-13 · 依据：`HANDOFF.md` 第 3/5/6/8 节、`docs/reviews/2026-11-13-final-plan.md`、`docs/reviews/2026-11-13-ui-ux-design.md` 第 2 节与 6.3 节
 > 分支：`feat/m0-foundation` · 交付方式：1 个 PR（内部按主题拆提交），CI 通过后由用户手动合并
 
 ## 1. 目标与完成标准

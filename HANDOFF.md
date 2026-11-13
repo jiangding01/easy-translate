@@ -53,18 +53,16 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
 - **还没有**：任何翻译能力；方案第 9 节的手工验收（真实 Chrome）尚未执行；CI 尚未在 GitHub 上首次运行。
 - **git**：`main` 上是规划文档；M0 在 `feat/m0-foundation`。
 
-## 5. 下一步：M0 地基（验收标准见 final-plan 第 7 节）
+## 5. 批次状态与下一步
 
-建议顺序，每一步都应能独立验证：
-1. **工具链**：引入 Biome 2（`biome.json`，加 `lint`/`format` 脚本），引入 Vitest + `WxtVitest`（wxt/testing）+ `@webext-core/fake-browser` + happy-dom（加 `test` 脚本）。
-2. **依赖**：zod v4、idb、`@webext-core/messaging`。
-3. **配置**：在 `src/lib/config/` 下建立 `schema.ts`（zod ConfigV1）、`repository.ts`（后台单写入点：串行执行「读最新 → 字段 patch → zod 校验 → 写入」，`onChanged` 广播）、`use-config.ts`。必须有「并发 patch 不丢更新」的单测。
-4. **消息**：`src/lib/messaging/protocol.ts`（一次性调用的 5 个消息族），以及 `port.ts`（翻译 Port 帧：enqueue/cancel/chunk/done/error；`onDisconnect` 时取消该连接名下的全部任务）。必须有断连清理的单测。
-5. **体积门禁**：size-limit，预算见 UI 规范 6.3 节（content core ≤20KB gzip）。
-6. **CI**：GitHub Actions 运行 check、lint、test、size。复杂逻辑写在 Node 脚本里，不要写成长串 Bash。
-7. **设计 token**：把 UI 规范第 2 节的 token 落到 `src/styles/`（TS 单一来源，同时生成 `:root` 与 `:host` 两份），用它替换 `DESIGN.md` 的旧主题，并让 popup/options 接入新的 config。
+- **M0 地基**：已实现，等待合并。**实际设计以 [`docs/plans/m0-foundation.md`](docs/plans/m0-foundation.md) 为准**，其第 6 节记录了相对最终方案的 7 处偏离：体积门禁用自写脚本而非 size-limit；token 只用一个纯 CSS 文件；schema 按批次追加字段；客户端不用 zod；消息返回 `Result`；happy-dom 和 idb 推迟引入；Port 只做传输层。
+- **M0 留给后续批次的约定**：
+  - 新增配置字段时，在 `schema.ts` 和 `defaults.ts` 中追加并给出默认值，不需要提升版本号。只有破坏性变更才提升 `schemaVersion` 并编写迁移。
+  - Port 的调用方在切换会话前必须先 `cancelAll()`。
+  - popup 的 gzip 体积已用到 74/80KB，往 popup 新增依赖之前要先评估。
+- **下一步：M1 翻译核心**：范围和验收标准见 final-plan 第 7 节。开工前先用 think skill 写出 `docs/plans/m1-*.md`。
 
-M0 完成后依次进入 M1（翻译核心）和 M2（整页翻译），二者合起来就是 MVP。
+M1 和 M2（整页翻译）完成后即构成 MVP。
 
 ## 6. 需要实测确认的假设（不要默认成立）
 
