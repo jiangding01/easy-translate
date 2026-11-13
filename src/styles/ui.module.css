@@ -104,6 +104,13 @@
   color: #475569;
   overflow-wrap: anywhere;
 }
+.error {
+  font-size: 13px;
+  min-height: 46px;
+  margin: 16px 0;
+  color: #b91c1c;
+  overflow-wrap: anywhere;
+}
 .pageInfo {
   padding: 12px;
   background: #f1f5f9;

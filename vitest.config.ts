@@ -7,6 +7,5 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     setupFiles: ['./vitest.setup.ts'],
-    passWithNoTests: true,
   },
 });
