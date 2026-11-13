@@ -223,7 +223,22 @@ describe('provider.test', () => {
       options,
       draft({ engine: 'custom', baseURL: 'https://llm.example.com/v1/chat/completions' }),
     );
-    expect(checkPermission).toHaveBeenCalledWith('https://llm.example.com/v1');
+    expect(checkPermission).toHaveBeenCalledWith('custom', 'https://llm.example.com/v1');
+    expect(result).toMatchObject({ ok: false, error: { code: 'config/permission-missing' } });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('does not ignore a missing permission for an openai endpoint', async () => {
+    const checkPermission = vi.fn(
+      async () =>
+        ({ ok: false, error: appError('config', 'config/permission-missing', 'no') }) as const,
+    );
+    const { handlers, submit } = setup({}, { checkPermission });
+    const result = await handlers['provider.test'](
+      options,
+      draft({ baseURL: 'https://proxy.example.com/v1' }),
+    );
+    expect(checkPermission).toHaveBeenCalledWith('openai', 'https://proxy.example.com/v1');
     expect(result).toMatchObject({ ok: false, error: { code: 'config/permission-missing' } });
     expect(submit).not.toHaveBeenCalled();
   });

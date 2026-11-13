@@ -1,4 +1,4 @@
-import type { ConfigV1 } from '@/lib/config/types';
+import type { ConfigV1, Engine } from '@/lib/config/types';
 import { ENGINES } from '@/lib/config/types';
 import { type AppError, appError, type Result } from '@/lib/errors';
 import { handle } from '@/lib/messaging/handle';
@@ -9,8 +9,9 @@ import type {
   SecretProviderId,
   SecretStatusInfo,
 } from '@/lib/messaging/protocol';
+import { forbiddenSenderError } from '@/lib/messaging/sender';
 import type { TranslationCache } from './cache';
-import { checkEndpointPermission } from './permissions';
+import { checkEngineEndpoint } from './permissions';
 import { buildPrompt } from './prompt';
 import { getAdapter as registryAdapter, resolveProviderSettings } from './providers/registry';
 import type { Scheduler } from './scheduler';
@@ -34,13 +35,9 @@ export interface AdminDeps {
   /** `browser.runtime.getURL('/options.html')`. */
   optionsUrl: string;
   getAdapter?: (engine: ProviderTestDraft['engine']) => ProviderAdapter;
-  checkPermission?: (baseURL: string) => Promise<Result<unknown>>;
+  checkPermission?: (engine: Engine, baseURL: string) => Promise<Result<unknown>>;
   now?: () => number;
   randomId?: () => string;
-}
-
-export function forbiddenSenderError(): AppError {
-  return appError('validation', 'validation/forbidden-sender', 'Sender is not allowed');
 }
 
 function invalidPayload(): AppError {
@@ -80,7 +77,7 @@ function parseDraft(raw: unknown): ProviderTestDraft {
 
 export function createAdminHandlers(deps: AdminDeps) {
   const getAdapter = deps.getAdapter ?? registryAdapter;
-  const checkPermission = deps.checkPermission ?? checkEndpointPermission;
+  const checkPermission = deps.checkPermission ?? checkEngineEndpoint;
   const now = deps.now ?? Date.now;
   const randomId = deps.randomId ?? (() => crypto.randomUUID());
 
@@ -102,16 +99,8 @@ export function createAdminHandlers(deps: AdminDeps) {
       gemini: { model },
       custom: { baseURL: draft.baseURL, model },
     });
-    if (engine === 'openai' || engine === 'custom') {
-      const permission = await checkPermission(settings.baseURL);
-      // Built-in OpenAI is covered by host_permissions, but an invalid URL is still an error.
-      if (
-        !permission.ok &&
-        (engine === 'custom' || permission.error.code !== 'config/permission-missing')
-      ) {
-        throw permission.error;
-      }
-    }
+    const permission = await checkPermission(engine, settings.baseURL);
+    if (!permission.ok) throw permission.error;
 
     // The draft key lives in this stack frame only.
     const draftKey = draft.apiKey === undefined ? '' : cleanApiKey(draft.apiKey);
