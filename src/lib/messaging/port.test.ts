@@ -1,0 +1,322 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { appError } from '@/lib/errors';
+import {
+  createPortClient,
+  PING_INTERVAL_MS,
+  type PortContext,
+  type PortLike,
+  servePort,
+} from './port';
+
+// ------------------------------------------------------------ test ports
+
+type Listener<T extends unknown[]> = (...args: T) => void;
+
+function endpoint() {
+  const messageListeners: Listener<[unknown]>[] = [];
+  const disconnectListeners: Listener<[]>[] = [];
+  return {
+    messageListeners,
+    disconnectListeners,
+    onMessage: { addListener: (cb: Listener<[unknown]>) => void messageListeners.push(cb) },
+    onDisconnect: { addListener: (cb: Listener<[]>) => void disconnectListeners.push(cb) },
+  };
+}
+
+/** Two connected ends with chrome-like semantics: async delivery, throw after disconnect. */
+function createPortPair() {
+  let connected = true;
+  const a = endpoint();
+  const b = endpoint();
+  const side = (self: typeof a, other: typeof a): PortLike => ({
+    onMessage: self.onMessage,
+    onDisconnect: self.onDisconnect,
+    postMessage(message) {
+      if (!connected) throw new Error('Attempting to use a disconnected port object');
+      const copy = structuredClone(message);
+      queueMicrotask(() => {
+        if (connected) for (const listener of other.messageListeners) listener(copy);
+      });
+    },
+    disconnect() {
+      if (!connected) return;
+      connected = false;
+      // Like chrome: only the *other* end gets onDisconnect.
+      queueMicrotask(() => {
+        for (const listener of other.disconnectListeners) listener();
+      });
+    },
+  });
+  return {
+    client: side(a, b),
+    server: side(b, a),
+    /** Connection lost (e.g. SW terminated): both ends see onDisconnect. */
+    breakConnection() {
+      connected = false;
+      for (const listener of [...a.disconnectListeners, ...b.disconnectListeners]) listener();
+    },
+  };
+}
+
+/** A client-side port that records frames and lets the test push frames in. */
+function recordingPort() {
+  const ends = endpoint();
+  const sent: Record<string, unknown>[] = [];
+  const port: PortLike = {
+    onMessage: ends.onMessage,
+    onDisconnect: ends.onDisconnect,
+    postMessage: (message) => void sent.push(message as Record<string, unknown>),
+    disconnect: vi.fn(),
+  };
+  return {
+    port,
+    sent,
+    deliver: (frame: unknown) => {
+      for (const listener of ends.messageListeners) listener(frame);
+    },
+  };
+}
+
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+function deferred<T>() {
+  let resolve: (value: T) => void = () => undefined;
+  let reject: (error: unknown) => void = () => undefined;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+type Handler = (payload: string, ctx: PortContext<string>) => Promise<string>;
+
+function connected(handler: Handler) {
+  const pairs: ReturnType<typeof createPortPair>[] = [];
+  const connect = vi.fn(() => {
+    const pair = createPortPair();
+    servePort(pair.server, handler);
+    pairs.push(pair);
+    return pair.client;
+  });
+  return { client: createPortClient<string, string, string>(connect), connect, pairs };
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+// ------------------------------------------------------------ tests
+
+describe('port transport', () => {
+  it('streams chunks and resolves with done', async () => {
+    const { client } = connected(async (payload, ctx) => {
+      ctx.emit('a');
+      ctx.emit('b');
+      return payload.toUpperCase();
+    });
+    const chunks: string[] = [];
+    const request = client.request('hi', (chunk) => chunks.push(chunk));
+    expect(await request.outcome).toEqual({ status: 'done', data: 'HI' });
+    expect(chunks).toEqual(['a', 'b']);
+  });
+
+  it('forwards an AppError as an error frame', async () => {
+    const { client } = connected(async () => {
+      throw appError('provider', 'provider/quota', 'quota', { retryable: true });
+    });
+    expect(await client.request('x').outcome).toEqual({
+      status: 'error',
+      error: { kind: 'provider', code: 'provider/quota', message: 'quota', retryable: true },
+    });
+  });
+
+  it('maps a non-AppError throw to internal', async () => {
+    const { client } = connected(async () => {
+      throw new Error('boom');
+    });
+    expect(await client.request('x').outcome).toMatchObject({
+      status: 'error',
+      error: { kind: 'internal', message: 'boom' },
+    });
+  });
+
+  it('cancels one request: its server signal aborts, others continue', async () => {
+    const signals: AbortSignal[] = [];
+    const gates = [deferred<string>(), deferred<string>()];
+    const { client } = connected((payload, ctx) => {
+      signals.push(ctx.signal);
+      return gates[Number(payload)]?.promise ?? Promise.reject(new Error('no gate'));
+    });
+    const first = client.request('0');
+    const second = client.request('1');
+    await flush();
+
+    first.cancel();
+    expect(await first.outcome).toEqual({ status: 'cancelled' });
+    await flush();
+    expect(signals[0]?.aborted).toBe(true);
+    expect(signals[1]?.aborted).toBe(false);
+
+    gates[1]?.resolve('ok');
+    expect(await second.outcome).toEqual({ status: 'done', data: 'ok' });
+  });
+
+  it('cancelAll ends every request and aborts them on the server', async () => {
+    const signals: AbortSignal[] = [];
+    const { client } = connected((_payload, ctx) => {
+      signals.push(ctx.signal);
+      return new Promise(() => undefined);
+    });
+    const requests = [client.request('a'), client.request('b')];
+    await flush();
+    client.cancelAll();
+    for (const request of requests) {
+      expect(await request.outcome).toEqual({ status: 'cancelled' });
+    }
+    await flush();
+    expect(signals.map((signal) => signal.aborted)).toEqual([true, true]);
+  });
+
+  it('drops chunks and late frames after cancel, and ignores unknown ids', async () => {
+    const { port, deliver } = recordingPort();
+    const client = createPortClient<string, string, string>(() => port);
+    const onChunk = vi.fn();
+    const request = client.request('x', onChunk);
+    deliver({ t: 'chunk', id: request.id, data: 'before' });
+    request.cancel();
+    deliver({ t: 'chunk', id: request.id, data: 'after' });
+    deliver({ t: 'done', id: request.id, data: 'late' });
+    deliver({ t: 'done', id: 'unknown', data: 'x' });
+    expect(onChunk).toHaveBeenCalledOnce();
+    expect(await request.outcome).toEqual({ status: 'cancelled' });
+  });
+
+  it('on disconnect: server aborts all, client fails all retryably, next request reconnects', async () => {
+    const signals: AbortSignal[] = [];
+    let hang = true;
+    const { client, connect, pairs } = connected(async (payload, ctx) => {
+      signals.push(ctx.signal);
+      if (hang) await new Promise(() => undefined);
+      return payload;
+    });
+    const requests = [client.request('a'), client.request('b')];
+    await flush();
+
+    pairs[0]?.breakConnection();
+    for (const request of requests) {
+      expect(await request.outcome).toEqual({
+        status: 'error',
+        error: expect.objectContaining({ code: 'network/port-disconnected', retryable: true }),
+      });
+    }
+    expect(signals.map((signal) => signal.aborted)).toEqual([true, true]);
+
+    hang = false;
+    expect(await client.request('c').outcome).toEqual({ status: 'done', data: 'c' });
+    expect(connect).toHaveBeenCalledTimes(2);
+  });
+
+  it('dispose cancels in-flight requests instead of leaving them pending', async () => {
+    const signals: AbortSignal[] = [];
+    const { client } = connected((_payload, ctx) => {
+      signals.push(ctx.signal);
+      return new Promise(() => undefined);
+    });
+    const request = client.request('a');
+    await flush();
+    client.dispose();
+    expect(await request.outcome).toEqual({ status: 'cancelled' });
+    await flush();
+    expect(signals[0]?.aborted).toBe(true);
+  });
+
+  it('treats a throwing postMessage as a disconnect and reconnects next time', async () => {
+    const broken: PortLike = {
+      ...recordingPort().port,
+      postMessage: () => {
+        throw new Error('Attempting to use a disconnected port object');
+      },
+    };
+    const healthy = recordingPort();
+    const connect = vi
+      .fn<() => PortLike>()
+      .mockReturnValueOnce(broken)
+      .mockReturnValue(healthy.port);
+    const client = createPortClient<string, string, string>(connect);
+
+    expect(await client.request('a').outcome).toEqual({
+      status: 'error',
+      error: expect.objectContaining({ code: 'network/port-disconnected', retryable: true }),
+    });
+    client.request('b');
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(healthy.sent).toMatchObject([{ t: 'req', payload: 'b' }]);
+  });
+
+  it('classifies a context-invalidated connect failure as non-retryable', async () => {
+    const client = createPortClient<string, string, string>(() => {
+      throw new Error('Extension context invalidated.');
+    });
+    expect(await client.request('a').outcome).toEqual({
+      status: 'error',
+      error: expect.objectContaining({ code: 'internal/context-invalidated', retryable: false }),
+    });
+  });
+
+  it('server ignores a duplicate request id', async () => {
+    const pair = createPortPair();
+    const handler = vi.fn(async (payload: string) => payload);
+    servePort(pair.server, handler);
+    const frames: unknown[] = [];
+    pair.client.onMessage.addListener((frame) => frames.push(frame));
+    pair.client.postMessage({ t: 'req', id: 'same', payload: 'one' });
+    pair.client.postMessage({ t: 'req', id: 'same', payload: 'two' });
+    await flush();
+    expect(handler).toHaveBeenCalledOnce();
+    expect(frames).toEqual([{ t: 'done', id: 'same', data: 'one' }]);
+  });
+
+  it('server sends nothing when the handler finishes after being aborted', async () => {
+    const pair = createPortPair();
+    const gate = deferred<string>();
+    let ctx: PortContext<string> | undefined;
+    servePort<string, string, string>(pair.server, (_payload, context) => {
+      ctx = context;
+      return gate.promise;
+    });
+    const frames: unknown[] = [];
+    pair.client.onMessage.addListener((frame) => frames.push(frame));
+    pair.client.postMessage({ t: 'req', id: 'r1', payload: 'x' });
+    await flush();
+    pair.client.postMessage({ t: 'cancel', id: 'r1' });
+    await flush();
+    ctx?.emit('late chunk');
+    gate.resolve('late result');
+    await flush();
+    expect(ctx?.signal.aborted).toBe(true);
+    expect(frames).toEqual([]);
+  });
+
+  it('pings every 20s while requests are in flight and stops when idle', async () => {
+    vi.useFakeTimers();
+    const { port, sent, deliver } = recordingPort();
+    const connect = vi.fn(() => port);
+    const client = createPortClient<string, string, string>(connect);
+
+    vi.advanceTimersByTime(PING_INTERVAL_MS * 2);
+    expect(connect).not.toHaveBeenCalled();
+
+    const request = client.request('x');
+    vi.advanceTimersByTime(PING_INTERVAL_MS - 1);
+    expect(sent.filter((frame) => frame.t === 'ping')).toHaveLength(0);
+    vi.advanceTimersByTime(1);
+    expect(sent.filter((frame) => frame.t === 'ping')).toHaveLength(1);
+    vi.advanceTimersByTime(PING_INTERVAL_MS);
+    expect(sent.filter((frame) => frame.t === 'ping')).toHaveLength(2);
+
+    deliver({ t: 'done', id: request.id, data: 'ok' });
+    vi.advanceTimersByTime(PING_INTERVAL_MS * 3);
+    expect(sent.filter((frame) => frame.t === 'ping')).toHaveLength(2);
+  });
+});

@@ -3,34 +3,47 @@ import { browser } from 'wxt/browser';
 import { useConfig } from '@/lib/config/use-config';
 import { describeError } from '@/lib/error-messages';
 import { languageName } from '@/lib/languages';
-import { GET_BACKGROUND_STATUS, inspectActivePage, type PageInfo } from '@/lib/messages';
+import { call } from '@/lib/messaging/handle';
+import { type PageInfo, sendMessage } from '@/lib/messaging/protocol';
 import styles from '@/styles/ui.module.css';
+import { inspectActivePage } from './inspect-page';
+
+interface Status {
+  text: string;
+  error?: boolean;
+}
 
 export function App() {
   const { state } = useConfig();
   const [page, setPage] = useState<PageInfo>();
-  const [status, setStatus] = useState('正在连接扩展…');
+  const [status, setStatus] = useState<Status>({ text: '正在连接扩展…' });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    browser.runtime
-      .sendMessage({ type: GET_BACKGROUND_STATUS })
-      .then(() => setStatus('扩展已就绪，翻译引擎尚未接入。'))
-      .catch(() => setStatus('加载失败，请重新加载扩展后重试。'));
+    void call(() => sendMessage('app.getStatus', undefined)).then((result) =>
+      setStatus(
+        result.ok
+          ? { text: '扩展已就绪，翻译引擎尚未接入。' }
+          : { text: describeError(result.error), error: true },
+      ),
+    );
   }, []);
 
   async function inspect() {
     setBusy(true);
     setPage(undefined);
-    setStatus('正在检查页面…');
-    try {
-      setPage(await inspectActivePage());
-      setStatus('页面通信正常，可以继续接入翻译引擎。');
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : '检查失败，请重试。');
-    } finally {
-      setBusy(false);
+    setStatus({ text: '正在检查页面…' });
+    const result = await inspectActivePage().catch(() => undefined);
+    if (result?.ok) {
+      setPage(result.data);
+      setStatus({ text: '页面通信正常，可以继续接入翻译引擎。' });
+    } else {
+      setStatus({
+        text: result ? describeError(result.error, '检查失败，请重试。') : '检查失败，请重试。',
+        error: true,
+      });
     }
+    setBusy(false);
   }
 
   return (
@@ -63,11 +76,11 @@ export function App() {
         <p className={styles.pageInfo}>
           {page.title || '未命名页面'}
           <br />
-          页面语言：{page.language}
+          页面语言：{page.language || '未声明'}
         </p>
       )}
-      <p className={styles.status} role="status">
-        {status}
+      <p className={status.error ? styles.error : styles.status} role="status">
+        {status.text}
       </p>
       <footer className={styles.footer}>
         <span>v{browser.runtime.getManifest().version}</span>
@@ -77,7 +90,7 @@ export function App() {
           onClick={() => {
             void browser.runtime
               .openOptionsPage()
-              .catch(() => setStatus('无法打开设置页，请重试。'));
+              .catch(() => setStatus({ text: '无法打开设置页，请重试。', error: true }));
           }}
         >
           翻译设置 →
