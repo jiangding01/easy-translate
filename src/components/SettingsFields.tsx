@@ -1,9 +1,17 @@
-import { targetLanguages, type Settings } from '@/lib/settings';
+import type { ConfigChange, ConfigV1, Theme } from '@/lib/config/types';
+import { LANGUAGES, type LanguageCode } from '@/lib/languages';
 import styles from '@/styles/ui.module.css';
 
+const THEME_OPTIONS: { value: Theme; label: string }[] = [
+  { value: 'system', label: '跟随系统' },
+  { value: 'light', label: '浅色' },
+  { value: 'dark', label: '深色' },
+];
+
 interface Props {
-  value: Settings;
-  onChange: (value: Settings) => void;
+  /** Always the storage snapshot: the controls hold no local state. */
+  value: ConfigV1;
+  onChange: (change: ConfigChange) => void;
   disabled?: boolean;
 }
 
@@ -12,21 +20,30 @@ export function SettingsFields({ value, onChange, disabled }: Props) {
     <fieldset className={styles.fields} disabled={disabled}>
       <label className={styles.field}>
         目标语言
-        <select value={value.targetLanguage} onChange={(event) => onChange({
-          ...value, targetLanguage: event.target.value as Settings['targetLanguage'],
-        })}>
-          {Object.entries(targetLanguages).map(([code, label]) => (
-            <option key={code} value={code}>{label}</option>
+        <select
+          value={value.language.target}
+          onChange={(event) =>
+            onChange({ path: 'language.target', value: event.target.value as LanguageCode })
+          }
+        >
+          {LANGUAGES.map((language) => (
+            <option key={language.code} value={language.code}>
+              {language.name}
+            </option>
           ))}
         </select>
       </label>
       <label className={styles.field}>
-        显示模式
-        <select value={value.displayMode} onChange={(event) => onChange({
-          ...value, displayMode: event.target.value as Settings['displayMode'],
-        })}>
-          <option value="bilingual">双语对照</option>
-          <option value="replace">替换原文</option>
+        界面主题
+        <select
+          value={value.ui.theme}
+          onChange={(event) => onChange({ path: 'ui.theme', value: event.target.value as Theme })}
+        >
+          {THEME_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </label>
     </fieldset>

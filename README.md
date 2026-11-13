@@ -2,12 +2,12 @@
 
 Easy Translate 是面向 Chrome 的网页翻译扩展，围绕网页双语阅读、划词翻译、输入翻译和视频字幕设计，使用 TypeScript、React、WXT 与 Manifest V3 开发。
 
-项目当前版本为 `0.1.0`，处于基础工程阶段。已完成弹窗、设置页、后台 Service Worker、页面通信和本地偏好存储。翻译引擎及各业务模块将按技术方案分批接入。
+项目当前版本为 `0.1.0`，已完成 M0 地基：质量门禁（Biome、Vitest、CI、体积预算）、配置仓库、类型化消息协议、Port 传输层和设计 token。翻译引擎及各业务模块将按技术方案分批接入。
 
 ## 当前功能
 
 - 在弹窗中检查当前网页，显示页面标题、HTML 声明的语言及通信状态。
-- 在设置页保存目标语言和双语对照／替换原文的显示偏好。
+- 在设置页选择目标语言和界面主题（跟随系统／浅色／深色），选择即保存；已打开的弹窗无需刷新即可同步。
 - 在受限页面或页面脚本连接失败时显示操作提示。
 
 ## 规划模块
@@ -48,31 +48,50 @@ WXT 会监听源码并更新开发产物。修改 manifest 或后台逻辑后，
 | 命令 | 用途 |
 | --- | --- |
 | `npm run dev` | 启动 Chrome 扩展开发构建 |
+| `npm run lint` | Biome 只读检查（格式与 lint），即 `biome ci .` |
+| `npm run format` | Biome 自动格式化并应用安全修复 |
 | `npm run typecheck` | 执行 TypeScript 严格检查 |
-| `npm run check` | 执行类型检查、生产构建和 manifest 入口资源校验 |
+| `npm test` | 运行 Vitest 单元测试；`npm run test:watch` 为监听模式 |
 | `npm run build` | 生成 `.output/chrome-mv3` 生产产物 |
+| `npm run check:build` | 校验 manifest 及其引用的入口资源 |
+| `npm run check:size` | 按入口检查 gzip 体积预算（content ≤ 20KB、background ≤ 60KB、popup ≤ 80KB、options ≤ 150KB） |
+| `npm run check` | 依次执行 lint、typecheck、test、build、check:build、check:size |
 | `npm run zip` | 在 `.output` 中生成扩展 ZIP 包 |
 
-本地验证生产版本时，在扩展管理页加载 `.output/chrome-mv3`。
+GitHub Actions（`.github/workflows/ci.yml`）在 PR 和推送到 `main` 时运行同一套检查。本地验证生产版本时，在扩展管理页加载 `.output/chrome-mv3`。
 
 ## 项目结构
 
 ```text
 src/
   entrypoints/
-    background.ts       # 后台 Service Worker
+    background.ts       # 后台 Service Worker：配置唯一写入点、消息 handler
     content.ts          # 网页内容脚本
     popup/              # 工具栏弹窗
     options/            # 设置页
   components/           # 共享界面组件
-  lib/                  # 消息协议、设置模型与存储
-  styles/               # CSS Modules 样式
+  lib/
+    config/             # 配置：schema、宽松解析、仓库（后台）、客户端与 useConfig（页面）
+    messaging/          # 类型化消息协议、handle/call、Port 传输层
+    errors.ts           # AppError 与 Result
+    languages.ts        # 支持的语言与语言标签归一化
+  styles/
+    tokens.css          # 设计 token（唯一来源，:root 与 :host）
+    theme.ts            # 主题切换（data-et-theme）
+    ui.module.css       # 扩展页面样式（只引用 --et-* 变量）
 public/icon/            # 扩展图标
-scripts/check-build.mjs # 构建产物校验
-docs/design/            # 分模块技术方案与验收计划
-DESIGN.md               # 界面设计与组件规范
+scripts/
+  check-build.mjs       # manifest 与入口资源校验
+  check-size.mjs        # gzip 体积预算（零依赖）
+.github/workflows/      # CI
+docs/plans/             # 各批次技术方案
+docs/design/            # 旧方案（功能参考）
+biome.json              # Biome 配置
+vitest.config.ts        # Vitest 配置（WxtVitest + fake browser）
 wxt.config.ts           # WXT 与 Manifest V3 配置
 ```
+
+单元测试与源码同目录放置，命名为 `*.test.ts`。
 
 ## 文档导航
 
@@ -87,15 +106,16 @@ wxt.config.ts           # WXT 与 Manifest V3 配置
 | [整体架构](docs/design/00-architecture.md) | 执行环境、模块职责和架构图 |
 | [通信与数据契约](docs/design/13-protocols-and-data.md) | 消息、任务会话、配置和缓存契约 |
 | [实施与验收计划](docs/design/14-implementation-and-validation.md) | 开发批次、依赖和完成门槛 |
-| [界面规范](DESIGN.md) | 视觉、组件、布局和交互约定 |
+| [M0 地基方案](docs/plans/m0-foundation.md) | 质量门禁、配置、消息、Port 与设计 token 的实现依据 |
 
 ## 本地验收
 
 1. 加载扩展，在普通 HTTP/HTTPS 页面打开弹窗。
 2. 点击「检查当前页面」，确认显示页面标题和声明语言。
-3. 打开「翻译设置」，修改并保存偏好，重新打开弹窗确认持久化。
-4. 在 Chrome 内部页等受限页面验证错误提示。
-5. 在扩展管理页检查 Service Worker 和弹窗的运行错误。
+3. 打开「翻译设置」，切换目标语言和界面主题，确认已打开的弹窗无需刷新即同步。
+4. 在 `chrome://serviceworker-internals` 停止 Service Worker 后再修改设置，确认仍能保存。
+5. 在 Chrome 内部页等受限页面验证错误提示。
+6. 在扩展管理页检查 Service Worker 和弹窗的运行错误。
 
 安装或重新加载扩展后，请刷新已有网页，使内容脚本生效。Chrome 内部页、网上应用店和内置 PDF 阅读器等页面受浏览器注入限制。
 
