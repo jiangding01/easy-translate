@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@webext-core/messaging": "^4.0.1",
+    "idb": "^8.0.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "zod": "^4.6.7"
@@ -32,6 +33,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@wxt-dev/module-react": "^1.2.2",
+    "fake-indexeddb": "^6.2.8",
     "typescript": "^5.9.0",
     "vite": "^8.0.0",
     "vitest": "^5.1.0",
