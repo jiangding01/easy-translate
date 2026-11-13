@@ -26,9 +26,12 @@ export async function inspectActivePage(): Promise<PageInfo> {
   }
 
   if (
-    typeof response !== 'object' || response === null ||
-    !('title' in response) || typeof response.title !== 'string' ||
-    !('language' in response) || typeof response.language !== 'string'
+    typeof response !== 'object' ||
+    response === null ||
+    !('title' in response) ||
+    typeof response.title !== 'string' ||
+    !('language' in response) ||
+    typeof response.language !== 'string'
   ) {
     throw new Error('页面脚本返回了无效数据，请刷新网页后重试。');
   }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { GET_BACKGROUND_STATUS, inspectActivePage, type PageInfo } from '@/lib/messages';
-import { getSettings, targetLanguages, type Settings } from '@/lib/settings';
+import { getSettings, type Settings, targetLanguages } from '@/lib/settings';
 import styles from '@/styles/ui.module.css';
 
 export function App() {
@@ -11,13 +11,12 @@ export function App() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      getSettings(),
-      browser.runtime.sendMessage({ type: GET_BACKGROUND_STATUS }),
-    ]).then(([value]) => {
-      setSettings(value);
-      setStatus('扩展已就绪，翻译引擎尚未接入。');
-    }).catch(() => setStatus('加载失败，请重新加载扩展后重试。'));
+    Promise.all([getSettings(), browser.runtime.sendMessage({ type: GET_BACKGROUND_STATUS })])
+      .then(([value]) => {
+        setSettings(value);
+        setStatus('扩展已就绪，翻译引擎尚未接入。');
+      })
+      .catch(() => setStatus('加载失败，请重新加载扩展后重试。'));
   }, []);
 
   async function inspect() {
@@ -43,19 +42,48 @@ export function App() {
       </header>
       <p className={styles.muted}>网页翻译，从这里开始。</p>
       <dl className={styles.summary}>
-        <div><dt>目标语言</dt><dd>{settings ? targetLanguages[settings.targetLanguage] : '加载中'}</dd></div>
-        <div><dt>显示模式</dt><dd>{settings ? (settings.displayMode === 'bilingual' ? '双语对照' : '替换原文') : '加载中'}</dd></div>
+        <div>
+          <dt>目标语言</dt>
+          <dd>{settings ? targetLanguages[settings.targetLanguage] : '加载中'}</dd>
+        </div>
+        <div>
+          <dt>显示模式</dt>
+          <dd>
+            {settings ? (settings.displayMode === 'bilingual' ? '双语对照' : '替换原文') : '加载中'}
+          </dd>
+        </div>
       </dl>
-      <button className={styles.primary} onClick={() => void inspect()} disabled={busy || !settings}>
+      <button
+        type="button"
+        className={styles.primary}
+        onClick={() => void inspect()}
+        disabled={busy || !settings}
+      >
         {busy ? '检查中…' : '检查当前页面'}
       </button>
-      {page && <p className={styles.pageInfo}>{page.title || '未命名页面'}<br />页面语言：{page.language}</p>}
-      <p className={styles.status} role="status">{status}</p>
+      {page && (
+        <p className={styles.pageInfo}>
+          {page.title || '未命名页面'}
+          <br />
+          页面语言：{page.language}
+        </p>
+      )}
+      <p className={styles.status} role="status">
+        {status}
+      </p>
       <footer className={styles.footer}>
         <span>v{browser.runtime.getManifest().version}</span>
-        <button className={styles.textButton} onClick={() => {
-          void browser.runtime.openOptionsPage().catch(() => setStatus('无法打开设置页，请重试。'));
-        }}>翻译设置 →</button>
+        <button
+          type="button"
+          className={styles.textButton}
+          onClick={() => {
+            void browser.runtime
+              .openOptionsPage()
+              .catch(() => setStatus('无法打开设置页，请重试。'));
+          }}
+        >
+          翻译设置 →
+        </button>
       </footer>
     </main>
   );
