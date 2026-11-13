@@ -1,5 +1,5 @@
 import { defineExtensionMessaging } from '@webext-core/messaging';
-import type { ConfigChange, ConfigPath, ConfigSnapshot } from '@/lib/config/types';
+import type { ConfigChange, ConfigPath, ConfigSnapshot, Engine } from '@/lib/config/types';
 import type { AppError, Result } from '@/lib/errors';
 import type { LanguageCode } from '@/lib/languages';
 
@@ -7,6 +7,32 @@ export interface PageInfo {
   title: string;
   /** `<html lang>`; empty when the page does not declare one. */
   language: string;
+}
+
+export type SecretProviderId = 'openai' | 'deepseek' | 'gemini' | 'custom';
+
+/** Never carries the key itself: `last4` is empty for short keys. */
+export interface SecretStatusInfo {
+  configured: boolean;
+  last4: string;
+}
+
+/** Unsaved settings-page values; `apiKey` falls back to the saved key when omitted or blank. */
+export interface ProviderTestDraft {
+  engine: Engine;
+  baseURL: string;
+  model: string;
+  apiKey?: string;
+}
+
+export interface ProviderTestResult {
+  latencyMs: number;
+  text: string;
+}
+
+export interface CacheStatsInfo {
+  count: number;
+  totalBytes: number;
 }
 
 /**
@@ -19,6 +45,12 @@ export interface ProtocolMap {
   'app.getStatus'(): Result<{ version: string }>;
   'config.patch'(changes: ConfigChange[]): Result<ConfigSnapshot>;
   'config.reset'(paths?: ConfigPath[]): Result<ConfigSnapshot>;
+  /** Settings page only (`validation/forbidden-sender` otherwise). */
+  'secrets.set'(args: { provider: SecretProviderId; key: string | null }): Result<SecretStatusInfo>;
+  'secrets.status'(): Result<Record<SecretProviderId, SecretStatusInfo>>;
+  'provider.test'(draft: ProviderTestDraft): Result<ProviderTestResult>;
+  'cache.stats'(): Result<CacheStatsInfo>;
+  'cache.clear'(): Result<null>;
   /** popup → top frame (frameId 0) of a given tab. */
   'page.getInfo'(): Result<PageInfo>;
 }
