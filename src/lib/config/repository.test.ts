@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { createLocalStore } from './local-store';
 import { createConfigRepository, type KeyValueStore } from './repository';
+import { EXTRA_DEFAULTS } from './test-fixtures';
 import type { ConfigChange } from './types';
 
 const uiLanguage = 'en-US';
@@ -28,6 +29,8 @@ function memoryStore(initial: Record<string, unknown> = {}) {
 }
 
 const valid = (data: Record<string, unknown>) => ({ config: { schemaVersion: 1, data } });
+const full = (ui: unknown, language: unknown, extra: Record<string, unknown> = {}) =>
+  valid({ ui, language, ...EXTRA_DEFAULTS, ...extra });
 
 describe('ConfigRepository', () => {
   it('writes defaults on first load', async () => {
@@ -35,13 +38,17 @@ describe('ConfigRepository', () => {
     const snapshot = await createConfigRepository({ store, uiLanguage }).load();
     expect(snapshot).toEqual({
       schemaVersion: 1,
-      data: { ui: { theme: 'system' }, language: { target: 'en' } },
+      data: {
+        ui: { theme: 'system' },
+        language: { target: 'en', source: 'auto' },
+        ...EXTRA_DEFAULTS,
+      },
     });
     expect(store.data.get('config')).toEqual(snapshot);
   });
 
   it('does not write when stored data is already valid', async () => {
-    const store = memoryStore(valid({ ui: { theme: 'dark' }, language: { target: 'ja' } }));
+    const store = memoryStore(full({ theme: 'dark' }, { target: 'ja', source: 'auto' }));
     const set = vi.spyOn(store, 'set');
     await createConfigRepository({ store, uiLanguage }).load();
     expect(set).not.toHaveBeenCalled();
@@ -76,7 +83,8 @@ describe('ConfigRepository', () => {
     const snapshot = await repo.patch([{ path: 'language.target', value: 'zh-TW' }]);
     expect(snapshot.data).toEqual({
       ui: { theme: 'system' },
-      language: { target: 'zh-TW' },
+      language: { target: 'zh-TW', source: 'auto' },
+      ...EXTRA_DEFAULTS,
       future: { keep: true },
     });
   });
@@ -88,6 +96,24 @@ describe('ConfigRepository', () => {
     const change = { path: 'ui.theme', value: 'neon' } as unknown as ConfigChange;
     await expect(repo.patch([change])).rejects.toMatchObject({ code: 'config/invalid-value' });
     expect(store.data.get('config')).toEqual(initial.config);
+  });
+
+  it('patches the engine, source language and provider fields, and rejects an unknown engine', async () => {
+    const store = memoryStore();
+    const repo = createConfigRepository({ store, uiLanguage });
+    const snapshot = await repo.patch([
+      { path: 'translation.engine', value: 'gemini' },
+      { path: 'language.source', value: 'ja' },
+      { path: 'providers.gemini.model', value: 'some-model' },
+      { path: 'providers.custom.baseURL', value: 'http://localhost:11434/v1' },
+    ]);
+    expect(snapshot.data.translation.engine).toBe('gemini');
+    expect(snapshot.data.language.source).toBe('ja');
+    expect(snapshot.data.providers.gemini.model).toBe('some-model');
+    expect(snapshot.data.providers.custom.baseURL).toBe('http://localhost:11434/v1');
+
+    const bad = { path: 'translation.engine', value: 'bing' } as unknown as ConfigChange;
+    await expect(repo.patch([bad])).rejects.toMatchObject({ code: 'config/invalid-value' });
   });
 
   it('rejects a path outside the whitelist', async () => {
@@ -115,14 +141,14 @@ describe('ConfigRepository', () => {
   it('resets a single path and all paths, keeping unknown keys', async () => {
     const store = memoryStore(valid({ ui: { theme: 'dark' }, language: { target: 'ja' }, x: 1 }));
     const repo = createConfigRepository({ store, uiLanguage });
-    expect((await repo.reset(['ui.theme'])).data).toEqual({
+    expect((await repo.reset(['ui.theme'])).data).toMatchObject({
       ui: { theme: 'system' },
       language: { target: 'ja' },
       x: 1,
     });
-    expect((await repo.reset()).data).toEqual({
+    expect((await repo.reset()).data).toMatchObject({
       ui: { theme: 'system' },
-      language: { target: 'en' },
+      language: { target: 'en', source: 'auto' },
       x: 1,
     });
   });

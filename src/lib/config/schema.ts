@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { LANGUAGE_CODES } from '@/lib/languages';
-import { type ConfigV1, THEMES } from './types';
+import { type ConfigV1, ENGINES, THEMES } from './types';
 
 // Background-only: the client never imports zod.
 // Objects are loose so keys written by a newer build survive a downgrade.
@@ -10,6 +10,16 @@ export const configSchema = z.looseObject({
   }),
   language: z.looseObject({
     target: z.enum(LANGUAGE_CODES),
+    source: z.enum(['auto', ...LANGUAGE_CODES]),
+  }),
+  translation: z.looseObject({
+    engine: z.enum(ENGINES),
+  }),
+  providers: z.looseObject({
+    openai: z.looseObject({ baseURL: z.string(), model: z.string() }),
+    deepseek: z.looseObject({ model: z.string() }),
+    gemini: z.looseObject({ model: z.string() }),
+    custom: z.looseObject({ baseURL: z.string(), model: z.string() }),
   }),
 });
 
