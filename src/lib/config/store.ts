@@ -31,6 +31,8 @@ export function createConfigStore(deps: ConfigStoreDeps): ConfigStore {
   let state: ConfigState = { status: 'loading' };
   const listeners = new Set<() => void>();
   let unwatch: (() => void) | undefined;
+  /** Bumped by dispose so reads started before it cannot land afterwards. */
+  let epoch = 0;
 
   function setState(next: ConfigState) {
     if (
@@ -48,13 +50,16 @@ export function createConfigStore(deps: ConfigStoreDeps): ConfigStore {
     // A running watch is enough, except after a failed read: retry that read.
     if (unwatch && state.status !== 'error') return;
     unwatch ??= deps.watch((snapshot) => setState({ status: 'ready', snapshot }));
+    const started = epoch;
     deps.read().then(
       (snapshot) => {
         // A watch event may already have delivered something newer.
-        if (state.status !== 'ready') setState({ status: 'ready', snapshot });
+        if (started === epoch && state.status !== 'ready') setState({ status: 'ready', snapshot });
       },
       (error: unknown) => {
-        if (state.status !== 'ready') setState({ status: 'error', error: toAppError(error) });
+        if (started === epoch && state.status !== 'ready') {
+          setState({ status: 'error', error: toAppError(error) });
+        }
       },
     );
   }
@@ -74,6 +79,7 @@ export function createConfigStore(deps: ConfigStoreDeps): ConfigStore {
       unwatch?.();
       unwatch = undefined;
       listeners.clear();
+      epoch += 1;
       state = { status: 'loading' };
     },
   };

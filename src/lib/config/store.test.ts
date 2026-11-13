@@ -115,4 +115,22 @@ describe('config store', () => {
       expect(store.getSnapshot()).toEqual({ status: 'ready', snapshot: snapshot('dark') }),
     );
   });
+
+  it('ignores a read that was started before dispose and lands after it', async () => {
+    const resolvers: Array<(value: ConfigSnapshot) => void> = [];
+    const { store } = setup(
+      () =>
+        new Promise<ConfigSnapshot>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+    store.subscribe(vi.fn());
+    store.dispose();
+    store.subscribe(vi.fn());
+    resolvers[0]?.(snapshot('light')); // stale read from before dispose
+    resolvers[1]?.(snapshot('dark'));
+    await vi.waitFor(() =>
+      expect(store.getSnapshot()).toEqual({ status: 'ready', snapshot: snapshot('dark') }),
+    );
+  });
 });
