@@ -1,6 +1,6 @@
 # Easy Translate 交接文档（HANDOFF）
 
-> 最后更新：2026-11-13 · 阶段：**规划完成，尚未开始实施（下一步 M0）**
+> 最后更新：2026-11-13 · 阶段：**M0 已实现，待审查和合并（分支 `feat/m0-foundation`）**
 > 本文给接手的 Agent 或开发者用，按顺序读完即可直接开工。文中凡与其他文档冲突的地方，以本文和「权威文档」为准。
 
 ## 1. 项目一句话
@@ -43,11 +43,15 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
 
 ## 4. 当前代码状态
 
-- **已有**：约 400 行骨架，包括 popup（检查当前页面）、options（目标语言和显示模式两项设置）、background（返回状态）、content（返回页面标题和语言）、`src/lib/messages.ts`、`src/lib/settings.ts`。
-- **可用命令**：`npm run dev | build | check | typecheck | zip`。截至 2026-11-13，`npm run check` 通过。
-- **还没有**：测试框架、lint、schema 校验、任何翻译能力。
-- **git**：分支 `main`。规划文档（`docs/reviews/`、本文、`CHANGELOG.md`）已于 2026-11-13 提交并推送。
-- **骨架代码将被重构**：`settings.ts` 迁移到 config repository；`messages.ts` 迁移到 `lib/messaging`；popup 和 options 按 UI 规范重做。不必保留现有的实现方式。
+- **M0 地基已实现，待审查和合并**（分支 `feat/m0-foundation`，6 个提交，尚未推送）。实现依据为 `docs/plans/m0-foundation.md`。
+  - 质量门禁：`biome.json`、`vitest.config.ts`（WxtVitest + fake browser）、`scripts/check-size.mjs`、`.github/workflows/ci.yml`。
+  - 配置：`src/lib/config/`（ConfigV1 = `ui.theme` + `language.target`，存于 `storage.local["config"]`；后台 `repository.ts` 为唯一写入点；页面用 `client.ts`、`useConfig`）。
+  - 消息：`src/lib/messaging/protocol.ts`（app.getStatus、config.patch、config.reset、page.getInfo，均返回 `Result`）、`handle.ts`、`port.ts`（只有传输层，后台业务注册在 M1）。
+  - 设计 token：`src/styles/tokens.css`、`theme.ts`；popup/options 已接入新配置和主题，信息结构未按 UI 规范重做（避免展示尚不可用的能力）。
+  - 已删除 `src/lib/settings.ts`、`src/lib/messages.ts`；显示模式设置移除，M2 重新加入。
+- **可用命令**：`npm run dev | build | lint | format | typecheck | test | check | zip`。截至 2026-11-13，`npm run check` 通过（83 个单元测试）。
+- **还没有**：任何翻译能力；方案第 9 节的手工验收（真实 Chrome）尚未执行；CI 尚未在 GitHub 上首次运行。
+- **git**：`main` 上是规划文档；M0 在 `feat/m0-foundation`。
 
 ## 5. 下一步：M0 地基（验收标准见 final-plan 第 7 节）
 
@@ -81,8 +85,23 @@ M0 完成后依次进入 M1（翻译核心）和 M2（整页翻译），二者�
 - 每完成一项任务：更新 `CHANGELOG.md`，并在本文「进度日志」中追加一行。
 - 未经用户要求，不提交（commit）、不推送（push）。
 
-## 8. 进度日志
+## 8. 开发流程（每个批次或任务都按此循环执行，2026-11-13 用户约定）
+
+1. **方案**：先用 `think` skill 制定技术方案。
+2. **方案审查**：对方案做一次审查。审查没问题、且用户确认之后，才能开始实现。
+3. **实现**：在新分支上开发（不直接在 main 上开发），同时编写测试用例。
+4. **代码审查**：完成后用 `check` skill 审查。有问题就修，修完再 check，循环到**没有阻断性问题**为止。
+5. **文档同步**：更新相关文档（`CHANGELOG.md`、本文的进度日志和状态、README、方案文档等），确保文档与代码改动一致。
+6. **汇报**：向用户汇报结果。
+7. **提交**：提交并推送分支，视情况开 PR。
+8. **合并**：CI 通过后由**用户手动合并**。Agent 不自行合并，也不开启 auto-merge。
+9. **收尾**：用户告知已合并后，切回 main 拉取最新代码，清理已合并的本地和远端分支，再视情况进入下一阶段。
+
+> 注：CI 在 M0 中建立。M0 的 PR 开出时 CI 才首次运行，需确认它能通过。
+
+## 9. 进度日志
 
 | 日期 | 事项 |
 | --- | --- |
-| 2026-11-13 | 熟悉骨架与旧方案；Fable 5.2 完成两轮评审，产出最终方案和 UI/UX 规范；用户拍板全部决策（见第 3 节）；暂不做高保真设计稿；创建本文和 `CHANGELOG.md`，提交并推送到 main。下一步：M0 |
+| 2026-11-13 | 熟悉骨架与旧方案；Fable 5.2 完成两轮评审，产出最终方案和 UI/UX 规范；用户拍板全部决策（见第 3 节）；暂不做高保真设计稿；创建本文和 `CHANGELOG.md`，提交并推送到 main。约定开发流程（见第 8 节）。下一步：M0 |
+| 2026-11-13 | M0 方案 `docs/plans/m0-foundation.md` 经审查后获批。在 `feat/m0-foundation` 上实现 M0（工具链与 CI、配置仓库、消息协议与 Port 传输层、设计 token 与主题），`npm run check` 通过。状态：**已实现，待审查和合并**；第 9 节手工验收待在真实 Chrome 中执行。下一步：审查 → 推送并开 PR → CI 通过后由用户合并 → M1 |
