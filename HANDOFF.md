@@ -1,6 +1,6 @@
 # Easy Translate 交接文档（HANDOFF）
 
-> 最后更新：2026-11-13 · 阶段：**M0 已合并；M1 翻译核心方案设计中（分支 `feat/m1-translation-core`）**
+> 最后更新：2026-11-14 · 阶段：**M1 翻译核心暂停中**（分支 `feat/m1-translation-core`，未推送）：后台能力已完成并通过 Deep 审查，剩 3b（设置页 UI）未做
 > 本文给接手的 Agent 或开发者用，按顺序读完即可直接开工。文中凡与其他文档冲突的地方，以本文和「权威文档」为准。
 
 ## 1. 项目一句话
@@ -66,6 +66,34 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
     - `call()` 把所有发送失败都归为「后台不可达」。M1 新增的写操作应当保持幂等，因为可能出现「实际已写入、但回包丢失」的情况。
     - 以上 3 项已在 [`docs/plans/m1-translation-core.md`](docs/plans/m1-translation-core.md) 中定案：provider 用固定键对象；超时由调度器分三层负责；写操作保持幂等。
 - **M1 翻译核心**：方案见 [`docs/plans/m1-translation-core.md`](docs/plans/m1-translation-core.md)，状态以该文件头部为准。
+  - **已完成**（分支 `feat/m1-translation-core`，未推送，HEAD `47f7b09`）：
+    - 配置字段；
+    - provider 适配器：google 用 POST，LLM 一律流式；
+    - 编解码、提示词、IndexedDB 缓存、密钥、权限；
+    - 调度器：三层超时、公平轮转、按 endpoint 冷却、每个 Port 最多 8 个在途请求；
+    - 翻译服务；
+    - 后台接线，包括 Port 注册、`secrets.*`、`provider.test`、`cache.*`；
+    - 配置写入只接受扩展页面发起的请求。
+    - 已通过 check Deep 审查，24 项问题全部修复，`npm run check` 通过，356 个测试。
+  - **剩余 3b**：
+    - 先按「隐中生岛 + 琥珀」重做设置页（翻译服务）和工具栏小面板的原型，用户确认后再实现；
+    - tokens.css 从墨青换成琥珀，并加对比度校验；
+    - 3b 完成后再做一轮 check（只审新增的 diff），然后更新 README 和 CHANGELOG，推送、开 PR；
+    - 手工验收按方案第 10 节执行，第 2–5 项需要用户自备密钥。
+- **界面方向已确认**：「隐中生岛」加琥珀主题色，完整规范见 [`docs/plans/ui-isle-direction.md`](docs/plans/ui-isle-direction.md)。原型在 https://claude.ai/artifact/GJTgsP7SFHmhP6M2SczwTp 。最高原则：人的感受第一、少打扰、近乎原生的沉浸阅读。
+  - 默认在所有页面上都不留痕迹，由用户主动唤起。
+  - 不常驻悬浮球。
+  - 支持左、右、底部三种停靠位置。
+  - 动效用单一形状加弹簧驱动。
+  - 旧 UI 规范 `docs/reviews/2026-11-13-ui-ux-design.md` 中被取代的章节已在其文件头标注。
+- **竞品痛点即我们的差异化**（2026-11-13 调研沉浸式翻译等）：
+  - 免费额度不透明、订阅弹窗打扰；
+  - 大页面卡顿；
+  - 排版错乱、悬停结果消失；
+  - 429 只能手动换引擎；
+  - 每个页面默认显示浮球，需要逐站关闭。
+  - 从 M2 起，每个批次的方案都要有一节「差异化」，说明针对上述哪一条。
+  - 可参考的竞品机制：沉浸式翻译公开的站点规则 JSON（`.add` / `.remove` 增量语法与 `id` 继承）、视口预翻译、字幕遇到 429 时回退原字幕。
 - **留给 M2 及以后的约定**（来自 M1 方案的审查和参考项目调研）：
   - SW 被回收后，在途请求会丢失，后台不做恢复。**由 M2 的内容脚本负责 Port 重连，并重发未完成的段**；已完成的段会命中缓存。
   - **M2 开工前先实测**：`{{n}}` 一类占位符经过 Google 翻译后的保留率，再据此确定占位符格式。占位符与原文发生冲突时，换用新的随机标记（nonce）。
@@ -73,6 +101,11 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
   - 行内标签用编号标记保护，并校验出现次数、配对和嵌套。用 MutationObserver 检测框架重新挂载节点，并恢复译文。
   - 首屏按字符预算优先翻译，其余用 IntersectionObserver 懒加载，`rootMargin` 设为 1000px。
   - M3 的输入翻译要兼容 Lexical、ProseMirror、Draft.js、Slate、Quill 等富文本编辑器；M5 的字幕以当前时间 ±10 秒为滚动窗口预取。
+  - **来自 M1 架构审查，留到对应批次再做（现在做属于过度设计）**：
+    - M2：视口优先由内容脚本控制提交顺序，调度器不加优先级。
+    - M3：给 `scheduler.submit` 增加可选参数 `onDelta`，并在 `TranslateChunk` 中增加 delta 分支，用于划词流式。新增第三个调用方时，把 `service` 和 `admin` 里重复的「解析配置 → 适配器 → 提示词」抽成 `resolveJobContext()`。
+    - M4：引入 `TranslateOptions`（temperature、style、glossary），统一计算 `paramsDigest`；`buildPrompt` 和 `ProviderContext` 都要接收这些参数。
+    - 下次新增 provider 时：把 `resolveProviderSettings` 移出 registry，改为表驱动，并让 `SecretProviderId` 由 `Engine` 派生。
 
 M1 和 M2（整页翻译）完成后即构成 MVP。
 
@@ -117,3 +150,4 @@ M1 和 M2（整页翻译）完成后即构成 MVP。
 | 2026-11-13 | M0 方案 `docs/plans/m0-foundation.md` 经审查后获批。在 `feat/m0-foundation` 上实现 M0（工具链与 CI、配置仓库、消息协议与 Port 传输层、设计 token 与主题），`npm run check` 通过。状态：**已实现，待审查和合并**；第 9 节手工验收待在真实 Chrome 中执行。下一步：审查 → 推送并开 PR → CI 通过后由用户合并 → M1 |
 | 2026-11-13 | 已开 PR jiangding01/easy-translate#1。按 check skill 的 Deep 流程补做了完整审查：安全、架构 2 个专项审查，加上 4 个角度的对抗式审查。确认 13 项问题并修复，每项都先写回归测试；其中 Port 修了「无法序列化的响应会让请求永久挂起」等问题。M1 开工前必须决定的事项已记入第 5 节。状态：**等待用户合并** |
 | 2026-11-13 | **M0 已合并**（PR #1，合并提交 `c5b7bb2`，main 上的 CI 通过）。用户在真实 Chrome 中完成手工验收：第 1、2、3、4、5b、6 项通过；5a（`chrome://` 页面的提示）只有单元测试覆盖。LCU 的 URL 策略只允许 http/https，不能用来测试扩展页面。下一步：M1 翻译核心（分支 `feat/m1-translation-core`） |
+| 2026-11-14 | **M1 后台能力完成，暂停于 3b 之前**（应用户要求，下次继续）。<br>**实现**：分三段完成。第一段 Sonnet：配置、provider、缓存。第二段 Opus：调度器与服务。3a Sonnet：后台接线。<br>**审查**：按 check skill 的 Deep 流程，做了安全、架构 2 个专项审查，加上 4 个角度的对抗式审查，确认的问题已全部修复。主要有：OpenAI baseURL 绕过权限检查；配置写入没有校验发送方；冷却作用域与超大 Retry-After；缓存淘汰阻塞读取，TTL 删除与写入有竞态；LLM 输出被截断或被拦截时，真实原因被掩盖。每项修复都有先红后绿的回归测试，目前共 356 个测试。<br>**设计**：界面方向确认为「隐中生岛」加琥珀主题色，见 `docs/plans/ui-isle-direction.md`。<br>**下一步**：3b 原型 → 3b 实现 → check → 推送并开 PR |
