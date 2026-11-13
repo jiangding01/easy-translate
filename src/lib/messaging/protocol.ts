@@ -39,7 +39,8 @@ export interface CacheStatsInfo {
  * One-shot messages between contexts. Every reply is a `Result`: handlers are
  * wrapped with `handle()` and senders go through `call()`, so nothing throws
  * across a context boundary. Payloads are not validated: every sender is this
- * extension's own code (config writes are validated by the repository).
+ * extension's own code (config writes are validated by the repository, and
+ * accepted from extension pages only).
  */
 export interface ProtocolMap {
   'app.getStatus'(): Result<{ version: string }>;

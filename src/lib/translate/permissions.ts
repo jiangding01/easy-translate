@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import type { Engine } from '@/lib/config/types';
 import { type AppError, appError, fail, ok, type Result } from '@/lib/errors';
 import { normalizeBaseURL } from './base-url';
 
@@ -39,10 +40,7 @@ const defaultDeps: PermissionDeps = {
   contains: (origins) => browser.permissions.contains({ origins }),
 };
 
-/**
- * Checks the optional host permission of a custom endpoint before any request is
- * made. Built-in providers are covered by `host_permissions` and need no check.
- */
+/** Checks the optional host permission of an endpoint before any request is made. */
 export async function checkEndpointPermission(
   baseURL: string,
   deps: PermissionDeps = defaultDeps,
@@ -61,4 +59,41 @@ export async function checkEndpointPermission(
     );
   }
   return parsed;
+}
+
+/** Origins covered by the manifest's `host_permissions`. */
+export const BUILTIN_ORIGINS: ReadonlySet<string> = new Set([
+  'https://translate.googleapis.com',
+  'https://api.openai.com',
+  'https://api.deepseek.com',
+  'https://generativelanguage.googleapis.com',
+]);
+
+const GOOGLE_ENDPOINT = 'https://translate.googleapis.com';
+
+function originOf(baseURL: string): string | undefined {
+  try {
+    return new URL(normalizeBaseURL(baseURL)).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The single endpoint gate for every engine, run before any request. A built-in
+ * origin passes as is; anything else must be https (or http on localhost) and
+ * hold the optional host permission. Google ignores `baseURL`: its endpoint is fixed.
+ */
+export async function checkEngineEndpoint(
+  engine: Engine,
+  baseURL: string,
+  deps: PermissionDeps = defaultDeps,
+): Promise<Result<EndpointOrigin>> {
+  const url = engine === 'google' ? GOOGLE_ENDPOINT : baseURL;
+  const origin = originOf(url);
+  if (origin !== undefined && BUILTIN_ORIGINS.has(origin)) {
+    const { hostname } = new URL(origin);
+    return ok({ pattern: `https://${hostname}/*`, origin });
+  }
+  return checkEndpointPermission(url, deps);
 }

@@ -5,6 +5,7 @@ import { createConfigRepository } from '@/lib/config/repository';
 import { toAppError } from '@/lib/errors';
 import { handle } from '@/lib/messaging/handle';
 import { onMessage, TRANSLATE_PORT_NAME } from '@/lib/messaging/protocol';
+import { createConfigHandlers } from '@/lib/messaging/sender';
 import { createAdminHandlers } from '@/lib/translate/admin';
 import { createTranslationCache } from '@/lib/translate/cache';
 import { createTranslatePortHost } from '@/lib/translate/port-host';
@@ -21,6 +22,7 @@ export default defineBackground(() => {
     secrets,
     cache,
   });
+  const config = createConfigHandlers({ repo, extensionRoot: browser.runtime.getURL('/') });
   const admin = createAdminHandlers({
     getConfig: async () => (await repo.load()).data,
     secrets,
@@ -34,14 +36,9 @@ export default defineBackground(() => {
     'app.getStatus',
     handle(() => ({ version: browser.runtime.getManifest().version })),
   );
-  onMessage(
-    'config.patch',
-    handle(({ data }) => repo.patch(data)),
-  );
-  onMessage(
-    'config.reset',
-    handle(({ data }) => repo.reset(data)),
-  );
+  // Config writes are accepted from extension pages only, never from content scripts.
+  onMessage('config.patch', ({ data, sender }) => config['config.patch'](sender, data));
+  onMessage('config.reset', ({ data, sender }) => config['config.reset'](sender, data));
   onMessage('secrets.set', ({ data, sender }) => admin['secrets.set'](sender, data));
   onMessage('secrets.status', ({ sender }) => admin['secrets.status'](sender));
   onMessage('provider.test', ({ data, sender }) => admin['provider.test'](sender, data));

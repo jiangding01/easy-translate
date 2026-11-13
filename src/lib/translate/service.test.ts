@@ -7,6 +7,7 @@ import { createPortClient, type PortLike, servePort } from '@/lib/messaging/port
 import type { TranslateChunk, TranslateDone, TranslateRequest } from '@/lib/messaging/protocol';
 import { createTranslationCache, openCacheDb } from './cache';
 import type { DetectLanguage } from './language';
+import { checkEngineEndpoint } from './permissions';
 import {
   classifyTranslation,
   createTranslateService,
@@ -404,6 +405,40 @@ describe('translate service over the port', () => {
     expect(result.outcome).toEqual({ status: 'done', data: { total: 1, failed: 1 } });
     expect(result.byId.i0).toMatchObject({ error: { code: 'config/permission-missing' } });
     expect(providers.calls).toHaveLength(0);
+  });
+});
+
+describe('translate service: endpoint checks', () => {
+  const denyAll = vi.fn(async () => false);
+  const realCheck = (engine: Parameters<typeof checkEngineEndpoint>[0], baseURL: string) =>
+    checkEngineEndpoint(engine, baseURL, { contains: denyAll });
+
+  it('rejects openai on a non-built-in https endpoint without the grant', async () => {
+    const { providers, config, run } = setup({ checkPermission: realCheck });
+    config.translation.engine = 'openai';
+    config.providers.openai.baseURL = 'https://proxy.example.com/v1';
+    const result = await run({ items: items('Hello'), source: 'en' });
+    expect(result.byId.i0).toMatchObject({ error: { code: 'config/permission-missing' } });
+    expect(providers.calls).toHaveLength(0);
+  });
+
+  it('rejects openai on plain http to a non-local host', async () => {
+    const { providers, config, run } = setup({ checkPermission: realCheck });
+    config.translation.engine = 'openai';
+    config.providers.openai.baseURL = 'http://proxy.example.com/v1';
+    const result = await run({ items: items('Hello'), source: 'en' });
+    expect(result.byId.i0).toMatchObject({ error: { code: 'config/invalid-base-url' } });
+    expect(providers.calls).toHaveLength(0);
+  });
+
+  it('lets built-in endpoints through without asking for a grant', async () => {
+    denyAll.mockClear();
+    const { providers, config, run } = setup({ checkPermission: realCheck });
+    config.translation.engine = 'openai';
+    const result = await run({ items: items('Hello'), source: 'en' });
+    expect(result.byId.i0).toMatchObject({ text: 'O:Hello' });
+    expect(providers.calls).toHaveLength(1);
+    expect(denyAll).not.toHaveBeenCalled();
   });
 });
 

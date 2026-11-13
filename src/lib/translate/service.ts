@@ -12,7 +12,7 @@ import {
 import type { TranslationCache } from './cache';
 import { makeCacheKey } from './cache-key';
 import { createSameLanguageCheck, type DetectLanguage, detectWithBrowser } from './language';
-import { checkEndpointPermission } from './permissions';
+import { checkEngineEndpoint } from './permissions';
 import { buildPrompt, promptDigest } from './prompt';
 import { abortedError } from './providers/errors';
 import { getAdapter as registryAdapter, resolveProviderSettings } from './providers/registry';
@@ -31,8 +31,8 @@ export interface TranslateServiceDeps {
   random?: () => number;
   /** `null` disables detection; omitted uses chrome.i18n.detectLanguage. */
   detectLanguage?: DetectLanguage | null;
-  /** Host-permission check for the custom endpoint. */
-  checkPermission?: (baseURL: string) => Promise<Result<unknown>>;
+  /** Endpoint gate (built-in origin, or https/localhost with the host permission). */
+  checkPermission?: (engine: Engine, baseURL: string) => Promise<Result<unknown>>;
   /** Shared scheduler; by default the service creates its own. */
   scheduler?: Scheduler;
 }
@@ -130,7 +130,7 @@ export function createTranslateService(deps: TranslateServiceDeps): TranslateSer
   const isSameLanguage = createSameLanguageCheck(
     deps.detectLanguage === undefined ? detectWithBrowser : (deps.detectLanguage ?? undefined),
   );
-  const checkPermission = deps.checkPermission ?? checkEndpointPermission;
+  const checkPermission = deps.checkPermission ?? checkEngineEndpoint;
   const { cache } = deps;
   let sequence = 0;
 
@@ -222,13 +222,11 @@ export function createTranslateService(deps: TranslateServiceDeps): TranslateSer
       if (misses.length === 0) return done();
 
       // 4. Preconditions shared by every remaining item.
-      if (engine === 'custom') {
-        const permission = await checkPermission(settings.baseURL);
-        throwIfAborted(signal);
-        if (!permission.ok) {
-          for (const item of misses) emit({ id: item.id, error: permission.error });
-          return done();
-        }
+      const permission = await checkPermission(engine, settings.baseURL);
+      throwIfAborted(signal);
+      if (!permission.ok) {
+        for (const item of misses) emit({ id: item.id, error: permission.error });
+        return done();
       }
       const apiKey = engine === 'google' ? undefined : await deps.secrets.get(engine);
       throwIfAborted(signal);
