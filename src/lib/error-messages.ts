@@ -16,7 +16,10 @@ const MESSAGES: Record<string, string> = {
   'config/invalid-base-url':
     '接口地址不正确。请填写 https 开头的地址，本地模型可用 http://localhost。',
   'config/model-required': '尚未填写模型名称。请填写模型后重试。',
-  'config/permission-missing': '尚未授权访问该接口地址。请在设置页点击「授权」后重试。',
+  'config/permission-missing': '尚未授权访问该接口地址。请在设置页点击「授权访问」后重试。',
+  'config/provider-limit': '自定义服务已达 10 个上限。请先删除不用的服务。',
+  'config/provider-missing': '找不到这个自定义服务，可能已被删除。请在设置页重新选择默认引擎。',
+  'config/invalid-value': '设置值不正确，没有保存。请检查后重试。',
   'provider/unauthorized': '密钥无效或没有访问权限。请检查密钥后重试。',
   'provider/not-found': '接口地址或模型不存在。请检查接口地址和模型名称。',
   'provider/quota-exceeded': '该服务的额度已用完。请充值，或换一个翻译服务。',

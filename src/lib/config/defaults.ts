@@ -10,8 +10,8 @@ export function createDefaultConfig(uiLanguage: string): ConfigV1 {
       openai: { baseURL: 'https://api.openai.com/v1', model: 'gpt-5-mini' },
       deepseek: { model: 'deepseek-chat' },
       gemini: { model: '' },
-      custom: { baseURL: '', model: '' },
     },
+    customProviders: {},
   };
 }
 

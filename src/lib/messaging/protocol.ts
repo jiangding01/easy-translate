@@ -1,5 +1,11 @@
 import { defineExtensionMessaging } from '@webext-core/messaging';
-import type { ConfigChange, ConfigPath, ConfigSnapshot, Engine } from '@/lib/config/types';
+import type {
+  ConfigChange,
+  ConfigPath,
+  ConfigSnapshot,
+  CustomProviderId,
+  Engine,
+} from '@/lib/config/types';
 import type { AppError, Result } from '@/lib/errors';
 import type { LanguageCode } from '@/lib/languages';
 
@@ -9,7 +15,8 @@ export interface PageInfo {
   language: string;
 }
 
-export type SecretProviderId = 'openai' | 'deepseek' | 'gemini' | 'custom';
+/** Built-in engines that take a key, or a custom provider id. */
+export type SecretProviderId = 'openai' | 'deepseek' | 'gemini' | CustomProviderId;
 
 /** Never carries the key itself: `last4` is empty for short keys. */
 export interface SecretStatusInfo {
@@ -17,7 +24,10 @@ export interface SecretStatusInfo {
   last4: string;
 }
 
-/** Unsaved settings-page values; `apiKey` falls back to the saved key when omitted or blank. */
+/**
+ * Unsaved settings-page values; `apiKey` falls back to the key saved for `engine`
+ * when omitted or blank. A custom id need not exist in the config yet.
+ */
 export interface ProviderTestDraft {
   engine: Engine;
   baseURL: string;
@@ -48,7 +58,8 @@ export interface ProtocolMap {
   'config.reset'(paths?: ConfigPath[]): Result<ConfigSnapshot>;
   /** Settings page only (`validation/forbidden-sender` otherwise). */
   'secrets.set'(args: { provider: SecretProviderId; key: string | null }): Result<SecretStatusInfo>;
-  'secrets.status'(): Result<Record<SecretProviderId, SecretStatusInfo>>;
+  /** Every built-in provider, plus each custom provider that has a key. */
+  'secrets.status'(): Result<Partial<Record<SecretProviderId, SecretStatusInfo>>>;
   'provider.test'(draft: ProviderTestDraft): Result<ProviderTestResult>;
   'cache.stats'(): Result<CacheStatsInfo>;
   'cache.clear'(): Result<null>;

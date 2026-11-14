@@ -5,6 +5,6 @@ export const EXTRA_DEFAULTS = {
     openai: { baseURL: 'https://api.openai.com/v1', model: 'gpt-5-mini' },
     deepseek: { model: 'deepseek-chat' },
     gemini: { model: '' },
-    custom: { baseURL: '', model: '' },
   },
+  customProviders: {},
 } as const;

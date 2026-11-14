@@ -1,36 +1,14 @@
 import { browser } from 'wxt/browser';
 import type { Engine } from '@/lib/config/types';
-import { type AppError, appError, fail, ok, type Result } from '@/lib/errors';
-import { normalizeBaseURL } from './base-url';
+import {
+  BUILTIN_ORIGINS,
+  type EndpointOrigin,
+  normalizeBaseURL,
+  parseEndpointOrigin,
+} from '@/lib/endpoint';
+import { appError, fail, ok, type Result } from '@/lib/errors';
 
-const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
-
-export interface EndpointOrigin {
-  /** Match pattern for permissions.request / contains (ports are not part of a pattern). */
-  pattern: string;
-  origin: string;
-}
-
-export function invalidBaseUrlError(): AppError {
-  return appError(
-    'config',
-    'config/invalid-base-url',
-    'Base URL must be https, or http on localhost',
-  );
-}
-
-/** Extracts the permission origin; only https, or http on localhost / 127.0.0.1, is accepted. */
-export function parseEndpointOrigin(baseURL: string): Result<EndpointOrigin> {
-  let url: URL;
-  try {
-    url = new URL(normalizeBaseURL(baseURL));
-  } catch {
-    return fail(invalidBaseUrlError());
-  }
-  const local = url.protocol === 'http:' && LOCAL_HOSTS.has(url.hostname);
-  if (url.protocol !== 'https:' && !local) return fail(invalidBaseUrlError());
-  return ok({ pattern: `${url.protocol}//${url.hostname}/*`, origin: url.origin });
-}
+export { BUILTIN_ORIGINS, type EndpointOrigin, parseEndpointOrigin };
 
 export interface PermissionDeps {
   contains: (origins: string[]) => Promise<boolean>;
@@ -60,14 +38,6 @@ export async function checkEndpointPermission(
   }
   return parsed;
 }
-
-/** Origins covered by the manifest's `host_permissions`. */
-export const BUILTIN_ORIGINS: ReadonlySet<string> = new Set([
-  'https://translate.googleapis.com',
-  'https://api.openai.com',
-  'https://api.deepseek.com',
-  'https://generativelanguage.googleapis.com',
-]);
 
 const GOOGLE_ENDPOINT = 'https://translate.googleapis.com';
 

@@ -1,11 +1,19 @@
 import { isPlainObject } from '@/lib/config/merge';
 import type { KeyValueStore } from '@/lib/config/repository';
+import { type CustomProviderId, isCustomProviderId } from '@/lib/config/types';
 import { type AppError, appError } from '@/lib/errors';
 
 export const SECRETS_STORAGE_KEY = 'secrets';
 
-export const SECRET_PROVIDERS = ['openai', 'deepseek', 'gemini', 'custom'] as const;
-export type SecretProvider = (typeof SECRET_PROVIDERS)[number];
+/** Built-in engines that take a key; custom providers are keyed by their id. */
+export const BUILTIN_SECRET_PROVIDERS = ['openai', 'deepseek', 'gemini'] as const;
+export type SecretProvider = (typeof BUILTIN_SECRET_PROVIDERS)[number] | CustomProviderId;
+
+export function isSecretProvider(value: unknown): value is SecretProvider {
+  return (
+    (BUILTIN_SECRET_PROVIDERS as readonly unknown[]).includes(value) || isCustomProviderId(value)
+  );
+}
 
 export interface SecretStatus {
   configured: boolean;
@@ -43,9 +51,10 @@ function toStatus(key: string | undefined): SecretStatus {
 function readSecrets(raw: unknown): Partial<Record<SecretProvider, string>> {
   if (!isPlainObject(raw)) return {};
   const secrets: Partial<Record<SecretProvider, string>> = {};
-  for (const provider of SECRET_PROVIDERS) {
-    const value = raw[provider];
-    if (typeof value === 'string' && value !== '') secrets[provider] = value;
+  for (const [provider, value] of Object.entries(raw)) {
+    if (isSecretProvider(provider) && typeof value === 'string' && value !== '') {
+      secrets[provider] = value;
+    }
   }
   return secrets;
 }
@@ -55,7 +64,8 @@ export interface SecretStore {
   get(provider: SecretProvider): Promise<string | undefined>;
   /** Overwrite semantics, so a retry after a lost reply is safe. `null` (or blank) deletes. */
   set(provider: SecretProvider, key: string | null): Promise<SecretStatus>;
-  status(): Promise<Record<SecretProvider, SecretStatus>>;
+  /** Every built-in provider, plus each custom provider that has a key. */
+  status(): Promise<Partial<Record<SecretProvider, SecretStatus>>>;
 }
 
 export function createSecretStore(store: KeyValueStore): SecretStore {
@@ -85,9 +95,13 @@ export function createSecretStore(store: KeyValueStore): SecretStore {
 
     async status() {
       const secrets = readSecrets(await store.get(SECRETS_STORAGE_KEY));
+      const providers = new Set<SecretProvider>([
+        ...BUILTIN_SECRET_PROVIDERS,
+        ...(Object.keys(secrets) as SecretProvider[]),
+      ]);
       return Object.fromEntries(
-        SECRET_PROVIDERS.map((provider) => [provider, toStatus(secrets[provider])]),
-      ) as Record<SecretProvider, SecretStatus>;
+        [...providers].map((provider) => [provider, toStatus(secrets[provider])]),
+      );
     },
   };
 }

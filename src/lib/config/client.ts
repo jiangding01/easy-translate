@@ -12,8 +12,10 @@ import {
   type ConfigPath,
   type ConfigSnapshot,
   type ConfigV1,
-  ENGINES,
-  type Engine,
+  CUSTOM_PROVIDER_ID_PATTERN,
+  type CustomProvider,
+  isBuiltinEngine,
+  isCustomProviderId,
   THEMES,
   type Theme,
 } from './types';
@@ -28,8 +30,23 @@ function isTheme(value: unknown): value is Theme {
   return typeof value === 'string' && (THEMES as readonly string[]).includes(value);
 }
 
-function isEngine(value: unknown): value is Engine {
-  return typeof value === 'string' && (ENGINES as readonly string[]).includes(value);
+function isCustomProvider(value: unknown): value is CustomProvider {
+  return (
+    isPlainObject(value) &&
+    typeof value.name === 'string' &&
+    typeof value.baseURL === 'string' &&
+    typeof value.model === 'string'
+  );
+}
+
+/** Keeps well-formed entries in stored order. */
+function normalizeCustomProviders(raw: unknown): Record<string, CustomProvider> {
+  const providers: Record<string, CustomProvider> = {};
+  if (!isPlainObject(raw)) return providers;
+  for (const [id, value] of Object.entries(raw)) {
+    if (CUSTOM_PROVIDER_ID_PATTERN.test(id) && isCustomProvider(value)) providers[id] = value;
+  }
+  return providers;
 }
 
 /** Structural merge with defaults plus enum guards. Pure; exported for tests. */
@@ -42,6 +59,11 @@ export function normalizeConfig(raw: unknown, uiLanguage: string): ConfigSnapsho
   const ui = isPlainObject(merged.ui) ? merged.ui : {};
   const language = isPlainObject(merged.language) ? merged.language : {};
   const translation = isPlainObject(merged.translation) ? merged.translation : {};
+  const customProviders = normalizeCustomProviders(merged.customProviders);
+  const engine = translation.engine;
+  const engineOk =
+    isBuiltinEngine(engine) ||
+    (isCustomProviderId(engine) && Object.hasOwn(customProviders, engine));
   return {
     schemaVersion: CONFIG_SCHEMA_VERSION,
     data: {
@@ -56,11 +78,10 @@ export function normalizeConfig(raw: unknown, uiLanguage: string): ConfigSnapsho
             : defaults.data.language.source,
       },
       providers: merged.providers as ConfigV1['providers'],
+      customProviders,
       translation: {
         ...translation,
-        engine: isEngine(translation.engine)
-          ? translation.engine
-          : defaults.data.translation.engine,
+        engine: engineOk ? engine : defaults.data.translation.engine,
       },
     },
   };

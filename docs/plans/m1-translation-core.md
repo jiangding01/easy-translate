@@ -215,6 +215,35 @@ providers: {
 - **缓存**：显示「n 条 · x MB」，提供「清空」按钮。
 - 体积预算：options ≤ 150KB，现为 74KB。新增的 UI 只用原生控件和 CSS Modules，不引入组件库。
 
+### 4.11 第 3b 步修订：多个自定义服务与新界面（2026-11-14，用户确认原型后批准）
+
+原型见 https://claude.ai/artifact/GJTgsP7SFHmhP6M2SczwTp 「设置页与面板 · 琥珀」页。本节取代 4.2 中「只能有 1 个自定义端点」的限制，以及 4.10 中「选中即默认」的交互。
+
+- **配置**：删除 `providers.custom`，新增 `customProviders: Record<id, { name, baseURL, model }>`。`id` 形如 `custom-` 加 8 位小写字母数字，由设置页生成。最多 10 个。`translation.engine` 取值为 4 个内置引擎之一，或某个自定义服务的 `id`。扩展还没发布，不做迁移，`schemaVersion` 保持 1。
+- **按条目写入**：`ConfigChange` 新增一种操作 `{ path: 'customProviders', key: id, value: 条目 | null }`，只新增、覆盖或删除这一条，其余条目不动。两个页面同时修改不同的服务，不会互相覆盖（M0 深度审查列出的方案二）。
+  - 写入时，如果默认引擎指向一个不存在的自定义服务（比如刚被删掉），仓库把它改回 `google`，和删除在同一次写入里完成。
+  - 读取修复：问题出在某个条目内部时，整条删除，而不是把整个配置重置为默认值。
+- **密钥**：按服务 `id` 存储，自定义服务各有各的密钥。删除服务时，设置页随后删除它的密钥；`secrets.status` 只返回已保存的条目。
+- **引擎族**：调度冷却和缓存键用「引擎族」（内置引擎就是自己，自定义服务统一记为 `custom`）加 endpoint，所以同一个地址上的多个自定义服务共享冷却和缓存。
+- **主机权限**：浏览器要求 `permissions.request` 必须在用户点击中调用，失焦自动保存不算点击，所以：
+  - 「添加服务」对话框在点「添加」时申请权限；被拒绝也保存服务，标为「待授权」。
+  - 已保存的服务（包括改了 Base URL 的 OpenAI）只要地址不是内置域名，且还没授权，详情里就出现「访问权限 · 授权访问」一行。
+  - 删除服务后，如果没有其他服务再用这个地址，就撤销它的权限。
+  - `parseEndpointOrigin` 和 `normalizeBaseURL` 移到 `src/lib/endpoint.ts`，页面和后台共用。
+- **设置页**：左侧导航「通用 / 翻译服务」。
+  - 引擎列表中，点一行只展开详情；点左侧圆点或详情里的「设为默认引擎」才切换默认。
+  - 「添加服务」按钮在列表正上方右侧，用原生 `<dialog>` 的 `showModal()` 打开，自带焦点圈定和 `Esc` 关闭。
+  - 测试连接用灵岛材质的深色试译条。
+  - 清空缓存和删除服务都在原地确认，不弹窗。
+- **工具栏面板**：M1 落地外观，以及能判断的状态：
+  - 外文页面：主按钮「翻译此页」暂不可用，提示整页翻译在下个版本接入；
+  - 母语页面：页面 `lang` 与目标语言一致；
+  - 浏览器自己的页面；
+  - 默认引擎缺少密钥。
+  
+  底部可以切换默认引擎，也可以打开设置。移除「检查当前页面」调试按钮。「这次先用 Google 翻译」和「总是翻译此站」随 M2 接入。
+- **主题色**：`tokens.css` 换成琥珀色（`docs/plans/ui-isle-direction.md` 第 6 节）。新增 `scripts/check-contrast.mjs`，校验文字和控件的对比度，并接入 `npm run check`。工具栏图标的单色字形和状态小点放到 M2，与 `action.setIcon` 的状态一起做。
+
 ## 5. 文件清单（约 40 个，超过 8 个，在此说明）
 
 - **新增 `src/lib/translate/`**（只在后台使用）：`types.ts`、`providers/{google,openai-compat,gemini,registry,errors}.ts`、`sse.ts`、`codec.ts`、`prompt.ts`、`cache.ts`、`cache-key.ts`、`scheduler.ts`、`language.ts`、`service.ts`、`secrets.ts`、`permissions.ts`，以及各自的 `*.test.ts`。

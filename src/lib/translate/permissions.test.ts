@@ -72,7 +72,7 @@ describe('checkEngineEndpoint', () => {
     ['openai', 'https://api.openai.com/v1'],
     ['deepseek', 'https://api.deepseek.com'],
     ['gemini', 'https://generativelanguage.googleapis.com/v1beta'],
-    ['custom', 'https://api.openai.com/v1'],
+    ['custom-aaaaaaaa', 'https://api.openai.com/v1'],
     ['google', ''],
   ] as const)('lets %s through on a built-in origin (%s) without asking', async (engine, url) => {
     const contains = vi.fn(async () => false);

@@ -72,7 +72,36 @@ describe('readConfig', () => {
     });
     const { data } = await readConfig();
     expect(data.providers.openai).toEqual({ baseURL: 'https://api.openai.com/v1', model: 'x' });
-    expect(data.providers.custom).toEqual({ baseURL: '', model: '' });
+    expect(data.customProviders).toEqual({});
+  });
+
+  it('keeps well-formed custom providers in order and drops malformed ones', async () => {
+    const ollama = { name: 'Ollama', baseURL: 'http://localhost:11434/v1', model: 'm' };
+    const router = { name: 'Router', baseURL: 'https://router.example.com/v1', model: 'r' };
+    await fakeBrowser.storage.local.set({
+      config: {
+        schemaVersion: 1,
+        data: {
+          translation: { engine: 'custom-bbbbbbbb' },
+          customProviders: {
+            'custom-bbbbbbbb': router,
+            'custom-aaaaaaaa': ollama,
+            'not-an-id': ollama,
+            'custom-cccccccc': { name: 1 },
+          },
+        },
+      },
+    });
+    const { data } = await readConfig();
+    expect(Object.keys(data.customProviders)).toEqual(['custom-bbbbbbbb', 'custom-aaaaaaaa']);
+    expect(data.translation.engine).toBe('custom-bbbbbbbb');
+  });
+
+  it('falls back to the default engine when the custom provider is missing', async () => {
+    await fakeBrowser.storage.local.set({
+      config: { schemaVersion: 1, data: { translation: { engine: 'custom-zzzzzzzz' } } },
+    });
+    expect((await readConfig()).data.translation.engine).toBe('google');
   });
 });
 

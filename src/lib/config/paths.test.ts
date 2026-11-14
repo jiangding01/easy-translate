@@ -64,8 +64,7 @@ describe('whitelist', () => {
       'providers.openai.model',
       'providers.deepseek.model',
       'providers.gemini.model',
-      'providers.custom.baseURL',
-      'providers.custom.model',
+      'customProviders',
     ] as const satisfies readonly ConfigPath[];
     // Type side: every ConfigPath is listed (and `satisfies` checks the reverse).
     expectTypeOf<Exclude<ConfigPath, (typeof expected)[number]>>().toEqualTypeOf<never>();

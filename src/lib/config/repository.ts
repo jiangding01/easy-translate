@@ -1,5 +1,6 @@
 import { appError, isAppError } from '@/lib/errors';
 import { createDefaultConfig } from './defaults';
+import { isPlainObject } from './merge';
 import { parseStoredConfig } from './parse';
 import { CONFIG_PATHS, getPath, isConfigPath, setPath } from './paths';
 import { configSchema } from './schema';
@@ -10,6 +11,10 @@ import {
   type ConfigPath,
   type ConfigSnapshot,
   type ConfigV1,
+  type CustomProviderChange,
+  isBuiltinEngine,
+  isCustomProviderId,
+  MAX_CUSTOM_PROVIDERS,
 } from './types';
 
 export interface KeyValueStore {
@@ -106,12 +111,17 @@ export function createConfigRepository(deps: ConfigRepositoryDeps): ConfigReposi
       enqueue(async () => {
         let data: unknown = await readWritable();
         for (const change of changes) {
-          if (!isConfigPath(change.path)) {
+          if (isCustomProviderChange(change)) {
+            data = applyCustomProviderChange(data, change);
+            continue;
+          }
+          // The record itself is never replaced wholesale through a patch.
+          if (!isConfigPath(change.path) || (change.path as string) === 'customProviders') {
             throw appError('config', 'config/unknown-path', `Unknown config path: ${change.path}`);
           }
           data = setPath(data, change.path, change.value);
         }
-        return write(data);
+        return write(dropDanglingEngine(data));
       }),
 
     reset: (paths) =>
@@ -127,6 +137,46 @@ export function createConfigRepository(deps: ConfigRepositoryDeps): ConfigReposi
         return write(data);
       }),
   };
+}
+
+function isCustomProviderChange(change: ConfigChange): change is CustomProviderChange {
+  return change.path === 'customProviders' && 'key' in change;
+}
+
+function applyCustomProviderChange(data: unknown, change: CustomProviderChange): unknown {
+  if (!isCustomProviderId(change.key)) {
+    throw appError('config', 'config/invalid-value', 'Invalid custom provider id');
+  }
+  const current = getPath(data, 'customProviders');
+  const providers: Record<string, unknown> = isPlainObject(current) ? { ...current } : {};
+  if (change.value === null) {
+    delete providers[change.key];
+  } else {
+    if (
+      !Object.hasOwn(providers, change.key) &&
+      Object.keys(providers).length >= MAX_CUSTOM_PROVIDERS
+    ) {
+      throw appError(
+        'config',
+        'config/provider-limit',
+        `At most ${MAX_CUSTOM_PROVIDERS} custom providers`,
+      );
+    }
+    // Replacing an existing key keeps its position, so display order is stable.
+    providers[change.key] = structuredClone(change.value);
+  }
+  return setPath(data, 'customProviders', providers);
+}
+
+/** Removing the default provider falls back to Google in the same write. */
+function dropDanglingEngine(data: unknown): unknown {
+  const engine = getPath(data, 'translation.engine');
+  const providers = getPath(data, 'customProviders');
+  if (isBuiltinEngine(engine)) return data;
+  if (isCustomProviderId(engine) && isPlainObject(providers) && Object.hasOwn(providers, engine)) {
+    return data;
+  }
+  return isCustomProviderId(engine) ? setPath(data, 'translation.engine', 'google') : data;
 }
 
 function describe(error: unknown): string {

@@ -27,11 +27,44 @@ describe('parseStoredConfig', () => {
       language: { target: 'ko', source: 'ja' },
       translation: { engine: 'openai' },
       providers: { ...EXTRA_DEFAULTS.providers, gemini: { model: 'm' } },
+      customProviders: {},
     };
     const result = parse(stored(data));
     expect(result.snapshot.data).toEqual(data);
     expect(result.repaired).toBe(false);
     expect(result.resetPaths).toEqual([]);
+  });
+
+  it('drops only the broken custom provider entry, keeping the others and their order', () => {
+    const good = { name: 'A', baseURL: 'https://a.example.com/v1', model: 'm' };
+    const result = parse(
+      stored({
+        ...defaults,
+        translation: { engine: 'custom-bbbbbbbb' },
+        customProviders: {
+          'custom-cccccccc': good,
+          'custom-aaaaaaaa': { name: 1, baseURL: 'x', model: 'y' },
+          'Bad Key': good,
+          'custom-bbbbbbbb': good,
+        },
+      }),
+    );
+    expect(result.fallback).toBe(false);
+    expect(Object.keys(result.snapshot.data.customProviders)).toEqual([
+      'custom-cccccccc',
+      'custom-bbbbbbbb',
+    ]);
+    expect(result.snapshot.data.translation.engine).toBe('custom-bbbbbbbb');
+    expect(result.resetPaths).toEqual(
+      expect.arrayContaining(['customProviders.custom-aaaaaaaa', 'customProviders.Bad Key']),
+    );
+  });
+
+  it('resets a default engine that points at a missing custom provider to Google', () => {
+    const result = parse(stored({ ...defaults, translation: { engine: 'custom-zzzzzzzz' } }));
+    expect(result.snapshot.data.translation.engine).toBe('google');
+    expect(result.resetPaths).toContain('translation.engine');
+    expect(result.fallback).toBe(false);
   });
 
   it('preserves unknown keys at every level', () => {

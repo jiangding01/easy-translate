@@ -1,4 +1,4 @@
-import type { ConfigV1, Engine } from '@/lib/config/types';
+import { type ConfigV1, type Engine, engineFamily } from '@/lib/config/types';
 import { type AppError, appError, type Result } from '@/lib/errors';
 import { isLanguageCode, type LanguageCode } from '@/lib/languages';
 import {
@@ -90,7 +90,10 @@ export function portBusyError(): AppError {
   );
 }
 
-/** Cooldown scope: one per engine and endpoint origin; Google has a fixed endpoint. */
+/**
+ * Cooldown scope: one per engine family and endpoint origin (custom providers on
+ * the same server share it); Google has a fixed endpoint.
+ */
 export function cooldownKeyFor(engine: Engine, baseURL: string): string {
   if (engine === 'google') return 'google';
   let origin = baseURL;
@@ -99,7 +102,7 @@ export function cooldownKeyFor(engine: Engine, baseURL: string): string {
   } catch {
     // Unparsable endpoints were already rejected by the endpoint gate.
   }
-  return `${engine}|${origin}`;
+  return `${engineFamily(engine)}|${origin}`;
 }
 
 export function payloadTooLargeError(): AppError {
@@ -214,7 +217,7 @@ export function createTranslateService(deps: TranslateServiceDeps): TranslateSer
     const target: LanguageCode = request.target ?? config.language.target;
     const engine = config.translation.engine;
     const adapter = getAdapter(engine);
-    const settings = resolveProviderSettings(engine, config.providers);
+    const settings = resolveProviderSettings(engine, config);
 
     // 2. Same-language skip (only when the source is detected).
     let candidates = pending;
@@ -239,7 +242,8 @@ export function createTranslateService(deps: TranslateServiceDeps): TranslateSer
       candidates.map(async (item) => ({
         ...item,
         key: await makeCacheKey({
-          engine,
+          // Family, not id: re-adding the same endpoint and model reuses the cache.
+          engine: engineFamily(engine),
           endpoint: settings.baseURL,
           model: settings.model,
           source,
