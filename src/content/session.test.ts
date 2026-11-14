@@ -434,6 +434,33 @@ describe('page session: dynamic content', () => {
     expect(port.calls).toHaveLength(1);
   });
 
+  it('keeps one translation when a mixed parent loses its block child', async () => {
+    const { session, port, show } = setup(
+      '<div id="host">Inline lead text here. <div id="inner"><p>Block child text.</p></div></div>',
+    );
+    await session.start();
+    show([document.getElementById('host') as HTMLElement]);
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    port.calls[0]?.answer();
+    await vi.waitFor(() => expect(translations()).toHaveLength(1));
+    document.getElementById('inner')?.remove();
+    await wait(150);
+    expect(translations()).toEqual(['译:Inline lead text here.']);
+  });
+
+  it('forgets units whose whole area left before they were translated', async () => {
+    const { session, show, observed, unobserved } = setup(
+      '<section id="feed"><p>Never shown post text.</p></section><div><p>Other text here.</p></div>',
+    );
+    await session.start();
+    show(observed.slice(1));
+    const feed = document.getElementById('feed') as HTMLElement;
+    const paragraph = feed.querySelector('p') as HTMLElement;
+    feed.remove();
+    document.body.append(document.createElement('div'));
+    await vi.waitFor(() => expect(unobserved).toContain(paragraph));
+  });
+
   it('lets go of paragraphs the page removed', async () => {
     const { session, port, show, unobserved } = setup(
       '<div><p id="gone">Soon removed text.</p></div>',
