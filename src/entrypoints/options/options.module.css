@@ -388,7 +388,9 @@
   overflow: hidden;
 }
 .panelInner {
-  padding: 2px 18px 14px 52px;
+  /* 6px on top: .panelClip clips, and the first field's focus ring and glow
+     reach about 5px above it. */
+  padding: 6px 18px 14px 52px;
   display: flex;
   flex-direction: column;
   gap: 14px;
