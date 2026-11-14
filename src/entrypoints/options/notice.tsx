@@ -24,7 +24,11 @@ export function useNoticeState(): {
 } {
   const [notice, setNotice] = useState<Notice & { key: number }>();
   const show = useCallback((next: Notice) => {
-    setNotice((previous) => ({ ...next, key: (previous?.key ?? 0) + 1 }));
+    setNotice((previous) => {
+      // An unread error is not wiped by a later "已保存"; it leaves on its own timer.
+      if (previous?.kind === 'error' && next.kind === 'saved') return previous;
+      return { ...next, key: (previous?.key ?? 0) + 1 };
+    });
   }, []);
   const [api] = useState<NoticeApi>(() => ({
     saved: (text = '已保存') => show({ kind: 'saved', text }),

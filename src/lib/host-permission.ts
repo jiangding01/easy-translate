@@ -35,7 +35,3 @@ export function useHostPermission(pattern: string | undefined): boolean | undefi
 export function requestHostPermission(pattern: string): Promise<boolean> {
   return browser.permissions.request({ origins: [pattern] }).catch(() => false);
 }
-
-export function removeHostPermission(pattern: string): Promise<boolean> {
-  return browser.permissions.remove({ origins: [pattern] }).catch(() => false);
-}

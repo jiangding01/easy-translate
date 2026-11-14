@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { createDefaultConfig } from '@/lib/config/defaults';
 import type { KeyValueStore } from '@/lib/config/repository';
 import { appError, ok } from '@/lib/errors';
-import { type AdminDeps, createAdminHandlers, isOptionsSender, TEST_SAMPLE } from './admin';
+import {
+  type AdminDeps,
+  createAdminHandlers,
+  isOptionsSender,
+  TEST_DEADLINE_MS,
+  TEST_SAMPLE,
+} from './admin';
 import { createScheduler } from './scheduler';
 import { createSecretStore, SECRETS_STORAGE_KEY } from './secrets';
 import type { ProviderAdapter, ProviderContext } from './types';
@@ -133,6 +139,16 @@ describe('secrets', () => {
     expect(JSON.stringify(bad)).not.toContain('SECRET');
   });
 
+  it('rejects oversized test drafts before any request', async () => {
+    const { handlers, submit } = setup();
+    const long = await handlers['provider.test'](
+      options,
+      draft({ engine: 'openai', baseURL: `https://a.example.com/${'x'.repeat(2048)}` }),
+    );
+    expect(long).toMatchObject({ ok: false, error: { code: 'validation/invalid-payload' } });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
   it('lets the popup read the status, but nothing else', async () => {
     const { handlers } = setup({}, { popupUrl: 'chrome-extension://abc/popup.html' });
     const popup = { url: 'chrome-extension://abc/popup.html' };
@@ -193,6 +209,8 @@ describe('provider.test', () => {
     const request = submit.mock.calls[0]?.[0];
     expect(request?.persist).toBeUndefined();
     expect(request?.segments[0]?.key).toMatch(/^test:/);
+    // A test holds a scheduler slot for at most this long.
+    expect(request?.deadlineMs).toBe(TEST_DEADLINE_MS);
     expect(store.data.has(SECRETS_STORAGE_KEY)).toBe(false);
     expect(store.data.size).toBe(0);
     expect(JSON.stringify(result)).not.toContain(DRAFT_KEY);

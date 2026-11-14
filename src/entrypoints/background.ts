@@ -2,6 +2,7 @@ import { browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
 import { createLocalStore } from '@/lib/config/local-store';
 import { createConfigRepository } from '@/lib/config/repository';
+import { CONFIG_STORAGE_KEY, type ConfigSnapshot } from '@/lib/config/types';
 import { toAppError } from '@/lib/errors';
 import { handle } from '@/lib/messaging/handle';
 import { onMessage, TRANSLATE_PORT_NAME } from '@/lib/messaging/protocol';
@@ -47,12 +48,25 @@ export default defineBackground(() => {
   onMessage('cache.clear', ({ sender }) => admin['cache.clear'](sender));
   browser.runtime.onConnect.addListener(createTranslatePortHost(service, TRANSLATE_PORT_NAME));
 
-  const load = () => {
-    // Shares the repository queue with patches, so it never races them.
-    repo.load().catch((error: unknown) => {
-      console.warn('[config] load failed:', toAppError(error).code);
+  // A key lives exactly as long as its custom provider, however the provider went
+  // away (deleted on any page, reset, dropped by repair). The background owns this.
+  const pruneSecrets = (snapshot: ConfigSnapshot) => {
+    secrets.pruneCustom(new Set(Object.keys(snapshot.data.customProviders))).catch(() => {
+      console.warn('[secrets] prune failed');
     });
   };
+  const load = () => {
+    // Shares the repository queue with patches, so it never races them.
+    repo
+      .load()
+      .then(pruneSecrets)
+      .catch((error: unknown) => {
+        console.warn('[config] load failed:', toAppError(error).code);
+      });
+  };
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && CONFIG_STORAGE_KEY in changes) load();
+  });
   browser.runtime.onInstalled.addListener(load);
   load();
 });

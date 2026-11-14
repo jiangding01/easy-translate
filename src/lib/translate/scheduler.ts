@@ -79,6 +79,8 @@ export interface ScheduleRequest {
    * segments nobody waits for anymore. Omit to skip caching.
    */
   persist?: (entries: CacheEntry[]) => unknown;
+  /** Shorter segment deadline than the adapter kind's default (connection tests). */
+  deadlineMs?: number;
 }
 
 export interface SchedulerSnapshot {
@@ -566,7 +568,12 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
       adapter,
       context: request.context,
       persist: request.persist,
-      deadline: now() + SCHEDULER_LIMITS[adapter.kind].deadlineMs,
+      deadline:
+        now() +
+        Math.min(
+          request.deadlineMs ?? Number.POSITIVE_INFINITY,
+          SCHEDULER_LIMITS[adapter.kind].deadlineMs,
+        ),
     };
 
     const fresh: Segment[] = [];

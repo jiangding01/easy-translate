@@ -55,6 +55,18 @@ describe('secret store', () => {
     expect(await store.get('custom-bbbbbbbb')).toBe('sk-second-2222');
   });
 
+  it('prunes keys of custom providers that no longer exist, never built-in keys', async () => {
+    const store = createSecretStore(memory());
+    await store.set('openai', 'sk-openai-1234');
+    await store.set('custom-aaaaaaaa', 'sk-keep-1111');
+    await store.set('custom-bbbbbbbb', 'sk-gone-2222');
+    expect(await store.pruneCustom(new Set(['custom-aaaaaaaa']))).toBe(1);
+    expect(await store.get('custom-bbbbbbbb')).toBeUndefined();
+    expect(await store.get('custom-aaaaaaaa')).toBe('sk-keep-1111');
+    expect(await store.get('openai')).toBe('sk-openai-1234');
+    expect(await store.pruneCustom(new Set(['custom-aaaaaaaa']))).toBe(0);
+  });
+
   it('ignores stored entries that are not provider ids', async () => {
     const backing = memory();
     backing.data.set('secrets', { custom: 'sk-legacy-1234', 'custom-aaaaaaaa': 'sk-ok-123456' });

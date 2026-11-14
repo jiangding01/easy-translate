@@ -1,5 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { type CustomProviderId, MAX_CUSTOM_PROVIDERS } from '@/lib/config/types';
+import {
+  CUSTOM_PROVIDER_LIMITS,
+  type CustomProviderId,
+  MAX_CUSTOM_PROVIDERS,
+} from '@/lib/config/types';
 import { useConfig } from '@/lib/config/use-config';
 import { normalizeBaseURL, requiredHostPermission } from '@/lib/endpoint';
 import { defaultProviderName, newCustomId, PRESETS } from '@/lib/engine-view';
@@ -26,7 +30,7 @@ interface Draft {
   model: string;
 }
 
-const DIALOG_WIDTH = 520;
+const DIALOG_WIDTH = 640;
 const DIALOG_TOP = 96;
 
 const emptyDraft = (): Draft => ({
@@ -100,7 +104,7 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
     const baseURL = normalizeBaseURL(draft.baseURL);
     const name = draft.name.trim() || defaultProviderName(preset, baseURL);
     const added = await patch([
-      { path: 'customProviders', key: id, value: { name, baseURL, model: draft.model.trim() } },
+      { path: 'customProviders', key: id, add: { name, baseURL, model: draft.model.trim() } },
     ]);
     if (!added.ok) {
       setBusy(false);
@@ -194,7 +198,7 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
             <span className={styles.label}>名称</span>
             <input
               className={styles.input}
-              maxLength={40}
+              maxLength={CUSTOM_PROVIDER_LIMITS.name}
               value={draft.name}
               onChange={set('name')}
               placeholder={defaultProviderName(preset, draft.baseURL) || '留空则使用域名'}
@@ -213,6 +217,7 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
                 onChange={set('baseURL')}
                 onBlur={() => draft.baseURL.trim() !== '' && setTouched(true)}
                 placeholder="https://example.com/v1"
+                maxLength={CUSTOM_PROVIDER_LIMITS.baseURL}
                 aria-invalid={baseInvalid}
                 required
               />
@@ -240,7 +245,7 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
             <input
               className={`${styles.input} ${styles.mono}`}
               spellCheck={false}
-              maxLength={200}
+              maxLength={CUSTOM_PROVIDER_LIMITS.model}
               value={draft.model}
               onChange={set('model')}
               placeholder="填写模型 ID"

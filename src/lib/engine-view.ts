@@ -1,6 +1,9 @@
+import { hasEditableBaseURL, takesApiKey } from '@/lib/config/engine-fields';
 import {
+  BUILTIN_ENGINES,
   type BuiltinEngine,
   type ConfigV1,
+  CUSTOM_PROVIDER_LIMITS,
   type CustomProvider,
   type CustomProviderId,
   type Engine,
@@ -32,8 +35,6 @@ export const BUILTIN_META: Record<BuiltinEngine, BuiltinMeta> = {
     link: { href: 'https://ai.google.dev/gemini-api/docs/models', label: '密钥与模型列表 ↗' },
   },
 };
-
-export const BUILTIN_ORDER: readonly BuiltinEngine[] = ['google', 'openai', 'deepseek', 'gemini'];
 
 export interface Preset {
   id: string;
@@ -77,12 +78,17 @@ export function hostOf(url: string): string {
   }
 }
 
+/** Host-based fallback name, cut to the stored name limit. */
+export function hostName(baseURL: string): string {
+  return hostOf(baseURL).slice(0, CUSTOM_PROVIDER_LIMITS.name);
+}
+
 /** A preset keeps its label while its address is untouched; otherwise the host names it. */
 export function defaultProviderName(preset: Preset | undefined, baseURL: string): string {
   if (preset && preset.id !== 'other' && normalizeBaseURL(baseURL) === preset.baseURL) {
     return preset.label;
   }
-  return hostOf(baseURL);
+  return hostName(baseURL);
 }
 
 export interface EngineEntry {
@@ -95,39 +101,13 @@ export interface EngineEntry {
 /** Built-in engines first, then custom providers in stored order. */
 export function engineEntries(config: ConfigV1): EngineEntry[] {
   return [
-    ...BUILTIN_ORDER.map((id) => ({ id, name: BUILTIN_META[id].name })),
+    ...BUILTIN_ENGINES.map((id) => ({ id, name: BUILTIN_META[id].name })),
     ...Object.entries(config.customProviders).map(([id, custom]) => ({
       id: id as CustomProviderId,
       name: custom.name || hostOf(custom.baseURL) || '未命名服务',
       custom,
     })),
   ];
-}
-
-export function engineName(config: ConfigV1, engine: Engine): string {
-  return engineEntries(config).find((entry) => entry.id === engine)?.name ?? engine;
-}
-
-/** The base URL an engine actually calls, or '' when it has a fixed built-in endpoint. */
-export function editableBaseURL(config: ConfigV1, engine: Engine): string {
-  if (engine === 'openai') return config.providers.openai.baseURL;
-  if (isBuiltinEngine(engine)) return '';
-  return config.customProviders[engine]?.baseURL ?? '';
-}
-
-export function modelOf(config: ConfigV1, engine: Engine): string {
-  switch (engine) {
-    case 'google':
-      return '';
-    case 'openai':
-      return config.providers.openai.model;
-    case 'deepseek':
-      return config.providers.deepseek.model;
-    case 'gemini':
-      return config.providers.gemini.model;
-    default:
-      return config.customProviders[engine]?.model ?? '';
-  }
 }
 
 /** Optional host permission pattern this base URL needs, or undefined (built-in or invalid). */
@@ -137,19 +117,25 @@ export function permissionPattern(baseURL: string): string | undefined {
   return required.ok && required.data ? required.data.pattern : undefined;
 }
 
-/** Patterns still used by any provider other than `except`. */
-export function patternsInUse(config: ConfigV1, except?: Engine): Set<string> {
-  const patterns = new Set<string>();
-  const add = (url: string) => {
-    const pattern = permissionPattern(url);
-    if (pattern) patterns.add(pattern);
-  };
-  if (except !== 'openai') add(config.providers.openai.baseURL);
-  for (const [id, custom] of Object.entries(config.customProviders)) {
-    if (id !== except) add(custom.baseURL);
-  }
-  return patterns;
-}
+/** Why an engine cannot translate (or be tested) yet, in the order the user should fix it. */
+export type NotReady = 'bad-url' | 'checking-grant' | 'needs-grant' | 'needs-key' | 'needs-model';
+
+/** Row and panel wording; `checking-grant` is transient and never shown as a problem. */
+export const NOT_READY_TEXT: Record<Exclude<NotReady, 'checking-grant'>, string> = {
+  'bad-url': '地址格式不正确',
+  'needs-grant': '还没有授权访问这个地址',
+  'needs-key': '还没有填写密钥',
+  'needs-model': '还没有填写模型',
+};
+
+/** Why the connection test is disabled. */
+export const TEST_BLOCKED_TEXT: Record<NotReady, string> = {
+  'bad-url': '先填写正确的地址',
+  'checking-grant': '正在检查授权…',
+  'needs-grant': '授权后可以测试',
+  'needs-key': '填写 API Key 后可以测试',
+  'needs-model': '填写模型后可以测试',
+};
 
 export interface EngineReadiness {
   /** Short status on the right of the row. */
@@ -158,35 +144,55 @@ export interface EngineReadiness {
   mono: boolean;
   /** Something must be done before this engine can translate. */
   attention: boolean;
-  /** One-line reason when attention is true. */
+  reason?: NotReady;
+  /** One-line problem for real (non-transient) reasons. */
   problem?: string;
 }
 
-export function engineReadiness(input: {
+export interface ReadinessInput {
   engine: Engine;
+  baseURL: string;
   model: string;
   secret: SecretStatusInfo | undefined;
-  /** undefined: no grant needed (built-in origin) or not known yet. */
+  /** Whether the endpoint's host permission is granted; undefined while unknown or not needed. */
   granted: boolean | undefined;
-}): EngineReadiness {
-  const { engine, model, secret, granted } = input;
+  /** A key typed but not saved yet (settings page). */
+  keyDraft?: boolean;
+}
+
+/** The single readiness rule for rows, the panel and the connection test. */
+export function engineReadiness(input: ReadinessInput): EngineReadiness {
+  const { engine, baseURL, model, secret, granted } = input;
   if (engine === 'google') return { status: '免费', mono: false, attention: false };
   const keyed = secret?.configured === true;
   const keyStatus = keyed ? (secret.last4 ? `密钥 ••••${secret.last4}` : '已配置密钥') : '';
-  if (granted === false) {
-    return { status: '待授权', mono: false, attention: true, problem: '还没有授权访问这个地址' };
+  const mono = keyed && secret.last4 !== '';
+  const notReady = (reason: NotReady, status: string, attention: boolean): EngineReadiness => ({
+    status,
+    mono: status === keyStatus && mono,
+    attention,
+    reason,
+    problem: reason === 'checking-grant' ? undefined : NOT_READY_TEXT[reason],
+  });
+
+  if (hasEditableBaseURL(engine)) {
+    if (!requiredHostPermission(baseURL).ok) return notReady('bad-url', '地址有误', true);
+    if (permissionPattern(baseURL)) {
+      if (granted === false) return notReady('needs-grant', '待授权', true);
+      if (granted === undefined) {
+        return notReady('checking-grant', keyStatus || '未填密钥', false);
+      }
+    }
   }
-  if (isBuiltinEngine(engine) && !keyed) {
-    return { status: '未配置', mono: false, attention: false, problem: '还没有填写密钥' };
+  if (isBuiltinEngine(engine) && takesApiKey(engine) && !keyed && !input.keyDraft) {
+    return notReady('needs-key', '未配置', false);
   }
-  if (model.trim() === '') {
+  if (model.trim() === '') return notReady('needs-model', keyStatus || '未填模型', true);
+  if (!keyed)
     return {
-      status: keyStatus || '未填模型',
-      mono: keyed && secret.last4 !== '',
-      attention: true,
-      problem: '还没有填写模型',
+      status: isBuiltinEngine(engine) ? '未保存' : '未填密钥',
+      mono: false,
+      attention: false,
     };
-  }
-  if (!keyed) return { status: '未填密钥', mono: false, attention: false };
-  return { status: keyStatus, mono: secret.last4 !== '', attention: false };
+  return { status: keyStatus, mono, attention: false };
 }

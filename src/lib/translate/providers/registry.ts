@@ -1,3 +1,4 @@
+import { engineFields } from '@/lib/config/engine-fields';
 import type { ConfigV1, Engine } from '@/lib/config/types';
 import { normalizeBaseURL } from '@/lib/endpoint';
 import { appError } from '@/lib/errors';
@@ -38,24 +39,7 @@ export function resolveProviderSettings(
   engine: Engine,
   config: Pick<ConfigV1, 'providers' | 'customProviders'>,
 ): ProviderSettings {
-  const { providers } = config;
-  switch (engine) {
-    case 'google':
-      return settingsFor(engine, { baseURL: '', model: '' });
-    case 'openai':
-      return settingsFor(engine, providers.openai);
-    case 'deepseek':
-      return settingsFor(engine, { baseURL: '', model: providers.deepseek.model });
-    case 'gemini':
-      return settingsFor(engine, { baseURL: '', model: providers.gemini.model });
-    default: {
-      const custom = Object.hasOwn(config.customProviders, engine)
-        ? config.customProviders[engine]
-        : undefined;
-      if (!custom) {
-        throw appError('config', 'config/provider-missing', 'Custom provider not found');
-      }
-      return settingsFor(engine, custom);
-    }
-  }
+  const fields = engineFields(config, engine);
+  if (!fields) throw appError('config', 'config/provider-missing', 'Custom provider not found');
+  return settingsFor(engine, fields);
 }

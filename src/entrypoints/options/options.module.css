@@ -834,7 +834,7 @@
 
 /* Grows from the "添加服务" button (transform-origin set in JS) and shrinks back. */
 .dialog {
-  width: min(520px, calc(100vw - 32px));
+  width: min(640px, calc(100vw - 32px));
   margin: 96px auto auto;
   padding: 0;
   border: 0;
@@ -910,7 +910,7 @@
 }
 .chips {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: wrap; /* one row at 640px; wraps only in narrow windows */
   gap: 8px;
 }
 .chip {

@@ -60,6 +60,31 @@ describe('parseStoredConfig', () => {
     );
   });
 
+  it('removes an entry whose key contains a dot without losing anything else', () => {
+    const good = { name: 'A', baseURL: 'https://a.example.com/v1', model: 'm' };
+    const result = parse(
+      stored({
+        ...defaults,
+        ui: { theme: 'dark' },
+        customProviders: { 'bad.key': good, 'custom-abcd1234': good },
+      }),
+    );
+    expect(result.fallback).toBe(false);
+    expect(result.snapshot.data.ui.theme).toBe('dark');
+    expect(Object.keys(result.snapshot.data.customProviders)).toEqual(['custom-abcd1234']);
+    expect(result.resetPaths).toEqual(['customProviders.bad.key']);
+  });
+
+  it('keeps more than ten stored providers (the limit applies when adding)', () => {
+    const good = { name: 'A', baseURL: 'https://a.example.com/v1', model: 'm' };
+    const customProviders = Object.fromEntries(
+      Array.from({ length: 11 }, (_, index) => [`custom-${String(index).padStart(8, '0')}`, good]),
+    );
+    const result = parse(stored({ ...defaults, customProviders }));
+    expect(Object.keys(result.snapshot.data.customProviders)).toHaveLength(11);
+    expect(result.repaired).toBe(false);
+  });
+
   it('resets a default engine that points at a missing custom provider to Google', () => {
     const result = parse(stored({ ...defaults, translation: { engine: 'custom-zzzzzzzz' } }));
     expect(result.snapshot.data.translation.engine).toBe('google');

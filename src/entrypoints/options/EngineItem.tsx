@@ -1,9 +1,15 @@
 import { useEffect, useId, useState } from 'react';
 import { DEFAULT_OPENAI_BASE_URL } from '@/lib/config/defaults';
 import {
+  engineFields,
+  fieldChange,
+  hasEditableBaseURL,
+  takesApiKey,
+} from '@/lib/config/engine-fields';
+import {
   type ConfigChange,
   type ConfigV1,
-  type CustomProvider,
+  CUSTOM_PROVIDER_LIMITS,
   isBuiltinEngine,
 } from '@/lib/config/types';
 import { useConfig } from '@/lib/config/use-config';
@@ -11,11 +17,11 @@ import { normalizeBaseURL, requiredHostPermission } from '@/lib/endpoint';
 import {
   BUILTIN_META,
   type EngineEntry,
-  editableBaseURL,
   engineReadiness,
+  hostName,
   hostOf,
-  modelOf,
   permissionPattern,
+  TEST_BLOCKED_TEXT,
 } from '@/lib/engine-view';
 import { appError } from '@/lib/errors';
 import { requestHostPermission, useHostPermission } from '@/lib/host-permission';
@@ -48,13 +54,14 @@ export function EngineItem(props: Props) {
   const panelId = useId();
   const { id: engine, custom } = entry;
   const builtin = isBuiltinEngine(engine);
-  const hasBase = engine === 'openai' || !builtin;
-  const takesKey = engine !== 'google';
+  const hasBase = hasEditableBaseURL(engine);
+  const takesKey = takesApiKey(engine);
 
+  const fields = engineFields(config, engine);
   const saved: Record<TextField, string> = {
     name: custom?.name ?? '',
-    baseURL: editableBaseURL(config, engine),
-    model: modelOf(config, engine),
+    baseURL: fields?.baseURL ?? '',
+    model: fields?.model ?? '',
   };
   const [draft, setDraft] = useState(saved);
   const [editing, setEditing] = useState<TextField>();
@@ -76,17 +83,12 @@ export function EngineItem(props: Props) {
 
   const pattern = hasBase ? permissionPattern(saved.baseURL) : undefined;
   const granted = useHostPermission(pattern);
-  const readiness = engineReadiness({ engine, model: saved.model, secret, granted });
+  const readiness = engineReadiness({ engine, ...saved, secret, granted });
 
   async function apply(change: ConfigChange, text = '已保存') {
     const result = await patch([change]);
     if (result.ok) notice.saved(text);
     else notice.failed(result.error);
-  }
-
-  function customChange(next: Partial<CustomProvider>): ConfigChange | undefined {
-    if (!custom || builtin) return undefined;
-    return { path: 'customProviders', key: engine, value: { ...custom, ...next } };
   }
 
   async function commit(field: TextField) {
@@ -100,24 +102,19 @@ export function EngineItem(props: Props) {
       const next = empty ? DEFAULT_OPENAI_BASE_URL : normalizeBaseURL(value);
       setDraft((current) => ({ ...current, baseURL: next }));
       if (next === saved.baseURL) return;
-      const change =
-        engine === 'openai'
-          ? { path: 'providers.openai.baseURL' as const, value: next }
-          : customChange({ baseURL: next });
+      const change = fieldChange(engine, 'baseURL', next);
       if (change) await apply(change);
       return;
     }
     if (value === saved[field]) return;
     if (field === 'name') {
-      const change = customChange({ name: value || hostOf(saved.baseURL) });
-      if (change) await apply(change);
+      if (builtin) return;
+      const name = value || hostName(saved.baseURL);
+      setDraft((current) => ({ ...current, name }));
+      await apply({ path: 'customProviders', key: engine, update: { name } });
       return;
     }
-    let change: ConfigChange | undefined;
-    if (engine === 'openai') change = { path: 'providers.openai.model', value };
-    else if (engine === 'deepseek') change = { path: 'providers.deepseek.model', value };
-    else if (engine === 'gemini') change = { path: 'providers.gemini.model', value };
-    else change = customChange({ model: value });
+    const change = fieldChange(engine, 'model', value);
     if (change) await apply(change);
   }
 
@@ -155,14 +152,20 @@ export function EngineItem(props: Props) {
   }
 
   const keyed = secret?.configured === true;
-  let blocked: string | undefined;
-  if (hasBase && !requiredHostPermission(draft.baseURL).ok) blocked = '先填写正确的地址';
-  else if (granted === false) blocked = '授权后可以测试';
-  else if (builtin && takesKey && !keyed && keyDraft.trim() === '')
-    blocked = '填写 API Key 后可以测试';
-  else if (takesKey && draft.model.trim() === '') blocked = '填写模型后可以测试';
+  // The test runs on what is typed now, so readiness is judged on the drafts.
+  const draftPattern = hasBase ? permissionPattern(draft.baseURL) : undefined;
+  const testReadiness = engineReadiness({
+    engine,
+    baseURL: draft.baseURL,
+    model: draft.model,
+    secret,
+    granted: draftPattern === pattern ? granted : undefined,
+    keyDraft: keyDraft.trim() !== '',
+  });
+  const blocked = testReadiness.reason ? TEST_BLOCKED_TEXT[testReadiness.reason] : undefined;
+  const testedWith = `${draft.baseURL.trim()}\n${draft.model.trim()}\n${keyed}`;
 
-  const sub = rowSubtitle(engine, saved, config);
+  const sub = rowSubtitle(engine, saved);
   const link = builtin ? BUILTIN_META[engine].link : undefined;
   const field = (name: TextField) => ({
     value: draft[name],
@@ -242,8 +245,8 @@ export function EngineItem(props: Props) {
                 <span className={styles.label}>名称</span>
                 <input
                   className={styles.input}
-                  maxLength={40}
-                  placeholder={hostOf(saved.baseURL)}
+                  maxLength={CUSTOM_PROVIDER_LIMITS.name}
+                  placeholder={hostName(saved.baseURL)}
                   {...field('name')}
                 />
               </label>
@@ -259,6 +262,7 @@ export function EngineItem(props: Props) {
                     id={`${panelId}-base`}
                     className={`${styles.input} ${styles.mono}`}
                     spellCheck={false}
+                    maxLength={CUSTOM_PROVIDER_LIMITS.baseURL}
                     placeholder={
                       engine === 'openai' ? DEFAULT_OPENAI_BASE_URL : 'https://example.com/v1'
                     }
@@ -353,7 +357,7 @@ export function EngineItem(props: Props) {
                 <input
                   className={`${styles.input} ${styles.mono}`}
                   spellCheck={false}
-                  maxLength={200}
+                  maxLength={CUSTOM_PROVIDER_LIMITS.model}
                   placeholder={
                     engine === 'gemini' ? '填写模型 ID，例如官方列表中的 flash 型号' : '填写模型 ID'
                   }
@@ -380,6 +384,7 @@ export function EngineItem(props: Props) {
               <TestStrip
                 autoRun={fresh}
                 blocked={blocked}
+                resetKey={testedWith}
                 run={() =>
                   admin.test({
                     engine,
@@ -447,11 +452,7 @@ function keyPlaceholder(builtin: boolean, secret: SecretStatusInfo | undefined):
   return builtin ? '粘贴密钥，离开输入框时自动保存' : '没有可以不填';
 }
 
-function rowSubtitle(
-  engine: EngineEntry['id'],
-  saved: Record<TextField, string>,
-  config: ConfigV1,
-): string {
+function rowSubtitle(engine: EngineEntry['id'], saved: Record<TextField, string>): string {
   switch (engine) {
     case 'google':
       return '免费 · 无需配置';
@@ -464,9 +465,7 @@ function rowSubtitle(
       return saved.model || '未填写模型';
     case 'gemini':
       return saved.model || '需要填写模型 ID';
-    default: {
-      const custom = config.customProviders[engine];
-      return `${hostOf(custom?.baseURL ?? '')} · ${saved.model || '未填写模型'}`;
-    }
+    default:
+      return `${hostOf(saved.baseURL)} · ${saved.model || '未填写模型'}`;
   }
 }
