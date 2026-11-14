@@ -33,6 +33,8 @@ export interface AdminDeps {
   scheduler: Pick<Scheduler, 'submit'>;
   /** `browser.runtime.getURL('/options.html')`. */
   optionsUrl: string;
+  /** `browser.runtime.getURL('/popup.html')`: may read `secrets.status` (never keys). */
+  popupUrl?: string;
   getAdapter?: (engine: ProviderTestDraft['engine']) => ProviderAdapter;
   checkPermission?: (engine: Engine, baseURL: string) => Promise<Result<unknown>>;
   now?: () => number;
@@ -47,7 +49,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-/** Accepts only pages of this extension's options page (`options.html`, with query or hash). */
+/** Accepts only the given extension page (`options.html` etc., with query or hash). */
 export function isOptionsSender(sender: AdminSender | undefined, optionsUrl: string): boolean {
   const url = sender?.url;
   if (typeof url !== 'string') return false;
@@ -78,6 +80,11 @@ export function createAdminHandlers(deps: AdminDeps) {
 
   const guard = (sender: AdminSender | undefined) => {
     if (!isOptionsSender(sender, deps.optionsUrl)) throw forbiddenSenderError();
+  };
+  // The toolbar panel shows "key missing" hints; status carries no key material.
+  const statusGuard = (sender: AdminSender | undefined) => {
+    const fromPopup = deps.popupUrl !== undefined && isOptionsSender(sender, deps.popupUrl);
+    if (!fromPopup) guard(sender);
   };
 
   async function testProvider(rawDraft: unknown): Promise<ProviderTestResult> {
@@ -143,9 +150,13 @@ export function createAdminHandlers(deps: AdminDeps) {
         return deps.secrets.set(args.provider, args.key);
       },
     ),
-    'secrets.status': wrap(
-      (): Promise<Partial<Record<SecretProviderId, SecretStatusInfo>>> => deps.secrets.status(),
-    ),
+    'secrets.status': (
+      sender: AdminSender | undefined,
+    ): Promise<Result<Partial<Record<SecretProviderId, SecretStatusInfo>>>> =>
+      handle(async () => {
+        statusGuard(sender);
+        return deps.secrets.status();
+      })(),
     'provider.test': wrap(testProvider),
     'cache.stats': wrap((): Promise<CacheStatsInfo> => deps.cache.stats()),
     'cache.clear': wrap(async () => {

@@ -29,6 +29,7 @@ export default defineBackground(() => {
     cache,
     scheduler: service.scheduler,
     optionsUrl: browser.runtime.getURL('/options.html'),
+    popupUrl: browser.runtime.getURL('/popup.html'),
   });
 
   // Register synchronously at top level so a message that wakes the SW is handled.

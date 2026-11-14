@@ -13,8 +13,22 @@ describe('inspectActivePage', () => {
     vi.spyOn(fakeBrowser.tabs, 'query').mockImplementation((() => Promise.resolve([tab])) as never);
     const result = await inspectActivePage();
     expect(result).toEqual({
+      host: 'example.com',
+      info: {
+        ok: false,
+        error: expect.objectContaining({ code: 'network/page-unreachable', retryable: false }),
+      },
+    });
+  });
+
+  it('fails fast on browser pages without messaging them', async () => {
+    const tab = { id: 2, url: 'chrome://extensions/' } as Browser.tabs.Tab;
+    vi.spyOn(fakeBrowser.tabs, 'query').mockImplementation((() => Promise.resolve([tab])) as never);
+    const result = await inspectActivePage();
+    expect(result.host).toBe('extensions');
+    expect(result.info).toMatchObject({
       ok: false,
-      error: expect.objectContaining({ code: 'network/page-unreachable', retryable: false }),
+      error: { code: 'validation/unsupported-page' },
     });
   });
 });
