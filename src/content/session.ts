@@ -436,13 +436,18 @@ export function createPageSession(deps: SessionDeps): PageSession {
         if (existing) kept.add(existing);
         else fresh.push(unit);
       }
-      // Old units in this area that were not found again: their text changed or left.
-      // A dialog can mark the rest of the page aria-hidden or inert for a while:
-      // still-present, unchanged units are kept, not dropped.
+      // Old units in this area that were not found again: their text changed, their
+      // shape changed (a run became a block), or they left. Only a root that was not
+      // rediscovered at all may be merely hidden (a dialog marks the page aria-hidden
+      // or inert for a while): its still-present, unchanged units are kept.
+      const foundRoots = new Set(found.map((unit) => unit.root));
       for (const [unitRoot, units] of [...unitsByRoot]) {
-        if (!root.contains(unitRoot)) continue;
+        if (unitRoot.isConnected && !root.contains(unitRoot)) continue;
+        const mayBeHidden = unitRoot.isConnected && !foundRoots.has(unitRoot);
         for (const unit of [...units]) {
-          if (!kept.has(unit) && !renderer.isCurrent(unit)) forget(unit);
+          if (kept.has(unit)) continue;
+          if (mayBeHidden && renderer.isCurrent(unit)) continue;
+          forget(unit);
         }
       }
       register(fresh);
@@ -560,7 +565,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
       win,
       style: config.page.style,
       target: config.language.target,
-      readStyle,
+      // Always the current reader: it is refreshed on every mutation round.
+      readStyle: (el) => readStyle(el),
     });
     await renderer.setMode(config.page.mode);
     if (current !== epoch) return state();
