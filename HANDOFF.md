@@ -78,6 +78,9 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
 - **M2 整页翻译**：方案见 [`docs/plans/m2-page-translation.md`](docs/plans/m2-page-translation.md)。
   - **M2a（分支 `feat/m2-page-translation`）**：已实现，check Deep 审查完成（安全、架构、对抗式三路，会话与渲染加 Fable 复查）。确认并修复的问题：停止与在途渲染写入的竞争（会留下孤儿译文）、会话译文记忆用 32 位哈希作键（可被碰撞顶替译文，改用完整原文）、对话框把应用根标为 `aria-hidden` 时整页译文被清掉、长会话里已卸载 DOM 被强引用、「仅译文」自身 CSS 干扰块级判断、停止时取消整个 Port、页面可伪造 `<style data-et>`、启动失败卡在运行中、面板轮询乱序。每项都有先红后绿的回归测试。第二轮 Fable 复查确认修复有效，并抓到一个由修复引入的重复译文问题（混合父元素失去块级子元素），已修复。共 515 个测试。
   - **M2a 真机验收**：按方案第 10 节，包括 4 倍 CPU 降速下的动效检查；设置页「译文」卡片与面板的实际观感需要在真实 Chrome 里看。
+  - **分段边界规则（2026-11-14 真机验收后修订）**：块级还是行内只看计算样式（`src/content/dom-rules.ts` 的 `isInlineElement`，对齐 FluentRead `isBlockBoundary`）：语义块标签总是边界，`code`/`img`/`br` 等总是行内，其余按 `display`（`inline*`、`contents` 为行内）。弹性布局和网格的子元素会被浏览器块级化，因此各自成为单元；M2a 原先「横向弹性布局合成一个单元」的做法已放弃：项之间的间距由 CSS 绘制，合并会把文字粘在一起（如「01Home PAGE」）。
+    - 例外（仍留在句子里）：脱离文档流的元素（`sr-only`、浮动徽章）按标签判断；`inline-flex`/`inline-grid` 小块内部的项算行内；`display: ruby*` 算行内，注音 `rt`/`rp` 不翻译。
+    - 已知取舍（与 FluentRead 相同）：弹性容器里「直接写的文字 + 链接」会被分成两段翻译，行内片段的译文还会成为容器的一个新项，在 `justify-content: space-between` 的容器里可能被推到中间。FluentRead 靠把原文包进一个合成 span 来避免，我们不移动网页节点，暂不做；真机验收时留意。
   - **M2b 灵岛，开工前要决定**：
     - 内容脚本 gzip 已到 19.2/20KB，灵岛必须按需加载。MV3 下两条路：声明 `web_accessible_resources` 后动态 import（网页能探测到扩展存在），或后台用 `chrome.scripting` 注入（需新增 `scripting` 权限）。需用户拍板。
     - 会话需要订阅接口：`PageSession` 现在只有拉取式 `state()`，面板靠 500ms 轮询；灵岛与会话同在内容脚本里，应加 `subscribe(listener)`，`reportStatus` 改为订阅者之一。
