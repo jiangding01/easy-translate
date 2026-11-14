@@ -768,24 +768,6 @@
   line-height: var(--et-lh-caption);
   color: var(--et-color-muted);
 }
-.select {
-  appearance: none;
-  height: var(--et-h-control-lg);
-  padding: 0 32px 0 12px;
-  border: 1px solid var(--et-color-border);
-  border-radius: var(--et-radius-md);
-  background: var(--et-color-elevated)
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='%23888' stroke-width='1.4'%3E%3Cpath d='M2.5 4l2.5 2.5L7.5 4'/%3E%3C/svg%3E")
-    no-repeat right 12px center;
-  color: var(--et-color-text);
-  font: inherit;
-  font-size: var(--et-fs-control);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.select:hover {
-  border-color: var(--et-color-border-strong);
-}
 .segmented {
   position: relative;
   display: grid;

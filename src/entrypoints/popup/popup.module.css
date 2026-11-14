@@ -37,24 +37,6 @@
   color: var(--et-color-faint);
   flex-shrink: 0;
 }
-.pairSelect {
-  appearance: none;
-  height: var(--et-h-control-sm);
-  margin-left: -6px;
-  padding: 0 22px 0 6px;
-  border: 0;
-  border-radius: var(--et-radius-md);
-  background: transparent
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='%23888' stroke-width='1.4'%3E%3Cpath d='M2.5 4l2.5 2.5L7.5 4'/%3E%3C/svg%3E")
-    no-repeat right 6px center;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  transition: background-color var(--et-dur-fast) var(--et-ease-out);
-}
-.pairSelect:hover {
-  background-color: var(--et-color-surface);
-}
 
 .body {
   padding: 10px 16px 14px;
@@ -143,14 +125,7 @@
 .spacer {
   flex-grow: 1;
 }
-.engine {
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
 .dot,
-.okDot,
 .warnDot {
   width: 6px;
   height: 6px;
@@ -158,42 +133,24 @@
   border-radius: var(--et-radius-full);
   background: var(--et-color-border-strong);
 }
-.okDot {
+.ok {
   background: var(--et-color-ok);
 }
+.warn,
 .warnDot {
   background: var(--et-color-warn);
 }
+.idle {
+  background: var(--et-color-border-strong);
+}
+.engineName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .notice .warnDot {
   margin-top: 6px;
-}
-.engine > span {
-  position: absolute;
-  left: 8px;
-  pointer-events: none;
-}
-.engineSelect {
-  appearance: none;
-  max-width: 200px;
-  height: var(--et-h-control-sm);
-  padding: 0 22px 0 20px;
-  border: 0;
-  border-radius: var(--et-radius-md);
-  background: transparent
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='%23888' stroke-width='1.4'%3E%3Cpath d='M2.5 4l2.5 2.5L7.5 4'/%3E%3C/svg%3E")
-    no-repeat right 6px center;
-  color: var(--et-color-muted);
-  font: inherit;
-  font-size: var(--et-fs-caption);
-  text-overflow: ellipsis;
-  cursor: pointer;
-  transition:
-    background-color var(--et-dur-fast) var(--et-ease-out),
-    color var(--et-dur-fast) var(--et-ease-out);
-}
-.engineSelect:hover {
-  background-color: var(--et-color-surface);
-  color: var(--et-color-text);
 }
 .iconButton {
   width: 30px;
