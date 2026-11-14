@@ -3,11 +3,27 @@ import { describe, expect, it } from 'vitest';
 import { createPacer, discoverUnits } from './discover';
 import { isInlineElement, type StyleReader } from './dom-rules';
 
-/** Display from the inline style, else a tag default: deterministic across DOM shims. */
+/**
+ * Display from the inline style, else a tag default: deterministic across DOM
+ * shims. Like browsers, it blockifies flex and grid items and out-of-flow
+ * (absolute, fixed, floated) boxes.
+ */
 const readStyle: StyleReader = (el) => {
-  const own = (el as HTMLElement).style?.display;
-  if (own) return { display: own };
-  return { display: el.tagName === 'DIV' || el.tagName === 'BODY' ? 'block' : 'inline' };
+  const style = (el as HTMLElement).style;
+  const own =
+    style?.display || (el.tagName === 'DIV' || el.tagName === 'BODY' ? 'block' : 'inline');
+  const position = style?.position || 'static';
+  const float = style?.cssFloat || 'none';
+  const parentDisplay = el.parentElement?.style?.display ?? '';
+  const blockified =
+    /^(inline-)?(flex|grid)$/.test(parentDisplay) ||
+    position === 'absolute' ||
+    position === 'fixed' ||
+    float !== 'none';
+  if (blockified && own.startsWith('inline')) {
+    return { display: own.replace(/^inline-?/, '') || 'block', position, float };
+  }
+  return { display: own, position, float };
 };
 
 async function units(markup: string) {
@@ -45,11 +61,14 @@ describe('discoverUnits', () => {
     ]);
   });
 
-  it('treats a flex meta row as one unit instead of blockified pieces', async () => {
+  it('translates flex items one by one: their gaps are CSS, not text', async () => {
     const found = await units(
       '<div style="display:flex"><span>Mara Ellis</span><span>·</span><span>6 min read</span></div>',
     );
-    expect(found).toEqual([{ kind: 'block', root: 'DIV', text: 'Mara Ellis·6 min read' }]);
+    expect(found).toEqual([
+      { kind: 'block', root: 'SPAN', text: 'Mara Ellis' },
+      { kind: 'block', root: 'SPAN', text: '6 min read' },
+    ]);
   });
 
   it('uses a flex child’s own display when it sets one', async () => {
@@ -116,6 +135,98 @@ describe('discoverUnits', () => {
     document.body.innerHTML = '<p>One sentence.</p><p>Two sentences.</p>';
     const found = await discoverUnits(document.body, { readStyle, cancelled: () => true });
     expect(found).toEqual([]);
+  });
+});
+
+describe('layout boundaries (claude.dev blog structures)', () => {
+  it('splits a list of grid rows made of links and spans into one unit per cell', async () => {
+    const row = (date: string, title: string) =>
+      `<a class="frow" href="/x" style="display:grid"><span style="display:block">${date}</span><span style="display:block">${title}</span><span style="display:block">12 min</span></a>`;
+    expect(
+      await units(
+        `<div>${row('Nov 09, 2026', 'Safely scaling multi-agent teams')}${row('Oct 15, 2026', 'How the team does code review')}</div>`,
+      ),
+    ).toEqual([
+      { kind: 'block', root: 'SPAN', text: 'Safely scaling multi-agent teams' },
+      { kind: 'block', root: 'SPAN', text: 'How the team does code review' },
+    ]);
+  });
+
+  it('keeps a flex column footer brand apart from each legal link', async () => {
+    const found = await units(
+      '<div class="fb-brand" style="display:flex;flex-direction:column"><span style="display:block">claude.dev</span><span style="display:block"><span>© 2026 Anthropic PBC</span><span style="display:flex"><a href="/p">Privacy Policy</a><a href="/t">Terms of Use</a></span></span></div>',
+    );
+    // "claude.dev" is filtered as an identifier; brand and legal links never merge.
+    expect(found.map((unit) => unit.text).sort()).toEqual([
+      'Privacy Policy',
+      'Terms of Use',
+      '© 2026 Anthropic PBC',
+    ]);
+  });
+
+  it('treats wrapped flex rows of cards as separate units', async () => {
+    expect(
+      (
+        await units(
+          '<div style="display:flex;flex-wrap:wrap"><div>First product card text</div><div>Second product card text</div></div>',
+        )
+      ).map((unit) => unit.text),
+    ).toEqual(['First product card text', 'Second product card text']);
+  });
+
+  it('keeps a span that really is inline inside its paragraph', async () => {
+    expect(await units('<p>Plain <span>inline words</span> stay together.</p>')).toEqual([
+      { kind: 'block', root: 'P', text: 'Plain inline words stay together.' },
+    ]);
+  });
+
+  it('skips text that is only a date', async () => {
+    const { isTranslatableText } = await import('./text');
+    for (const date of [
+      'Nov 09, 2026',
+      'Sep 28, 2026',
+      '28 September 2026',
+      'Sept. 3',
+      '2026-11-14',
+    ]) {
+      expect(isTranslatableText(date)).toBe(false);
+    }
+    for (const prose of [
+      'May the best tool win',
+      'March',
+      'Published on Nov 9, 2026 by Addy',
+      'Maybe 2',
+      'Mark 2',
+      'Octopus 8',
+    ]) {
+      expect(isTranslatableText(prose)).toBe(true);
+    }
+  });
+});
+
+describe('layout boundaries inside a sentence', () => {
+  it('keeps screen-reader-only and floated spans inside their sentence', async () => {
+    expect(
+      await units(
+        '<p>Check out <a href="/x">the guide<span style="position:absolute">about pricing</span></a> and <span style="float:right">this badge</span> today.</p>',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('keeps an inline-flex chip and its inner spans inside the sentence', async () => {
+    expect(
+      await units(
+        '<p>Press <span style="display:inline-flex">the <span>Ctrl key</span></span> to continue.</p>',
+      ),
+    ).toEqual([{ kind: 'block', root: 'P', text: 'Press the Ctrl key to continue.' }]);
+  });
+
+  it('treats ruby as inline and leaves the reading out of the text', async () => {
+    expect(
+      await units(
+        '<p>日本語の<ruby style="display:ruby">漢字<rt style="display:ruby-text">かんじ</rt></ruby>を読む</p>',
+      ),
+    ).toEqual([{ kind: 'block', root: 'P', text: '日本語の漢字を読む' }]);
   });
 });
 

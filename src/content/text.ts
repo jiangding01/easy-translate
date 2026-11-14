@@ -8,6 +8,8 @@ const NOT_PROSE = [
   /^[\d\s.,:;%+\-–—/×x()]+[\p{L}%°]{0,4}$/u, // numbers, sizes, times, "12 MB"
   /^[\w-]+\.(js|ts|tsx|jsx|json|md|py|rs|go|java|css|html|png|jpe?g|gif|svg|pdf|zip|txt|yml|yaml)$/i, // file names
   /^[a-z_$][\w$]*(\.[\w$]+)+(\(\))?$/i, // dotted identifiers, calls
+  // Dates on their own ("Nov 09, 2026", "28 September 2026", "Sept. 3"): noise when translated.
+  /^(?=.*\d)(\d{1,2}\s+)?(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)\.?(\s+\d{1,2}(st|nd|rd|th)?)?,?(\s+\d{4})?$/i,
 ];
 
 export const MAX_UNIT_CHARS = 5000;
