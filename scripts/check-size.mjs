@@ -40,7 +40,10 @@ const entries = [
   },
   {
     name: 'popup',
-    budget: 80 * KB,
+    // Raised from 80KB in M1 3b: React DOM (~60KB) is a fixed cost and the panel now
+    // shares the settings page's select and engine view. Past 90KB, evaluate a lighter
+    // runtime before raising again.
+    budget: 90 * KB,
     files: manifest.action?.default_popup ? await pageScripts(manifest.action.default_popup) : [],
   },
   {

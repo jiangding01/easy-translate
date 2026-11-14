@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { appError, ok } from '@/lib/errors';
 import { createConfigStore } from './store';
+import { EXTRA_DEFAULTS } from './test-fixtures';
 import type { ConfigSnapshot } from './types';
 
 const snapshot = (theme: 'system' | 'light' | 'dark'): ConfigSnapshot => ({
   schemaVersion: 1,
-  data: { ui: { theme }, language: { target: 'en' } },
+  data: { ui: { theme }, language: { target: 'en', source: 'auto' }, ...EXTRA_DEFAULTS },
 });
 
 function setup(read: () => Promise<ConfigSnapshot>) {

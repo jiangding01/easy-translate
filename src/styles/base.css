@@ -1,0 +1,41 @@
+/* Global base for extension pages (popup, options). Every value comes from tokens.css. */
+
+:root {
+  font-family: var(--et-font-sans);
+  font-size: var(--et-fs-page-md);
+  line-height: var(--et-lh-page-md);
+  color: var(--et-color-text);
+  background: var(--et-color-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+select,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+:focus-visible {
+  outline: 2px solid var(--et-color-focus);
+  outline-offset: 2px;
+}
