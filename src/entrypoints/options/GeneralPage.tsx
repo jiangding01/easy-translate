@@ -1,8 +1,21 @@
+import { Select, type SelectOption } from '@/components/Select';
 import { type ConfigChange, type ConfigV1, THEMES, type Theme } from '@/lib/config/types';
 import { useConfig } from '@/lib/config/use-config';
 import { LANGUAGES, type LanguageCode } from '@/lib/languages';
 import { useNotice } from './notice';
 import styles from './options.module.css';
+
+const TARGET_OPTIONS: SelectOption<LanguageCode>[] = LANGUAGES.map((language) => ({
+  value: language.code,
+  label: language.name,
+  sub: language.code,
+  lang: language.code,
+}));
+
+const SOURCE_OPTIONS: SelectOption<LanguageCode | 'auto'>[] = [
+  { value: 'auto', label: '自动检测', sub: '推荐' },
+  ...TARGET_OPTIONS,
+];
 
 const THEME_LABELS: Record<Theme, string> = { system: '跟随系统', light: '浅色', dark: '深色' };
 
@@ -21,52 +34,36 @@ export function GeneralPage({ config }: { config: ConfigV1 }) {
     <section aria-label="通用" className={styles.card}>
       <div className={styles.settingRow}>
         <div className={styles.settingText}>
-          <label htmlFor="target-language" className={styles.settingName}>
+          <span id="target-language-label" className={styles.settingName}>
             目标语言
-          </label>
+          </span>
           <span className={styles.settingHint}>网页会被翻译成这种语言</span>
         </div>
-        <select
-          id="target-language"
-          className={styles.select}
+        <Select
+          labelledBy="target-language-label"
+          align="end"
+          minWidth={200}
           value={config.language.target}
-          onChange={(event) =>
-            void change({ path: 'language.target', value: event.target.value as LanguageCode })
-          }
-        >
-          {LANGUAGES.map((language) => (
-            <option key={language.code} value={language.code}>
-              {language.name}
-            </option>
-          ))}
-        </select>
+          options={TARGET_OPTIONS}
+          onChange={(value) => void change({ path: 'language.target', value })}
+        />
       </div>
 
       <div className={styles.settingRow}>
         <div className={styles.settingText}>
-          <label htmlFor="source-language" className={styles.settingName}>
+          <span id="source-language-label" className={styles.settingName}>
             源语言
-          </label>
+          </span>
           <span className={styles.settingHint}>自动检测适合大多数网页；检测不准时再手动指定</span>
         </div>
-        <select
-          id="source-language"
-          className={styles.select}
+        <Select
+          labelledBy="source-language-label"
+          align="end"
+          minWidth={200}
           value={config.language.source}
-          onChange={(event) =>
-            void change({
-              path: 'language.source',
-              value: event.target.value as LanguageCode | 'auto',
-            })
-          }
-        >
-          <option value="auto">自动检测</option>
-          {LANGUAGES.map((language) => (
-            <option key={language.code} value={language.code}>
-              {language.name}
-            </option>
-          ))}
-        </select>
+          options={SOURCE_OPTIONS}
+          onChange={(value) => void change({ path: 'language.source', value })}
+        />
       </div>
 
       <div className={styles.settingRow}>

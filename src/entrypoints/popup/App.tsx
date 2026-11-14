@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
+import { Select, type SelectOption } from '@/components/Select';
 import { engineFields, hasEditableBaseURL } from '@/lib/config/engine-fields';
 import type { ConfigV1, Engine } from '@/lib/config/types';
 import { useConfig } from '@/lib/config/use-config';
@@ -18,6 +19,12 @@ import { useTheme } from '@/styles/theme';
 import { type ActivePage, inspectActivePage } from './inspect-page';
 import { panelState } from './panel-state';
 import styles from './popup.module.css';
+
+const TARGET_OPTIONS: SelectOption<LanguageCode>[] = LANGUAGES.map((language) => ({
+  value: language.code,
+  label: language.name,
+  lang: language.code,
+}));
 
 type Statuses = Partial<Record<SecretProviderId, SecretStatusInfo>>;
 
@@ -82,7 +89,7 @@ export function App() {
           {view.kind === 'loading' && ' '}
         </span>
         {(view.kind === 'foreign' || view.kind === 'loading') && (
-          <label className={styles.pair}>
+          <div className={styles.pair}>
             <span>
               {view.kind === 'foreign' && view.language ? languageName(view.language) : '自动检测'}
             </span>
@@ -98,21 +105,15 @@ export function App() {
             >
               <path d="M2 6h8M7 3l3 3-3 3" />
             </svg>
-            <select
-              className={styles.pairSelect}
-              aria-label="翻译成"
+            <Select
+              variant="inline"
+              label="翻译成"
+              minWidth={180}
               value={target}
-              onChange={(event) =>
-                void save({ path: 'language.target', value: event.target.value as LanguageCode })
-              }
-            >
-              {LANGUAGES.map((language) => (
-                <option key={language.code} value={language.code}>
-                  {language.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              options={TARGET_OPTIONS}
+              onChange={(value) => void save({ path: 'language.target', value })}
+            />
+          </div>
         )}
       </div>
 
@@ -242,25 +243,35 @@ function EngineSelect({
   onChange: (engine: Engine) => void;
 }) {
   const readiness = useReadiness(config, statuses);
-  const ready = statuses !== undefined && !readiness.problem;
+  const current = config.translation.engine;
+  const dot = (problem: boolean): 'ok' | 'warn' | 'idle' =>
+    statuses === undefined ? 'idle' : problem ? 'warn' : 'ok';
+  // Other engines' grants are not looked up here: their rows show key and model state only.
+  const options = engineEntries(config).map((entry): SelectOption<Engine> => {
+    const fields = engineFields(config, entry.id) ?? { baseURL: '', model: '' };
+    const state =
+      entry.id === current
+        ? readiness
+        : engineReadiness({
+            engine: entry.id,
+            ...fields,
+            secret: entry.id === 'google' ? undefined : statuses?.[entry.id],
+            granted: true,
+          });
+    return { value: entry.id, label: entry.name, sub: state.status, dot: dot(!!state.problem) };
+  });
+  const selected = options.find((option) => option.value === current);
   return (
-    <label className={styles.engine}>
-      <span
-        aria-hidden="true"
-        className={statuses === undefined ? styles.dot : ready ? styles.okDot : styles.warnDot}
-      />
-      <select
-        className={styles.engineSelect}
-        aria-label="默认引擎"
-        value={config.translation.engine}
-        onChange={(event) => onChange(event.target.value as Engine)}
-      >
-        {engineEntries(config).map((entry) => (
-          <option key={entry.id} value={entry.id}>
-            {entry.name}
-          </option>
-        ))}
-      </select>
-    </label>
+    <Select
+      variant="quiet"
+      label="默认引擎"
+      minWidth={236}
+      value={current}
+      options={options}
+      onChange={onChange}
+    >
+      <span aria-hidden="true" className={`${styles.dot} ${styles[dot(!!readiness.problem)]}`} />
+      <span className={styles.engineName}>{selected?.label}</span>
+    </Select>
   );
 }

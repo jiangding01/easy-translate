@@ -1,0 +1,191 @@
+/* The extension's own select. The list lives in the top layer (popover) and
+   grows out of its trigger, in the same motion language as the island. */
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--et-color-text);
+  font: inherit;
+  text-align: left;
+  transition:
+    border-color var(--et-dur-fast) var(--et-ease-out),
+    background-color var(--et-dur-fast) var(--et-ease-out),
+    box-shadow var(--et-dur-fast) var(--et-ease-out),
+    color var(--et-dur-fast) var(--et-ease-out);
+}
+.value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chevron {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--et-color-faint);
+  transition: transform var(--et-dur-slide) var(--et-ease-emphasized);
+}
+.trigger[aria-expanded="true"] .chevron {
+  transform: rotate(180deg);
+}
+
+/* Settings rows: looks like the text fields next to it. */
+.field {
+  min-width: 168px;
+  height: var(--et-h-control-lg);
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--et-color-border);
+  border-radius: var(--et-radius-md);
+  background: var(--et-color-elevated);
+  font-size: var(--et-fs-control);
+}
+.field:hover {
+  border-color: var(--et-color-border-strong);
+}
+.field[aria-expanded="true"] {
+  border-color: var(--et-color-focus);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--et-color-accent) 28%, transparent);
+}
+
+/* Inside a sentence ("English → 简体中文 ▾"). */
+.inline {
+  height: var(--et-h-control-sm);
+  margin-left: -6px;
+  padding: 0 6px;
+  gap: 6px;
+  border-radius: var(--et-radius-md);
+  font-weight: inherit;
+}
+.inline:hover,
+.inline[aria-expanded="true"] {
+  background: var(--et-color-surface);
+}
+
+/* Small footer control (engine switch). */
+.quiet {
+  max-width: 200px;
+  height: var(--et-h-control-sm);
+  padding: 0 8px;
+  gap: 6px;
+  border-radius: var(--et-radius-md);
+  color: var(--et-color-muted);
+  font-size: var(--et-fs-caption);
+}
+.quiet:hover,
+.quiet[aria-expanded="true"] {
+  background: var(--et-color-surface);
+  color: var(--et-color-text);
+}
+
+/* ---------------------------------------------------------------- list */
+
+.list {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 5px;
+  border: 0;
+  border-radius: var(--et-radius-lg);
+  background: var(--et-color-elevated);
+  color: var(--et-color-text);
+  box-shadow: var(--et-shadow-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: var(--et-fs-control);
+  outline: none;
+  transform-origin: top left;
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 160ms ease,
+    transform 200ms var(--et-ease-grow),
+    overlay 160ms allow-discrete,
+    display 160ms allow-discrete;
+}
+.list[data-align="end"] {
+  transform-origin: top right;
+}
+.list[data-side="above"] {
+  transform-origin: bottom left;
+}
+.list[data-side="above"][data-align="end"] {
+  transform-origin: bottom right;
+}
+.list:not(:popover-open) {
+  opacity: 0;
+  transform: scale(0.98);
+  transition-duration: 120ms;
+}
+@starting-style {
+  .list:popover-open {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+  }
+  .list[data-side="above"]:popover-open {
+    transform: translateY(4px) scale(0.96);
+  }
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--et-h-control-md);
+  padding: 0 10px;
+  border-radius: var(--et-radius-md);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.option[data-active="true"] {
+  background: var(--et-color-surface);
+}
+.option[aria-selected="true"] {
+  font-weight: var(--et-fw-medium);
+}
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sub {
+  flex-shrink: 0;
+  color: var(--et-color-faint);
+  font-size: var(--et-fs-page-xs);
+  font-weight: var(--et-fw-regular);
+}
+.check {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--et-color-accent-ink);
+  visibility: hidden;
+}
+.option[aria-selected="true"] .check {
+  visibility: visible;
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: var(--et-radius-full);
+  background: var(--et-color-border-strong);
+}
+.ok {
+  background: var(--et-color-ok);
+}
+.warn {
+  background: var(--et-color-warn);
+}
+.trigger .dot {
+  margin-right: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .list,
+  .chevron {
+    transition-duration: 1ms;
+  }
+}

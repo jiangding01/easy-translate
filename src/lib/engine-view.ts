@@ -14,61 +14,6 @@ import type { SecretStatusInfo } from '@/lib/messaging/protocol';
 
 // Engine view logic shared by the settings page and the toolbar panel: no React, no browser APIs.
 
-export interface BuiltinMeta {
-  name: string;
-  /** Where to get a key (and, for Gemini, the model list). */
-  link?: { href: string; label: string };
-}
-
-export const BUILTIN_META: Record<BuiltinEngine, BuiltinMeta> = {
-  google: { name: 'Google 翻译' },
-  openai: {
-    name: 'OpenAI',
-    link: { href: 'https://platform.openai.com/api-keys', label: '获取 API Key ↗' },
-  },
-  deepseek: {
-    name: 'DeepSeek',
-    link: { href: 'https://platform.deepseek.com/api_keys', label: '获取 API Key ↗' },
-  },
-  gemini: {
-    name: 'Gemini',
-    link: { href: 'https://ai.google.dev/gemini-api/docs/models', label: '密钥与模型列表 ↗' },
-  },
-};
-
-export interface Preset {
-  id: string;
-  label: string;
-  baseURL: string;
-  /** Local servers usually take no key. */
-  local: boolean;
-}
-
-/** Base URLs checked against each vendor's docs (2026-11-14). */
-export const PRESETS: readonly Preset[] = [
-  { id: 'ollama', label: 'Ollama（本地）', baseURL: 'http://localhost:11434/v1', local: true },
-  { id: 'lmstudio', label: 'LM Studio（本地）', baseURL: 'http://localhost:1234/v1', local: true },
-  { id: 'openrouter', label: 'OpenRouter', baseURL: 'https://openrouter.ai/api/v1', local: false },
-  { id: 'siliconflow', label: '硅基流动', baseURL: 'https://api.siliconflow.cn/v1', local: false },
-  { id: 'other', label: '其他', baseURL: '', local: false },
-];
-
-const ID_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
-
-/** `custom-` + 8 random lowercase letters or digits, unique among `existing`. */
-export function newCustomId(
-  existing: Iterable<string>,
-  random: (bytes: Uint8Array) => Uint8Array = (bytes) => crypto.getRandomValues(bytes),
-): CustomProviderId {
-  const taken = new Set(existing);
-  for (;;) {
-    const bytes = random(new Uint8Array(8));
-    const suffix = [...bytes].map((byte) => ID_ALPHABET[byte % ID_ALPHABET.length]).join('');
-    const id: CustomProviderId = `custom-${suffix}`;
-    if (!taken.has(id)) return id;
-  }
-}
-
 /** `host[:port]` of a URL, or '' when it does not parse. */
 export function hostOf(url: string): string {
   try {
@@ -83,13 +28,13 @@ export function hostName(baseURL: string): string {
   return hostOf(baseURL).slice(0, CUSTOM_PROVIDER_LIMITS.name);
 }
 
-/** A preset keeps its label while its address is untouched; otherwise the host names it. */
-export function defaultProviderName(preset: Preset | undefined, baseURL: string): string {
-  if (preset && preset.id !== 'other' && normalizeBaseURL(baseURL) === preset.baseURL) {
-    return preset.label;
-  }
-  return hostName(baseURL);
-}
+/** Display names of the built-in engines. */
+export const BUILTIN_NAMES: Record<BuiltinEngine, string> = {
+  google: 'Google 翻译',
+  openai: 'OpenAI',
+  deepseek: 'DeepSeek',
+  gemini: 'Gemini',
+};
 
 export interface EngineEntry {
   id: Engine;
@@ -101,7 +46,7 @@ export interface EngineEntry {
 /** Built-in engines first, then custom providers in stored order. */
 export function engineEntries(config: ConfigV1): EngineEntry[] {
   return [
-    ...BUILTIN_ENGINES.map((id) => ({ id, name: BUILTIN_META[id].name })),
+    ...BUILTIN_ENGINES.map((id) => ({ id, name: BUILTIN_NAMES[id] })),
     ...Object.entries(config.customProviders).map(([id, custom]) => ({
       id: id as CustomProviderId,
       name: custom.name || hostOf(custom.baseURL) || '未命名服务',
@@ -126,15 +71,6 @@ export const NOT_READY_TEXT: Record<Exclude<NotReady, 'checking-grant'>, string>
   'needs-grant': '还没有授权访问这个地址',
   'needs-key': '还没有填写密钥',
   'needs-model': '还没有填写模型',
-};
-
-/** Why the connection test is disabled. */
-export const TEST_BLOCKED_TEXT: Record<NotReady, string> = {
-  'bad-url': '先填写正确的地址',
-  'checking-grant': '正在检查授权…',
-  'needs-grant': '授权后可以测试',
-  'needs-key': '填写 API Key 后可以测试',
-  'needs-model': '填写模型后可以测试',
 };
 
 export interface EngineReadiness {

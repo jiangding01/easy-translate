@@ -15,13 +15,11 @@ import {
 import { useConfig } from '@/lib/config/use-config';
 import { normalizeBaseURL, requiredHostPermission } from '@/lib/endpoint';
 import {
-  BUILTIN_META,
   type EngineEntry,
   engineReadiness,
   hostName,
   hostOf,
   permissionPattern,
-  TEST_BLOCKED_TEXT,
 } from '@/lib/engine-view';
 import { appError } from '@/lib/errors';
 import { requestHostPermission, useHostPermission } from '@/lib/host-permission';
@@ -29,6 +27,7 @@ import type { SecretStatusInfo } from '@/lib/messaging/protocol';
 import { admin } from './hooks';
 import { useNotice } from './notice';
 import styles from './options.module.css';
+import { KEY_LINKS, TEST_BLOCKED_TEXT } from './providers';
 import { TestStrip } from './TestStrip';
 
 interface Props {
@@ -168,7 +167,7 @@ export function EngineItem(props: Props) {
   const testedWith = `${draft.baseURL.trim()}\n${draft.model.trim()}`;
 
   const sub = rowSubtitle(engine, saved);
-  const link = builtin ? BUILTIN_META[engine].link : undefined;
+  const link = builtin ? KEY_LINKS[engine] : undefined;
   const field = (name: TextField) => ({
     value: draft[name],
     onChange: (event: React.ChangeEvent<HTMLInputElement>) => {

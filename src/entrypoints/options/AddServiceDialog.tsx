@@ -6,12 +6,12 @@ import {
 } from '@/lib/config/types';
 import { useConfig } from '@/lib/config/use-config';
 import { normalizeBaseURL, requiredHostPermission } from '@/lib/endpoint';
-import { defaultProviderName, newCustomId, PRESETS } from '@/lib/engine-view';
 import { describeError } from '@/lib/error-messages';
 import { requestHostPermission } from '@/lib/host-permission';
 import { admin } from './hooks';
 import { useNotice } from './notice';
 import styles from './options.module.css';
+import { defaultProviderName, newCustomId, PRESETS } from './providers';
 
 interface Props {
   open: boolean;
