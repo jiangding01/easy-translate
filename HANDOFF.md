@@ -83,7 +83,7 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
     - 会话需要订阅接口：`PageSession` 现在只有拉取式 `state()`，面板靠 500ms 轮询；灵岛与会话同在内容脚本里，应加 `subscribe(listener)`，`reportStatus` 改为订阅者之一。
     - 原型先补三种停靠（左、右、底）和琥珀材质的最终稿，经确认再出方案。
   - **审查留下的结构建议（不阻塞）**：内容脚本的装配可抽成 `src/content/runtime.ts`，供 M3 划词共用 Port 与配置；`PageState` 与 `PageStatus` 可合并成一份；设置页预览引用了 `src/content/styles.ts`，样式常量可移到 `src/lib`；`site-memory.ts` 可拆读写两侧，给内容脚本减重。
-  - **图标**：用户会另找设计出稿。方向：暖黑超椭圆底板，一条暖白长线（原文）加一条琥珀短药丸（译文）；右下角给状态点留位置；16/32px 单独做像素对齐稿。
+  - **图标**：已完成「暗岛微光」（PR #5）：暖黑超椭圆底板，一条暖白长线（原文）加一条琥珀短药丸（译文），右下角给状态点留位置；16/32/48 各自按像素网格绘制，128 四周留 16px。PNG 与 `docs/assets/icon/` 的 SVG 都由 `scripts/build-icons.mjs` 生成（`npm run build:icons`）；状态点的底图读 `icon/16.png` 和 `icon/32.png`。
 - **界面方向已确认**：「隐中生岛」加琥珀主题色，完整规范见 [`docs/plans/ui-isle-direction.md`](docs/plans/ui-isle-direction.md)。原型在 https://claude.ai/artifact/GJTgsP7SFHmhP6M2SczwTp 。最高原则：人的感受第一、少打扰、近乎原生的沉浸阅读。
   - 默认在所有页面上都不留痕迹，由用户主动唤起。
   - 不常驻悬浮球。
@@ -107,7 +107,7 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
   - M3 的输入翻译要兼容 Lexical、ProseMirror、Draft.js、Slate、Quill 等富文本编辑器；M5 的字幕以当前时间 ±10 秒为滚动窗口预取。
   - **来自 M1 第 3b 步，留给 M2 的事项**：
   - 工具栏面板体积预算已从 80KB 调到 90KB（React 运行时是固定开销）。M2 往面板加功能时，如果超过 90KB，先评估更轻的运行时，不再直接调预算。
-  - 工具栏图标改成单色字形加状态小点（已翻译用琥珀色，有失败用珊瑚色），和 `action.setIcon` 一起做；面板上「翻译此页」「这次先用 Google 翻译」「总是翻译此站」随 M2 接入。**M2a 已接入状态点和面板；图标本身的重新设计待用户找设计出稿（方向：暖黑底板加两条线，右下角给状态点留位置）。**
+  - 工具栏图标改成单色字形加状态小点（已翻译用琥珀色，有失败用珊瑚色），和 `action.setIcon` 一起做；面板上「翻译此页」「这次先用 Google 翻译」「总是翻译此站」随 M2 接入。**M2a 已接入状态点和面板；图标已按「暗岛微光」重新设计（PR #5）。**
   - ~~manifest 没有设置 `minimum_chrome_version`~~：M2a 定为 117。
   - ~~兼容 OpenAI 接口的流式响应在后台累积时没有长度上限~~：M2a 加了 64000 字上限（OpenAI 兼容与 Gemini），超过按截断处理。
   - 同一地址上的多个自定义服务共享限流冷却（有意为之）；如果用户反馈同一聚合平台上多个账号互相拖累，再改成按地址加密钥区分。
