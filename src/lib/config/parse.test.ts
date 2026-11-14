@@ -26,6 +26,7 @@ describe('parseStoredConfig', () => {
       ui: { theme: 'dark' },
       language: { target: 'ko', source: 'ja' },
       translation: { engine: 'openai' },
+      page: { style: 'highlight', mode: 'translation' },
       providers: { ...EXTRA_DEFAULTS.providers, gemini: { model: 'm' } },
       customProviders: {},
     };

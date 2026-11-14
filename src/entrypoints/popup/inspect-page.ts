@@ -7,6 +7,9 @@ export interface ActivePage {
   /** Host of the active tab ('' when unknown); for browser pages, the scheme-less URL. */
   host: string;
   info: Result<PageInfo>;
+  /** Set for http(s) pages only. */
+  tabId?: number;
+  origin?: string;
 }
 
 function hostLabel(url: string | undefined): string {
@@ -30,6 +33,7 @@ export async function inspectActivePage(): Promise<ActivePage> {
     };
   }
   const tabId = tab.id;
+  const origin = new URL(tab.url).origin;
   const info = await call(
     () => sendMessage('page.getInfo', undefined, { tabId, frameId: 0 }),
     // Retrying cannot help: the user has to reload the page to get a content script.
@@ -37,5 +41,5 @@ export async function inspectActivePage(): Promise<ActivePage> {
       retryable: false,
     }),
   );
-  return { host, info };
+  return { host, info, tabId, origin };
 }

@@ -5,6 +5,14 @@ import type { LanguageCode } from '@/lib/languages';
 export const THEMES = ['system', 'light', 'dark'] as const;
 export type Theme = (typeof THEMES)[number];
 
+/** How a translation is set apart from the original on pages (M2). */
+export const PAGE_STYLES = ['plain', 'faded', 'underline', 'highlight'] as const;
+export type PageStyle = (typeof PAGE_STYLES)[number];
+
+/** What a new page-translation session shows first. */
+export const PAGE_MODES = ['bilingual', 'translation'] as const;
+export type PageMode = (typeof PAGE_MODES)[number];
+
 export const BUILTIN_ENGINES = ['google', 'openai', 'deepseek', 'gemini'] as const;
 export type BuiltinEngine = (typeof BUILTIN_ENGINES)[number];
 
@@ -50,6 +58,7 @@ export interface ConfigV1 {
   ui: { theme: Theme };
   language: { target: LanguageCode; source: 'auto' | LanguageCode };
   translation: { engine: Engine };
+  page: { style: PageStyle; mode: PageMode };
   providers: {
     openai: { baseURL: string; model: string };
     deepseek: { model: string };

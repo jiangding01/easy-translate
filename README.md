@@ -2,13 +2,14 @@
 
 Easy Translate 是面向 Chrome 的网页翻译扩展，围绕网页双语阅读、划词翻译、输入翻译和视频字幕设计，使用 TypeScript、React、WXT 与 Manifest V3 开发。
 
-项目当前版本为 `0.1.0`，已完成 M0 地基和 M1 翻译核心：后台可以调用 Google、OpenAI、DeepSeek、Gemini 和最多 10 个自定义的 OpenAI 兼容服务（含本地模型），带调度、超时、退避、缓存与密钥管理；设置页可以配置并测试这些服务。网页上的翻译入口从 M2（整页翻译）开始接入。
+项目当前版本为 `0.1.0`，已完成 M0 地基、M1 翻译核心和 M2a 整页翻译：网页可以一键双语阅读，后台可以调用 Google、OpenAI、DeepSeek、Gemini 和最多 10 个自定义的 OpenAI 兼容服务（含本地模型），带调度、超时、退避、缓存与密钥管理。
 
 ## 当前功能
 
+- **整页翻译**：点工具栏面板的「翻译此页」，或按快捷键（macOS `⌃⇧A`，Windows/Linux `Alt+A`）。译文出现在原文下方，沿用网页自己的字体；先翻眼前的段落，往下读时继续。面板里可以切换「双语 / 仅译文」、重试没译出的段落、「显示原文」还原网页，以及打开「总是翻译此站」。快捷键可以在 `chrome://extensions/shortcuts` 修改。
 - **设置页 · 翻译服务**：选择默认引擎；为 OpenAI、DeepSeek、Gemini 填写密钥和模型；添加最多 10 个自定义服务（Ollama、LM Studio、OpenRouter、硅基流动等预设，或任意 OpenAI 兼容地址），添加时申请访问权限；每个服务都能用「Hello, world.」测试连接；查看和清空翻译缓存。密钥只保存在本机，页面只能看到末 4 位。
-- **设置页 · 通用**：目标语言、源语言（默认自动检测）、外观（跟随系统／浅色／深色），选择即保存。
-- **工具栏面板**：显示当前网站和页面语言，切换目标语言和默认引擎；母语页面、浏览器页面、需要刷新的页面各有安静的提示；默认引擎缺密钥或未授权时给出「去设置」。「翻译此页」在 M2 接入。
+- **设置页 · 通用**：目标语言、源语言（默认自动检测）、外观（跟随系统／浅色／深色）、译文样式（无装饰／淡化／下划线／高亮，带预览）和打开时的显示方式，选择即保存。
+- **工具栏面板**：显示当前网站和页面语言，切换目标语言和默认引擎；母语页面、浏览器页面、需要刷新的页面各有安静的提示；默认引擎缺密钥或未授权时给出「去设置」。
 - 界面使用「隐中生岛」方向的琥珀主题，亮暗两套，下拉选择为自研组件。
 
 ## 规划模块
@@ -68,9 +69,10 @@ GitHub Actions（`.github/workflows/ci.yml`）在 PR 和推送到 `main` 时运�
 src/
   entrypoints/
     background.ts       # 后台 Service Worker：配置唯一写入点、翻译服务、消息与 Port handler
-    content.ts          # 网页内容脚本
+    content.ts          # 网页内容脚本：装配整页翻译会话、站点记忆自动翻译
     popup/              # 工具栏面板
     options/            # 设置页（通用、翻译服务、添加服务对话框、连接测试）
+  content/              # 整页翻译（内容脚本侧）：扫描与分段、视口队列与会话、渲染与动效、还原、动态内容
   components/           # 共享界面组件（自研下拉 Select）
   lib/
     config/             # 配置：schema、宽松解析、仓库（后台）、客户端与 useConfig（页面）、引擎字段映射
@@ -82,6 +84,8 @@ src/
     errors.ts           # AppError 与 Result
     error-messages.ts   # 错误码到中文文案
     languages.ts        # 支持的语言与语言标签归一化
+    site-memory.ts      # 「总是翻译此站」的存储格式与写入（只由后台写）
+    action-icon.ts      # 工具栏图标的状态小点
   styles/
     tokens.css          # 设计 token（唯一来源，:root 与 :host；琥珀主题）
     base.css            # 扩展页面的全局基础样式
@@ -141,6 +145,7 @@ wxt.config.ts           # WXT 与 Manifest V3 配置
 6. 在普通网页打开工具栏面板，确认显示网站和页面语言，能切换目标语言和默认引擎；在中文页面、`chrome://extensions` 和安装前已打开的网页上，分别显示对应提示。
 7. 清空翻译缓存后，条数归零。
 8. 在 `chrome://serviceworker-internals` 停止 Service Worker 后再修改设置或测试连接，确认仍能正常工作。
+9. 整页翻译的完整验收清单（含 4 倍 CPU 降速下的动效检查）见 [`docs/plans/m2-page-translation.md`](docs/plans/m2-page-translation.md) 第 10 节。
 
 安装或重新加载扩展后，请刷新已有网页，使内容脚本生效。Chrome 内部页、网上应用店和内置 PDF 阅读器等页面受浏览器注入限制。
 

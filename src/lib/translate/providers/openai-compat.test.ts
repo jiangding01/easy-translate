@@ -146,6 +146,12 @@ describe('openai-compat adapter', () => {
     }
   });
 
+  it('stops a runaway stream instead of accumulating without limit', async () => {
+    const chunks = Array.from({ length: 70 }, () => delta('x'.repeat(1000)));
+    const fn = mockFetch(sseResponse([...chunks, 'data: [DONE]\n\n']));
+    await expect(run(fn)).rejects.toMatchObject({ code: 'provider/output-truncated' });
+  });
+
   it.each([
     ['length', 'provider/output-truncated'],
     ['content_filter', 'provider/content-blocked'],

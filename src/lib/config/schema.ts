@@ -7,6 +7,8 @@ import {
   type Engine,
   isBuiltinEngine,
   isEngineId,
+  PAGE_MODES,
+  PAGE_STYLES,
   THEMES,
 } from './types';
 
@@ -31,6 +33,10 @@ export const configSchema = z
     }),
     translation: z.looseObject({
       engine: z.custom<Engine>(isEngineId, { message: 'Unknown engine' }),
+    }),
+    page: z.looseObject({
+      style: z.enum(PAGE_STYLES),
+      mode: z.enum(PAGE_MODES),
     }),
     providers: z.looseObject({
       openai: z.looseObject({
