@@ -1,14 +1,9 @@
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
+import { engineFields, hasEditableBaseURL } from '@/lib/config/engine-fields';
 import type { ConfigV1, Engine } from '@/lib/config/types';
 import { useConfig } from '@/lib/config/use-config';
-import {
-  editableBaseURL,
-  engineEntries,
-  engineReadiness,
-  modelOf,
-  permissionPattern,
-} from '@/lib/engine-view';
+import { engineEntries, engineReadiness, permissionPattern } from '@/lib/engine-view';
 import { describeError } from '@/lib/error-messages';
 import { appError, fail } from '@/lib/errors';
 import { useHostPermission } from '@/lib/host-permission';
@@ -198,10 +193,13 @@ export function App() {
 
 function useReadiness(config: ConfigV1, statuses: Statuses | undefined) {
   const engine = config.translation.engine;
-  const granted = useHostPermission(permissionPattern(editableBaseURL(config, engine)));
+  const fields = engineFields(config, engine) ?? { baseURL: '', model: '' };
+  const granted = useHostPermission(
+    hasEditableBaseURL(engine) ? permissionPattern(fields.baseURL) : undefined,
+  );
   return engineReadiness({
     engine,
-    model: modelOf(config, engine),
+    ...fields,
     secret: engine === 'google' ? undefined : statuses?.[engine],
     granted,
   });

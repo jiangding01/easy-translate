@@ -16,13 +16,15 @@ interface Props {
   blocked?: string;
   /** Runs once on mount (a freshly added provider). */
   autoRun?: boolean;
+  /** Identity of what is tested; when it changes, an old result no longer applies. */
+  resetKey: string;
 }
 
 /**
  * The connection test in isle material: "Hello, world." → the live translation,
  * which fades in the way page translations do, followed by the latency.
  */
-export function TestStrip({ run, blocked, autoRun }: Props) {
+export function TestStrip({ run, blocked, autoRun, resetKey }: Props) {
   const [state, setState] = useState<TestState>({ status: 'idle' });
   const [detail, setDetail] = useState(false);
   const sequence = useRef(0);
@@ -44,6 +46,16 @@ export function TestStrip({ run, blocked, autoRun }: Props) {
       result.ok ? { status: 'ok', result: result.data } : { status: 'fail', error: result.error },
     );
   }
+
+  // A result (or a reply still on its way) for other fields is dropped.
+  const testedKey = useRef(resetKey);
+  useEffect(() => {
+    if (testedKey.current === resetKey) return;
+    testedKey.current = resetKey;
+    sequence.current += 1;
+    setDetail(false);
+    setState({ status: 'idle' });
+  }, [resetKey]);
 
   const autoRan = useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: a one-shot run; `start` reads the latest props itself

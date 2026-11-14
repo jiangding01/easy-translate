@@ -5,10 +5,10 @@ import {
   defaultProviderName,
   engineEntries,
   engineReadiness,
+  hostName,
   hostOf,
   newCustomId,
   PRESETS,
-  patternsInUse,
   permissionPattern,
 } from './engine-view';
 
@@ -61,69 +61,87 @@ describe('permissions', () => {
     expect(permissionPattern('')).toBeUndefined();
     expect(permissionPattern('http://localhost:11434/v1')).toBe('http://localhost/*');
   });
-
-  it('collects patterns still in use, excluding one provider', () => {
-    const value = config();
-    expect(patternsInUse(value)).toEqual(
-      new Set(['https://router.example.com/*', 'http://localhost/*']),
-    );
-    expect(patternsInUse(value, 'custom-aaaaaaaa')).toEqual(
-      new Set(['https://router.example.com/*']),
-    );
-  });
 });
 
 describe('engineReadiness', () => {
   const key = { configured: true, last4: '1234' };
   const none = { configured: false, last4: '' };
+  const local = 'http://localhost:11434/v1';
+  const base = { baseURL: '', model: 'm', secret: key, granted: undefined };
 
   it('Google is always ready', () => {
-    expect(
-      engineReadiness({ engine: 'google', model: '', secret: undefined, granted: undefined }),
-    ).toEqual({
+    expect(engineReadiness({ ...base, engine: 'google', model: '' })).toEqual({
       status: '免费',
       mono: false,
       attention: false,
     });
   });
 
-  it('a built-in engine without a key is unconfigured', () => {
-    expect(
-      engineReadiness({ engine: 'openai', model: 'm', secret: none, granted: undefined }),
-    ).toMatchObject({
+  it('a built-in engine without a key is unconfigured, unless a key is being typed', () => {
+    expect(engineReadiness({ ...base, engine: 'deepseek', secret: none })).toMatchObject({
       status: '未配置',
+      reason: 'needs-key',
       problem: '还没有填写密钥',
     });
+    expect(
+      engineReadiness({ ...base, engine: 'deepseek', secret: none, keyDraft: true }).reason,
+    ).toBeUndefined();
   });
 
   it('shows the key suffix once ready', () => {
-    expect(
-      engineReadiness({ engine: 'deepseek', model: 'm', secret: key, granted: undefined }),
-    ).toEqual({
+    expect(engineReadiness({ ...base, engine: 'deepseek' })).toEqual({
       status: '密钥 ••••1234',
       mono: true,
       attention: false,
     });
   });
 
-  it('flags a missing grant before anything else', () => {
+  it('OpenAI on its built-in origin needs no grant', () => {
     expect(
-      engineReadiness({ engine: 'custom-aaaaaaaa', model: '', secret: none, granted: false }),
-    ).toMatchObject({ status: '待授权', attention: true });
+      engineReadiness({ ...base, engine: 'openai', baseURL: 'https://api.openai.com/v1' }).reason,
+    ).toBeUndefined();
+  });
+
+  it('checks the address, then the grant, before the key and model', () => {
+    const custom = { ...base, engine: 'custom-aaaaaaaa' as const, secret: none, model: '' };
+    expect(engineReadiness({ ...custom, baseURL: 'ftp://x' })).toMatchObject({
+      reason: 'bad-url',
+      status: '地址有误',
+    });
+    expect(engineReadiness({ ...custom, baseURL: local, granted: false })).toMatchObject({
+      reason: 'needs-grant',
+      status: '待授权',
+      attention: true,
+    });
+    const checking = engineReadiness({ ...custom, baseURL: local, granted: undefined });
+    expect(checking).toMatchObject({ reason: 'checking-grant', attention: false });
+    expect(checking.problem).toBeUndefined();
   });
 
   it('flags a missing model', () => {
-    expect(
-      engineReadiness({ engine: 'gemini', model: ' ', secret: key, granted: undefined }),
-    ).toMatchObject({
+    expect(engineReadiness({ ...base, engine: 'gemini', model: ' ' })).toMatchObject({
       attention: true,
+      reason: 'needs-model',
       problem: '还没有填写模型',
     });
   });
 
   it('a custom provider without a key is still usable', () => {
     expect(
-      engineReadiness({ engine: 'custom-aaaaaaaa', model: 'm', secret: undefined, granted: true }),
+      engineReadiness({
+        ...base,
+        engine: 'custom-aaaaaaaa',
+        baseURL: local,
+        secret: undefined,
+        granted: true,
+      }),
     ).toEqual({ status: '未填密钥', mono: false, attention: false });
+  });
+});
+
+describe('hostName', () => {
+  it('cuts long hosts to the stored name limit', () => {
+    const host = `${'a'.repeat(60)}.example.com`;
+    expect(hostName(`https://${host}/v1`)).toHaveLength(40);
   });
 });

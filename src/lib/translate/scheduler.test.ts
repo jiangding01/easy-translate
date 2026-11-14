@@ -128,6 +128,7 @@ interface SubmitOptions {
   adapter?: ProviderAdapter;
   engine?: string;
   cooldownKey?: string;
+  deadlineMs?: number;
 }
 
 function setup(
@@ -157,6 +158,7 @@ function setup(
       persist: (entries) => {
         persisted.push(...entries);
       },
+      deadlineMs: submitOptions.deadlineMs,
     });
     outcomes.forEach((outcome, index) => {
       void outcome.then((result) => {
@@ -364,6 +366,17 @@ describe('scheduler: timeouts', () => {
     expect(results).toEqual([undefined]); // retryable: the retry is pending
     await at(16_000);
     expect(net.calls).toHaveLength(2);
+  });
+
+  it('honors a shorter per-request deadline (connection tests)', async () => {
+    const { net, scheduler, submit } = setup();
+    const { results } = submit(['a'], { deadlineMs: 5_000 });
+    await at(4_999);
+    expect(results).toEqual([undefined]);
+    await at(5_000);
+    expect(results).toEqual([err('network/timeout')]);
+    expect(net.aborts()).toBe(1);
+    expect(scheduler.inspect()).toMatchObject({ active: { mt: 0 }, segments: 0 });
   });
 
   it('runs the segment deadline across retries and splits, then ends', async () => {

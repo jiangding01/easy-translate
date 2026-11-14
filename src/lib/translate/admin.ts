@@ -1,4 +1,4 @@
-import { type ConfigV1, type Engine, isEngineId } from '@/lib/config/types';
+import { type ConfigV1, CUSTOM_PROVIDER_LIMITS, type Engine, isEngineId } from '@/lib/config/types';
 import { type AppError, appError, type Result } from '@/lib/errors';
 import { handle } from '@/lib/messaging/handle';
 import type {
@@ -21,6 +21,8 @@ import type { ProviderAdapter } from './types';
 // dependencies, so tests need neither a browser nor real messaging.
 
 export const TEST_SAMPLE = 'Hello, world.';
+/** One sentence never needs longer; bounds how long a test can hold a scheduler slot. */
+export const TEST_DEADLINE_MS = 30_000;
 
 export interface AdminSender {
   url?: string;
@@ -64,7 +66,9 @@ function parseDraft(raw: unknown): ProviderTestDraft {
   if (
     !isEngineId(engine) ||
     typeof baseURL !== 'string' ||
+    baseURL.length > CUSTOM_PROVIDER_LIMITS.baseURL ||
     typeof model !== 'string' ||
+    model.length > CUSTOM_PROVIDER_LIMITS.model ||
     (apiKey !== undefined && typeof apiKey !== 'string')
   ) {
     throw invalidPayload();
@@ -123,6 +127,7 @@ export function createAdminHandlers(deps: AdminDeps) {
       adapter,
       context: { source: 'auto', target: config.language.target, settings, apiKey, prompt },
       segments: [{ key: `test:${randomId()}`, text: TEST_SAMPLE }],
+      deadlineMs: TEST_DEADLINE_MS,
       // No persist: a connection test never touches the cache.
     });
     const result = outcome ? await outcome : undefined;

@@ -95,14 +95,15 @@ export type ConfigPath = DotPath<ConfigV1>;
 type PlainPath = Exclude<ConfigPath, 'customProviders'>;
 
 /**
- * Adds, replaces or (with `null`) removes one custom provider and leaves the
- * others alone, so two pages editing different providers never overwrite each other.
+ * One custom provider at a time, so two pages editing different providers never
+ * overwrite each other. `update` merges only the given fields, so two quick
+ * edits of one provider keep both, and it fails for a provider that is gone
+ * instead of bringing it back.
  */
-export interface CustomProviderChange {
-  path: 'customProviders';
-  key: CustomProviderId;
-  value: CustomProvider | null;
-}
+export type CustomProviderChange =
+  | { path: 'customProviders'; key: CustomProviderId; add: CustomProvider }
+  | { path: 'customProviders'; key: CustomProviderId; update: Partial<CustomProvider> }
+  | { path: 'customProviders'; key: CustomProviderId; remove: true };
 
 export type ConfigChange =
   | {

@@ -12,7 +12,6 @@ import {
   type ConfigSnapshot,
   type ConfigV1,
   type CustomProviderChange,
-  isBuiltinEngine,
   isCustomProviderId,
   MAX_CUSTOM_PROVIDERS,
 } from './types';
@@ -110,6 +109,7 @@ export function createConfigRepository(deps: ConfigRepositoryDeps): ConfigReposi
     patch: (changes) =>
       enqueue(async () => {
         let data: unknown = await readWritable();
+        let engineSet = false;
         for (const change of changes) {
           if (isCustomProviderChange(change)) {
             data = applyCustomProviderChange(data, change);
@@ -119,9 +119,10 @@ export function createConfigRepository(deps: ConfigRepositoryDeps): ConfigReposi
           if (!isConfigPath(change.path) || (change.path as string) === 'customProviders') {
             throw appError('config', 'config/unknown-path', `Unknown config path: ${change.path}`);
           }
+          if (change.path === 'translation.engine') engineSet = true;
           data = setPath(data, change.path, change.value);
         }
-        return write(dropDanglingEngine(data));
+        return write(fallBackFromMissingEngine(data, { explicit: engineSet }));
       }),
 
     reset: (paths) =>
@@ -134,7 +135,7 @@ export function createConfigRepository(deps: ConfigRepositoryDeps): ConfigReposi
           }
           data = setPath(data, path, structuredClone(getPath(defaults, path)));
         }
-        return write(data);
+        return write(fallBackFromMissingEngine(data, { explicit: false }));
       }),
   };
 }
@@ -143,40 +144,58 @@ function isCustomProviderChange(change: ConfigChange): change is CustomProviderC
   return change.path === 'customProviders' && 'key' in change;
 }
 
+const CUSTOM_FIELDS = ['name', 'baseURL', 'model'] as const;
+
 function applyCustomProviderChange(data: unknown, change: CustomProviderChange): unknown {
   if (!isCustomProviderId(change.key)) {
     throw appError('config', 'config/invalid-value', 'Invalid custom provider id');
   }
   const current = getPath(data, 'customProviders');
   const providers: Record<string, unknown> = isPlainObject(current) ? { ...current } : {};
-  if (change.value === null) {
+  const exists = Object.hasOwn(providers, change.key);
+
+  if ('remove' in change) {
     delete providers[change.key];
-  } else {
-    if (
-      !Object.hasOwn(providers, change.key) &&
-      Object.keys(providers).length >= MAX_CUSTOM_PROVIDERS
-    ) {
+  } else if ('add' in change) {
+    if (exists) throw appError('config', 'config/invalid-value', 'Custom provider id is taken');
+    if (Object.keys(providers).length >= MAX_CUSTOM_PROVIDERS) {
       throw appError(
         'config',
         'config/provider-limit',
         `At most ${MAX_CUSTOM_PROVIDERS} custom providers`,
       );
     }
-    // Replacing an existing key keeps its position, so display order is stable.
-    providers[change.key] = structuredClone(change.value);
+    providers[change.key] = structuredClone(change.add);
+  } else {
+    // Updating a provider another page just removed must not bring it back.
+    const existing = providers[change.key];
+    if (!exists || !isPlainObject(existing)) {
+      throw appError('config', 'config/provider-missing', 'Custom provider not found');
+    }
+    const fields: Record<string, unknown> = {};
+    for (const field of CUSTOM_FIELDS) {
+      if (field in change.update) fields[field] = change.update[field];
+    }
+    // Merge field by field, so quick successive edits of one provider all survive.
+    providers[change.key] = { ...existing, ...fields };
   }
   return setPath(data, 'customProviders', providers);
 }
 
-/** Removing the default provider falls back to Google in the same write. */
-function dropDanglingEngine(data: unknown): unknown {
+/**
+ * The default engine must exist. When its provider went away (removed, reset)
+ * the default falls back to Google in the same write; choosing a provider that
+ * does not exist is an error instead, so the page never reports a false success.
+ */
+function fallBackFromMissingEngine(data: unknown, options: { explicit: boolean }): unknown {
   const engine = getPath(data, 'translation.engine');
   const providers = getPath(data, 'customProviders');
-  if (isBuiltinEngine(engine)) return data;
-  if (isCustomProviderId(engine) && isPlainObject(providers) && Object.hasOwn(providers, engine)) {
-    return data;
+  if (!isCustomProviderId(engine)) return data;
+  if (isPlainObject(providers) && Object.hasOwn(providers, engine)) return data;
+  if (options.explicit) {
+    throw appError('config', 'config/provider-missing', 'Custom provider not found');
   }
-  return isCustomProviderId(engine) ? setPath(data, 'translation.engine', 'google') : data;
+  return setPath(data, 'translation.engine', 'google');
 }
 
 function describe(error: unknown): string {

@@ -66,6 +66,8 @@ export interface SecretStore {
   set(provider: SecretProvider, key: string | null): Promise<SecretStatus>;
   /** Every built-in provider, plus each custom provider that has a key. */
   status(): Promise<Partial<Record<SecretProvider, SecretStatus>>>;
+  /** Deletes the keys of custom providers that no longer exist; returns how many. */
+  pruneCustom(existing: ReadonlySet<string>): Promise<number>;
 }
 
 export function createSecretStore(store: KeyValueStore): SecretStore {
@@ -90,6 +92,19 @@ export function createSecretStore(store: KeyValueStore): SecretStore {
         else secrets[provider] = cleaned;
         await store.set(SECRETS_STORAGE_KEY, secrets);
         return toStatus(secrets[provider]);
+      });
+    },
+
+    pruneCustom(existing) {
+      return enqueue(async () => {
+        const secrets = readSecrets(await store.get(SECRETS_STORAGE_KEY));
+        const stale = Object.keys(secrets).filter(
+          (provider) => isCustomProviderId(provider) && !existing.has(provider),
+        ) as SecretProvider[];
+        if (stale.length === 0) return 0;
+        for (const provider of stale) delete secrets[provider];
+        await store.set(SECRETS_STORAGE_KEY, secrets);
+        return stale.length;
       });
     },
 

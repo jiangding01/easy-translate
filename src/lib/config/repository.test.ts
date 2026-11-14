@@ -183,30 +183,60 @@ describe('ConfigRepository: custom providers', () => {
   const add = (key: CustomProviderId, name: string): ConfigChange => ({
     path: 'customProviders',
     key,
-    value: entry(name),
+    add: entry(name),
+  });
+  const update = (key: CustomProviderId, fields: Record<string, string>): ConfigChange => ({
+    path: 'customProviders',
+    key,
+    update: fields,
   });
   const remove = (key: CustomProviderId): ConfigChange => ({
     path: 'customProviders',
     key,
-    value: null,
+    remove: true,
   });
+  const setup = () => createConfigRepository({ store: memoryStore(), uiLanguage });
 
-  it('adds, replaces in place and removes single entries', async () => {
-    const repo = createConfigRepository({ store: memoryStore(), uiLanguage });
+  it('adds, updates in place and removes single entries', async () => {
+    const repo = setup();
     await repo.patch([add('custom-aaaaaaaa', 'a')]);
     await repo.patch([add('custom-bbbbbbbb', 'b')]);
-    const replaced = await repo.patch([add('custom-aaaaaaaa', 'a2')]);
-    expect(Object.keys(replaced.data.customProviders)).toEqual([
+    const updated = await repo.patch([update('custom-aaaaaaaa', { name: 'a2' })]);
+    expect(Object.keys(updated.data.customProviders)).toEqual([
       'custom-aaaaaaaa',
       'custom-bbbbbbbb',
     ]);
-    expect(replaced.data.customProviders['custom-aaaaaaaa']?.name).toBe('a2');
+    expect(updated.data.customProviders['custom-aaaaaaaa']).toEqual({ ...entry('a'), name: 'a2' });
     const removed = await repo.patch([remove('custom-aaaaaaaa')]);
     expect(Object.keys(removed.data.customProviders)).toEqual(['custom-bbbbbbbb']);
   });
 
+  it('keeps both fields when one provider is edited twice in quick succession', async () => {
+    const repo = setup();
+    await repo.patch([add('custom-aaaaaaaa', 'a')]);
+    await Promise.all([
+      repo.patch([update('custom-aaaaaaaa', { model: 'new-model' })]),
+      repo.patch([update('custom-aaaaaaaa', { name: 'renamed' })]),
+    ]);
+    const { data } = await repo.load();
+    expect(data.customProviders['custom-aaaaaaaa']).toMatchObject({
+      name: 'renamed',
+      model: 'new-model',
+    });
+  });
+
+  it('never brings back a provider that was removed', async () => {
+    const repo = setup();
+    await repo.patch([add('custom-aaaaaaaa', 'a')]);
+    await repo.patch([remove('custom-aaaaaaaa')]);
+    await expect(repo.patch([update('custom-aaaaaaaa', { name: 'late' })])).rejects.toMatchObject({
+      code: 'config/provider-missing',
+    });
+    expect((await repo.load()).data.customProviders).toEqual({});
+  });
+
   it('keeps concurrent edits of different entries', async () => {
-    const repo = createConfigRepository({ store: memoryStore(), uiLanguage });
+    const repo = setup();
     await Promise.all([
       repo.patch([add('custom-aaaaaaaa', 'a')]),
       repo.patch([add('custom-bbbbbbbb', 'b')]),
@@ -219,8 +249,7 @@ describe('ConfigRepository: custom providers', () => {
   });
 
   it('can make a new entry the default in the same patch', async () => {
-    const repo = createConfigRepository({ store: memoryStore(), uiLanguage });
-    const snapshot = await repo.patch([
+    const snapshot = await setup().patch([
       add('custom-aaaaaaaa', 'a'),
       { path: 'translation.engine', value: 'custom-aaaaaaaa' },
     ]);
@@ -228,25 +257,35 @@ describe('ConfigRepository: custom providers', () => {
   });
 
   it('falls back to Google when the default provider is removed', async () => {
-    const repo = createConfigRepository({ store: memoryStore(), uiLanguage });
+    const repo = setup();
     await repo.patch([
       add('custom-aaaaaaaa', 'a'),
       { path: 'translation.engine', value: 'custom-aaaaaaaa' },
     ]);
-    const snapshot = await repo.patch([remove('custom-aaaaaaaa')]);
+    expect((await repo.patch([remove('custom-aaaaaaaa')])).data.translation.engine).toBe('google');
+  });
+
+  it('refuses to make a missing provider the default instead of silently choosing Google', async () => {
+    const repo = setup();
+    await expect(
+      repo.patch([{ path: 'translation.engine', value: 'custom-zzzzzzzz' }]),
+    ).rejects.toMatchObject({ code: 'config/provider-missing' });
+    expect((await repo.load()).data.translation.engine).toBe('google');
+  });
+
+  it('falls back to Google when the custom providers are reset', async () => {
+    const repo = setup();
+    await repo.patch([
+      add('custom-aaaaaaaa', 'a'),
+      { path: 'translation.engine', value: 'custom-aaaaaaaa' },
+    ]);
+    const snapshot = await repo.reset(['customProviders']);
+    expect(snapshot.data.customProviders).toEqual({});
     expect(snapshot.data.translation.engine).toBe('google');
   });
 
-  it('turns a default engine that does not exist into Google', async () => {
-    const repo = createConfigRepository({ store: memoryStore(), uiLanguage });
-    await expect(
-      repo.patch([{ path: 'translation.engine', value: 'custom-zzzzzzzz' }]),
-    ).resolves.toMatchObject({ data: { translation: { engine: 'google' } } });
-  });
-
-  it(`stops at ${MAX_CUSTOM_PROVIDERS} entries but still allows replacing one`, async () => {
-    const store = memoryStore();
-    const repo = createConfigRepository({ store, uiLanguage });
+  it(`stops adding at ${MAX_CUSTOM_PROVIDERS} entries but still allows updates`, async () => {
+    const repo = setup();
     const ids = Array.from(
       { length: MAX_CUSTOM_PROVIDERS },
       (_, index) => `custom-${String(index).padStart(8, '0')}` as CustomProviderId,
@@ -255,26 +294,35 @@ describe('ConfigRepository: custom providers', () => {
     await expect(repo.patch([add('custom-zzzzzzzz', 'z')])).rejects.toMatchObject({
       code: 'config/provider-limit',
     });
-    await expect(repo.patch([add(ids[0] as CustomProviderId, 'again')])).resolves.toBeDefined();
+    await expect(
+      repo.patch([update(ids[0] as CustomProviderId, { name: 'again' })]),
+    ).resolves.toBeDefined();
   });
 
-  it('rejects malformed ids and values, and replacing the whole record', async () => {
+  it('rejects malformed ids, a taken id, invalid values and replacing the whole record', async () => {
     const store = memoryStore();
     const repo = createConfigRepository({ store, uiLanguage });
     const badId = {
       path: 'customProviders',
       key: 'custom',
-      value: entry('a'),
+      add: entry('a'),
     } as unknown as ConfigChange;
     await expect(repo.patch([badId])).rejects.toMatchObject({ code: 'config/invalid-value' });
-    const badValue = {
-      path: 'customProviders',
-      key: 'custom-aaaaaaaa',
-      value: { name: 'x'.repeat(41), baseURL: '', model: '' },
-    } as unknown as ConfigChange;
+    const badValue = add('custom-aaaaaaaa', 'x'.repeat(41));
     await expect(repo.patch([badValue])).rejects.toMatchObject({ code: 'config/invalid-value' });
     const whole = { path: 'customProviders', value: {} } as unknown as ConfigChange;
     await expect(repo.patch([whole])).rejects.toMatchObject({ code: 'config/unknown-path' });
     expect(store.data.has('config')).toBe(false);
+    await repo.patch([add('custom-aaaaaaaa', 'a')]);
+    await expect(repo.patch([add('custom-aaaaaaaa', 'b')])).rejects.toMatchObject({
+      code: 'config/invalid-value',
+    });
+  });
+
+  it('caps the OpenAI base URL and model like custom providers', async () => {
+    const repo = setup();
+    await expect(
+      repo.patch([{ path: 'providers.openai.model', value: 'm'.repeat(201) }]),
+    ).rejects.toMatchObject({ code: 'config/invalid-value' });
   });
 });

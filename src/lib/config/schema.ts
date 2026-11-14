@@ -7,14 +7,15 @@ import {
   type Engine,
   isBuiltinEngine,
   isEngineId,
-  MAX_CUSTOM_PROVIDERS,
   THEMES,
 } from './types';
 
+const LIMITS = CUSTOM_PROVIDER_LIMITS;
+
 const customProviderSchema = z.looseObject({
-  name: z.string().max(CUSTOM_PROVIDER_LIMITS.name),
-  baseURL: z.string().max(CUSTOM_PROVIDER_LIMITS.baseURL),
-  model: z.string().max(CUSTOM_PROVIDER_LIMITS.model),
+  name: z.string().max(LIMITS.name),
+  baseURL: z.string().max(LIMITS.baseURL),
+  model: z.string().max(LIMITS.model),
 });
 
 // Background-only: the client never imports zod.
@@ -32,15 +33,16 @@ export const configSchema = z
       engine: z.custom<Engine>(isEngineId, { message: 'Unknown engine' }),
     }),
     providers: z.looseObject({
-      openai: z.looseObject({ baseURL: z.string(), model: z.string() }),
-      deepseek: z.looseObject({ model: z.string() }),
-      gemini: z.looseObject({ model: z.string() }),
-    }),
-    customProviders: z
-      .record(z.string().regex(CUSTOM_PROVIDER_ID_PATTERN), customProviderSchema)
-      .refine((providers) => Object.keys(providers).length <= MAX_CUSTOM_PROVIDERS, {
-        message: `At most ${MAX_CUSTOM_PROVIDERS} custom providers`,
+      openai: z.looseObject({
+        baseURL: z.string().max(LIMITS.baseURL),
+        model: z.string().max(LIMITS.model),
       }),
+      deepseek: z.looseObject({ model: z.string().max(LIMITS.model) }),
+      gemini: z.looseObject({ model: z.string().max(LIMITS.model) }),
+    }),
+    // The 10-entry limit is enforced when adding (repository), not here: a stored
+    // record over the limit (a newer build) must not lose every entry on repair.
+    customProviders: z.record(z.string().regex(CUSTOM_PROVIDER_ID_PATTERN), customProviderSchema),
   })
   // Runs only once the shape is valid: the default engine must exist.
   .superRefine((config, ctx) => {

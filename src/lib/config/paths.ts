@@ -34,9 +34,10 @@ export function isConfigPath(path: unknown): path is ConfigPath {
   return typeof path === 'string' && CONFIG_PATHS.includes(path);
 }
 
-export function getPath(target: unknown, path: string): unknown {
+/** Reads by path segments; keys may contain dots (record keys are arbitrary). */
+export function getIn(target: unknown, segments: readonly string[]): unknown {
   let current = target;
-  for (const key of path.split('.')) {
+  for (const key of segments) {
     if (!isPlainObject(current)) return undefined;
     current = current[key];
   }
@@ -44,14 +45,33 @@ export function getPath(target: unknown, path: string): unknown {
 }
 
 /**
- * Returns a copy of `target` with `value` at `path`. Intermediate objects are
- * cloned (or created when missing); the value itself replaces whatever was
+ * Returns a copy of `target` with `value` at `segments`. Intermediate objects
+ * are cloned (or created when missing); the value itself replaces whatever was
  * there, so arrays and records are swapped as a whole.
  */
-export function setPath<T>(target: T, path: string, value: unknown): T {
-  const [head, ...rest] = path.split('.');
+export function setIn<T>(target: T, segments: readonly string[], value: unknown): T {
+  const [head, ...rest] = segments;
   if (head === undefined) return target;
   const source: Record<string, unknown> = isPlainObject(target) ? target : {};
-  const next = rest.length === 0 ? value : setPath(source[head], rest.join('.'), value);
+  const next = rest.length === 0 ? value : setIn(source[head], rest, value);
   return { ...source, [head]: next } as T;
+}
+
+/** Copy of `target` without the node at `segments` (unchanged when the parent is missing). */
+export function deleteIn(target: unknown, segments: readonly string[]): unknown {
+  const parentSegments = segments.slice(0, -1);
+  const last = segments.at(-1);
+  const parent = parentSegments.length ? getIn(target, parentSegments) : target;
+  if (last === undefined || !isPlainObject(parent)) return target;
+  const { [last]: _removed, ...rest } = parent;
+  return parentSegments.length ? setIn(target, parentSegments, rest) : rest;
+}
+
+/** Dot-path forms for schema-derived config paths (whose keys never contain dots). */
+export function getPath(target: unknown, path: string): unknown {
+  return getIn(target, path.split('.'));
+}
+
+export function setPath<T>(target: T, path: string, value: unknown): T {
+  return setIn(target, path.split('.'), value);
 }

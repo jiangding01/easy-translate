@@ -31,9 +31,15 @@ export function useSecretStatuses(): { statuses: SecretStatuses | undefined; ref
   const latest = useRef(0);
   const refresh = useCallback(() => {
     const sequence = ++latest.current;
-    void admin.secretStatus().then((result) => {
-      if (sequence === latest.current && result.ok) setStatuses(result.data);
-    });
+    const attempt = (retries: number) => {
+      void admin.secretStatus().then((result) => {
+        if (sequence !== latest.current) return;
+        if (result.ok) setStatuses(result.data);
+        // A failed latest read (SW waking up) would leave stale statuses: retry once.
+        else if (retries > 0) setTimeout(() => attempt(retries - 1), 500);
+      });
+    };
+    attempt(1);
   }, []);
   useEffect(() => refresh(), [refresh]);
   return { statuses, refresh };
