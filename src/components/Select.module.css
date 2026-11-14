@@ -101,10 +101,10 @@
   opacity: 1;
   transform: none;
   transition:
-    opacity 160ms ease,
-    transform 200ms var(--et-ease-grow),
-    overlay 160ms allow-discrete,
-    display 160ms allow-discrete;
+    opacity var(--et-dur-base) ease,
+    transform var(--et-dur-base) var(--et-ease-grow),
+    overlay var(--et-dur-base) allow-discrete,
+    display var(--et-dur-base) allow-discrete;
 }
 .list[data-align="end"] {
   transform-origin: top right;
@@ -118,7 +118,7 @@
 .list:not(:popover-open) {
   opacity: 0;
   transform: scale(0.98);
-  transition-duration: 120ms;
+  transition-duration: var(--et-dur-fast);
 }
 @starting-style {
   .list:popover-open {
@@ -179,12 +179,21 @@
 .warn {
   background: var(--et-color-warn);
 }
-.trigger .dot {
-  margin-right: -2px;
+.idle {
+  background: var(--et-color-border-strong);
 }
 
+/* Reduced motion: no scaling or sliding, only a short fade. */
 @media (prefers-reduced-motion: reduce) {
   .list,
+  .list:not(:popover-open) {
+    transform: none;
+  }
+  @starting-style {
+    .list[data-side]:popover-open {
+      transform: none;
+    }
+  }
   .chevron {
     transition-duration: 1ms;
   }

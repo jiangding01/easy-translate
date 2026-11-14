@@ -34,12 +34,17 @@ export function GeneralPage({ config }: { config: ConfigV1 }) {
     <section aria-label="通用" className={styles.card}>
       <div className={styles.settingRow}>
         <div className={styles.settingText}>
-          <span id="target-language-label" className={styles.settingName}>
+          <label
+            id="target-language-label"
+            htmlFor="target-language"
+            className={styles.settingName}
+          >
             目标语言
-          </span>
+          </label>
           <span className={styles.settingHint}>网页会被翻译成这种语言</span>
         </div>
         <Select
+          id="target-language"
           labelledBy="target-language-label"
           align="end"
           minWidth={200}
@@ -51,12 +56,17 @@ export function GeneralPage({ config }: { config: ConfigV1 }) {
 
       <div className={styles.settingRow}>
         <div className={styles.settingText}>
-          <span id="source-language-label" className={styles.settingName}>
+          <label
+            id="source-language-label"
+            htmlFor="source-language"
+            className={styles.settingName}
+          >
             源语言
-          </span>
+          </label>
           <span className={styles.settingHint}>自动检测适合大多数网页；检测不准时再手动指定</span>
         </div>
         <Select
+          id="source-language"
           labelledBy="source-language-label"
           align="end"
           minWidth={200}

@@ -34,19 +34,24 @@ export function listKey(key: string, active: number, count: number): ListKeyResu
 }
 
 /**
- * Type-to-select: the next label (after `active`, wrapping) that starts with
- * `query`; a repeated single letter cycles through matches. -1 when none.
+ * Type-to-select: the next option (after `active`, wrapping) with a term that
+ * starts with `query`; a repeated single letter cycles through matches. Each
+ * option has several terms (label, code). -1 when none.
  */
-export function typeahead(labels: readonly string[], active: number, query: string): number {
+export function typeahead(
+  terms: readonly (readonly string[])[],
+  active: number,
+  query: string,
+): number {
   const q = query.toLocaleLowerCase();
-  if (q === '') return -1;
+  if (q.trim() === '') return -1;
   const repeated = q.length > 1 && [...q].every((char) => char === q[0]);
   const needle = repeated ? q.slice(0, 1) : q;
   // Continuing a word keeps the current match when it still fits.
   const start = needle.length > 1 ? Math.max(active, 0) : active + 1;
-  for (let step = 0; step < labels.length; step += 1) {
-    const index = (start + step) % labels.length;
-    if (labels[index]?.toLocaleLowerCase().startsWith(needle)) return index;
+  for (let step = 0; step < terms.length; step += 1) {
+    const index = (start + step) % terms.length;
+    if (terms[index]?.some((term) => term.toLocaleLowerCase().startsWith(needle))) return index;
   }
   return -1;
 }
