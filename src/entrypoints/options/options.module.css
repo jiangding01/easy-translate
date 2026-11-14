@@ -486,6 +486,9 @@
 }
 .link {
   margin-left: auto;
+  margin-right: -3px;
+  padding: 0 3px;
+  border-radius: var(--et-radius-xs);
   color: var(--et-color-accent-ink);
   font-size: var(--et-fs-caption);
   text-decoration: none;
