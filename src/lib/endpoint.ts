@@ -43,6 +43,15 @@ export function parseEndpointOrigin(baseURL: string): Result<EndpointOrigin> {
   return ok({ pattern: `${url.protocol}//${url.hostname}/*`, origin: url.origin });
 }
 
+/** True for a server on this machine (localhost or 127.0.0.1). */
+export function isLocalEndpoint(baseURL: string): boolean {
+  try {
+    return LOCAL_HOSTS.has(new URL(normalizeBaseURL(baseURL)).hostname);
+  } catch {
+    return false;
+  }
+}
+
 /** Origins covered by the manifest's `host_permissions`. */
 export const BUILTIN_ORIGINS: ReadonlySet<string> = new Set([
   'https://translate.googleapis.com',

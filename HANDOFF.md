@@ -1,6 +1,6 @@
 # Easy Translate 交接文档（HANDOFF）
 
-> 最后更新：2026-11-14 · 阶段：**M1 翻译核心已完成，待合并**（分支 `feat/m1-translation-core`）：后台能力、设置页与工具栏面板（3b）都已完成并通过审查，等 PR 的 CI 通过后由用户合并
+> 最后更新：2026-11-14 · 阶段：**M1 翻译核心已合并**（PR #2）；真机验收发现的问题在 PR #3（分支 `fix/m1-polish`）修复。下一步：M2 整页翻译
 > 本文给接手的 Agent 或开发者用，按顺序读完即可直接开工。文中凡与其他文档冲突的地方，以本文和「权威文档」为准。
 
 ## 1. 项目一句话
@@ -44,13 +44,13 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
 ## 4. 当前代码状态
 
 - **main**：M0 地基（PR #1 已合并）。
-- **`feat/m1-translation-core`**：M1 翻译核心，待合并。依据 `docs/plans/m1-translation-core.md`（3b 的修订见第 4.11 节）。
+- **main**：M1 翻译核心已合并（PR #2，合并提交 `ea507ec`）；验收修复在 PR #3。依据 `docs/plans/m1-translation-core.md`（3b 的修订见第 4.11 节）。
   - 后台：`src/lib/translate/`（provider、调度器、缓存、密钥、权限、翻译服务、管理消息、Port `et-translate`）。
   - 配置：内置引擎字段，加最多 10 个自定义服务 `customProviders`，按条目 `add` / `update` / `remove` 写入；字段映射只在 `src/lib/config/engine-fields.ts` 一处。
   - 页面共用：`src/lib/engine-view.ts`（引擎列表与就绪判断）、`src/lib/endpoint.ts`（地址与权限判断）、`src/lib/host-permission.ts`、`src/components/Select.tsx`（自研下拉）。
   - 界面：设置页（通用 / 翻译服务）与工具栏面板，按「隐中生岛」加琥珀主题重做；token 在 `src/styles/tokens.css`，对比度由 `scripts/check-contrast.mjs` 校验。
 - **可用命令**：`npm run dev | build | lint | format | typecheck | test | check | check:contrast | check:size | zip`。`npm run check` 通过（416 个测试）。
-- **还没有**：网页上的任何翻译入口（从 M2 开始）；M1 的手工验收（方案第 10 节）待在真实 Chrome 中执行。
+- **还没有**：网页上的任何翻译入口（从 M2 开始）。
 
 ## 5. 批次状态与下一步
 
@@ -65,11 +65,12 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
     - `call()` 把所有发送失败都归为「后台不可达」。M1 新增的写操作应当保持幂等，因为可能出现「实际已写入、但回包丢失」的情况。
     - 以上 3 项已在 [`docs/plans/m1-translation-core.md`](docs/plans/m1-translation-core.md) 中定案：provider 用固定键对象；超时由调度器分三层负责；写操作保持幂等。
 - **M1 翻译核心**：方案见 [`docs/plans/m1-translation-core.md`](docs/plans/m1-translation-core.md)，状态以该文件头部为准。
-  - **已完成，待合并**（分支 `feat/m1-translation-core`）：
+  - **已合并**（PR #2）：
     - 后台：provider（google 用 POST，LLM 一律流式）、编解码、提示词、IndexedDB 缓存、密钥、权限、调度器、翻译服务、后台接线；
     - 3b：多个自定义服务、琥珀 token 与对比度校验、设置页、工具栏面板、自研下拉组件；
     - 审查：后台部分做过一轮 Deep 审查；3b 做过两轮 Deep 审查（安全、架构、四个对抗角度，再加修复后复查），下拉组件做过一轮 Standard 审查；确认的问题都已修复并补了回归测试。
-  - **合并前**：CI 通过；用户按方案第 10 节在真实 Chrome 中手工验收（第 2–5 项需要自备密钥）。
+  - **真机验收**（2026-11-14，用户在 Chrome 中用生产构建验证）：Google 测试连接、DeepSeek 保存密钥、添加本地 Ollama（授权提示、设置 `OLLAMA_ORIGINS` 后连通）、删除默认自定义服务回退到 Google、通用页下拉（含键盘）、亮暗主题、工具栏面板的各种状态都通过。清空缓存要等 M2 有网页翻译后才能测。发现的问题在 PR #3 修复。
+  - **开发版提示**：WXT 的开发构建会给 manifest 加上 `http(s)://*/*`，Chrome 会提示可选权限多余；授权流程只能用生产构建（`npm run build`）测试。
 - **界面方向已确认**：「隐中生岛」加琥珀主题色，完整规范见 [`docs/plans/ui-isle-direction.md`](docs/plans/ui-isle-direction.md)。原型在 https://claude.ai/artifact/GJTgsP7SFHmhP6M2SczwTp 。最高原则：人的感受第一、少打扰、近乎原生的沉浸阅读。
   - 默认在所有页面上都不留痕迹，由用户主动唤起。
   - 不常驻悬浮球。
@@ -112,7 +113,7 @@ M1 和 M2（整页翻译）完成后即构成 MVP。
 | 内容脚本的 `<all_urls>` 能让后台跨域 fetch | M1 | 扩大 `host_permissions` |
 | Translator / LanguageDetector API 在 Service Worker 中**不可用** | M3 前 | 本地引擎放到内容脚本或 offscreen document 执行，后台语言检测只用 `chrome.i18n.detectLanguage` |
 | Port 消息能刷新 SW 的 idle 计时 | M1 | 内容脚本断线后重连并重发未完成的段落 |
-| 本地 Ollama 接受扩展后台发出的请求（来源为 `chrome-extension://`） | M1 手工验收第 3 项 | 在设置页的测试失败详情里提示设置 `OLLAMA_ORIGINS`，并写进说明 |
+| 本地 Ollama 接受扩展后台发出的请求（来源为 `chrome-extension://`） | **已实测（2026-11-14）：默认拒绝，返回 403** | 已处理：本地 403 单独提示设置 `OLLAMA_ORIGINS`，README 有接入说明；设置后必须从菜单栏彻底退出 Ollama 再打开 |
 | YouTube 的 `captionTracks` 能直接取到字幕 | M5 | 回退到 hook 网络请求，并给出失效诊断提示 |
 
 ## 7. 协作约定（来自用户的全局偏好）
@@ -147,5 +148,6 @@ M1 和 M2（整页翻译）完成后即构成 MVP。
 | 2026-11-13 | M0 方案 `docs/plans/m0-foundation.md` 经审查后获批。在 `feat/m0-foundation` 上实现 M0（工具链与 CI、配置仓库、消息协议与 Port 传输层、设计 token 与主题），`npm run check` 通过。状态：**已实现，待审查和合并**；第 9 节手工验收待在真实 Chrome 中执行。下一步：审查 → 推送并开 PR → CI 通过后由用户合并 → M1 |
 | 2026-11-13 | 已开 PR jiangding01/easy-translate#1。按 check skill 的 Deep 流程补做了完整审查：安全、架构 2 个专项审查，加上 4 个角度的对抗式审查。确认 13 项问题并修复，每项都先写回归测试；其中 Port 修了「无法序列化的响应会让请求永久挂起」等问题。M1 开工前必须决定的事项已记入第 5 节。状态：**等待用户合并** |
 | 2026-11-13 | **M0 已合并**（PR #1，合并提交 `c5b7bb2`，main 上的 CI 通过）。用户在真实 Chrome 中完成手工验收：第 1、2、3、4、5b、6 项通过；5a（`chrome://` 页面的提示）只有单元测试覆盖。LCU 的 URL 策略只允许 http/https，不能用来测试扩展页面。下一步：M1 翻译核心（分支 `feat/m1-translation-core`） |
+| 2026-11-14 | **M1 已合并**（PR #2，CI 全绿，用户手动合并）。用户用生产构建做了真机验收，主要流程都通过。发现 7 个问题：展开行背景偏粉（白色 token 色相为 0，OKLCH 混合时被拉向粉色）、本地 Ollama 返回 403 被误报为密钥无效、对话框初始焦点、文字按钮焦点框、详情区首行焦点框被裁、下拉宽度、README 缺 Ollama 说明，都在 PR #3 修复。<br>**下一步**：PR #3 合并 → M2 整页翻译方案（先出原型） |
 | 2026-11-14 | **M1 第 3b 步完成**。<br>**原型**：设置页、工具栏面板，以及加宽的「添加服务」对话框和自研下拉，用户确认后实现。<br>**变更**：自定义服务从 1 个改成最多 10 个，按条目写入；主题换成琥珀，组件只引用 token；自研下拉取代原生下拉；工具栏面板体积预算调到 90KB。<br>**审查**：3b 做了两轮 Deep 审查（安全、架构、四个对抗角度，加修复后复查），下拉组件做了一轮 Standard 审查。修掉的主要问题：同一服务快速连改两处会互相覆盖；删除后的迟到修改会让服务复活；记录键名含「.」或叫 `constructor` 时会清空全部设置；孤儿密钥（改为后台负责清理，只读配置下不清理）；测试连接可能占住调度槽 180 秒。下拉组件的审查修了读屏读不出当前值、面板误把未授权服务标为可用等 8 项。共 416 个测试。<br>**下一步**：推送并开 PR → CI → 用户手工验收并合并 → M2 |
 | 2026-11-14 | **M1 后台能力完成，暂停于 3b 之前**（应用户要求，下次继续）。<br>**实现**：分三段完成。第一段 Sonnet：配置、provider、缓存。第二段 Opus：调度器与服务。3a Sonnet：后台接线。<br>**审查**：按 check skill 的 Deep 流程，做了安全、架构 2 个专项审查，加上 4 个角度的对抗式审查，确认的问题已全部修复。主要有：OpenAI baseURL 绕过权限检查；配置写入没有校验发送方；冷却作用域与超大 Retry-After；缓存淘汰阻塞读取，TTL 删除与写入有竞态；LLM 输出被截断或被拦截时，真实原因被掩盖。每项修复都有先红后绿的回归测试，目前共 356 个测试。<br>**设计**：界面方向确认为「隐中生岛」加琥珀主题色，见 `docs/plans/ui-isle-direction.md`。<br>**下一步**：3b 原型 → 3b 实现 → check → 推送并开 PR |

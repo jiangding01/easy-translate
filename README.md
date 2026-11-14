@@ -118,6 +118,19 @@ wxt.config.ts           # WXT 与 Manifest V3 配置
 | [M1 翻译核心方案](docs/plans/m1-translation-core.md) | provider、调度、缓存、密钥、权限与设置页的实现依据 |
 | [界面方向：隐中生岛](docs/plans/ui-isle-direction.md) | 已确认的界面方向、动效规范与琥珀主题 token |
 
+## 接入本地 Ollama
+
+1. 在设置页「翻译服务」点「添加服务」，选「Ollama（本地）」，在「模型」里填 `ollama list` 显示的模型名（例如 `qwen2.5:7b`），点「添加」并在浏览器的授权提示里选「允许」。
+2. Ollama 默认拒绝来自浏览器扩展的请求，测试连接会提示「本地服务拒绝了扩展的请求」。在终端运行下面的命令，然后**从菜单栏彻底退出 Ollama 再重新打开**（只关窗口不会重启后台服务）：
+
+   ```bash
+   launchctl setenv OLLAMA_ORIGINS "chrome-extension://*"
+   ```
+
+   用 `ollama serve` 启动的，改成 `OLLAMA_ORIGINS="chrome-extension://*" ollama serve`。可用 `ps -o lstart,command -p $(pgrep -f "ollama serve")` 确认服务确实是刚启动的。
+3. 不需要打开 Ollama 设置里的「Expose Ollama to the network」：扩展访问的是本机地址，打开它只会把服务暴露给局域网。
+4. 速度：模型第一次加载较慢，可能超时，等加载完再测一次即可。翻译用不到很长的上下文，把 Ollama 设置里的 Context length 调到 8k–16k 能明显加快加载和响应；整页翻译更适合 7B–8B 的模型。
+
 ## 本地验收
 
 1. 加载扩展，打开设置页的「翻译服务」，默认引擎为 Google，点「测试连接」应显示译文和延迟。

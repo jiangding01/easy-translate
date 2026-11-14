@@ -310,6 +310,12 @@
   color: var(--et-color-text);
   text-align: left;
 }
+.rowMain:focus-visible {
+  /* Inset: the card clips its rounded corners, and an outside ring would also
+     spill over the neighbouring rows. */
+  outline-offset: -2px;
+  border-radius: var(--et-radius-md);
+}
 .rowText {
   flex-grow: 1;
   min-width: 0;
@@ -388,7 +394,9 @@
   overflow: hidden;
 }
 .panelInner {
-  padding: 2px 18px 14px 52px;
+  /* 6px on top: .panelClip clips, and the first field's focus ring and glow
+     reach about 5px above it. */
+  padding: 6px 18px 14px 52px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -484,6 +492,9 @@
 }
 .link {
   margin-left: auto;
+  margin-right: -3px;
+  padding: 0 3px;
+  border-radius: var(--et-radius-xs);
   color: var(--et-color-accent-ink);
   font-size: var(--et-fs-caption);
   text-decoration: none;
@@ -564,7 +575,9 @@
 .textButton,
 .dangerText {
   border: 0;
-  padding: 0;
+  padding: 0 3px;
+  margin: 0 -3px;
+  border-radius: var(--et-radius-xs);
   background: transparent;
   color: var(--et-color-accent-ink);
   font-size: var(--et-fs-caption);

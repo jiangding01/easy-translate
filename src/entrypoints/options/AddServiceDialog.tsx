@@ -48,6 +48,7 @@ const emptyDraft = (): Draft => ({
  */
 export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
+  const modelInput = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const { patch } = useConfig();
   const notice = useNotice();
@@ -71,6 +72,8 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
         dialog.style.transformOrigin = `${button.left + button.width / 2 - left}px ${button.top + button.height / 2 - DIALOG_TOP}px`;
       }
       dialog.showModal();
+      // The preset already fills the address; the model is what the user types next.
+      modelInput.current?.focus();
     } else if (!open && dialog.open) {
       dialog.close();
     }
@@ -246,6 +249,7 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
               className={`${styles.input} ${styles.mono}`}
               spellCheck={false}
               maxLength={CUSTOM_PROVIDER_LIMITS.model}
+              ref={modelInput}
               value={draft.model}
               onChange={set('model')}
               placeholder="填写模型 ID"
