@@ -1,0 +1,215 @@
+/* Toolbar panel: small, one main action, quiet states. Tokens only. */
+
+.panel {
+  width: 280px;
+  font-size: var(--et-fs-page-sm);
+  line-height: var(--et-lh-page-sm);
+  background: var(--et-color-elevated);
+}
+
+.head {
+  padding: 12px 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.host {
+  min-height: 18px;
+  font-size: var(--et-fs-page-xs);
+  line-height: 18px;
+  color: var(--et-color-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* "English → 简体中文 ▾": the target is a native select dressed as text. */
+.pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  font-size: 14px;
+  font-weight: var(--et-fw-semibold);
+  color: var(--et-color-text);
+}
+.faint {
+  color: var(--et-color-faint);
+  flex-shrink: 0;
+}
+.pairSelect {
+  appearance: none;
+  height: 30px;
+  margin-left: -6px;
+  padding: 0 22px 0 6px;
+  border: 0;
+  border-radius: var(--et-radius-md);
+  background: transparent
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='%23888' stroke-width='1.4'%3E%3Cpath d='M2.5 4l2.5 2.5L7.5 4'/%3E%3C/svg%3E")
+    no-repeat right 6px center;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--et-dur-fast) var(--et-ease-out);
+}
+.pairSelect:hover {
+  background-color: var(--et-color-surface);
+}
+
+.body {
+  padding: 10px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.primary {
+  width: 100%;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--et-color-accent);
+  color: var(--et-color-on-accent);
+  font-size: 14px;
+  font-weight: var(--et-fw-semibold);
+  text-align: left;
+}
+.quiet {
+  margin: 0;
+  font-size: var(--et-fs-page-xs);
+  line-height: 17px;
+  color: var(--et-color-muted);
+}
+.panel > .quiet {
+  padding: 16px;
+}
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0;
+}
+.message strong {
+  font-size: 14px;
+  font-weight: var(--et-fw-semibold);
+}
+.message span {
+  font-size: 12.5px;
+  line-height: 19px;
+  color: var(--et-color-muted);
+}
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--et-color-surface);
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--et-color-muted);
+}
+.noticeText {
+  flex-grow: 1;
+  min-width: 0;
+}
+.error {
+  margin: 0;
+  font-size: var(--et-fs-page-xs);
+  color: var(--et-color-warn);
+}
+.textButton {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--et-color-accent-ink);
+  font-size: 12.5px;
+  font-weight: var(--et-fw-medium);
+  white-space: nowrap;
+}
+.textButton:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.footer {
+  height: 42px;
+  padding: 0 6px 0 8px;
+  border-top: 1px solid var(--et-color-border);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.spacer {
+  flex-grow: 1;
+}
+.engine {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.dot,
+.okDot,
+.warnDot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: var(--et-radius-full);
+  background: var(--et-color-border-strong);
+}
+.okDot {
+  background: var(--et-color-ok);
+}
+.warnDot {
+  background: var(--et-color-warn);
+}
+.notice .warnDot {
+  margin-top: 6px;
+}
+.engine > span {
+  position: absolute;
+  left: 8px;
+  pointer-events: none;
+}
+.engineSelect {
+  appearance: none;
+  max-width: 200px;
+  height: 30px;
+  padding: 0 22px 0 20px;
+  border: 0;
+  border-radius: var(--et-radius-md);
+  background: transparent
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='%23888' stroke-width='1.4'%3E%3Cpath d='M2.5 4l2.5 2.5L7.5 4'/%3E%3C/svg%3E")
+    no-repeat right 6px center;
+  color: var(--et-color-muted);
+  font: inherit;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition:
+    background-color var(--et-dur-fast) var(--et-ease-out),
+    color var(--et-dur-fast) var(--et-ease-out);
+}
+.engineSelect:hover {
+  background-color: var(--et-color-surface);
+  color: var(--et-color-text);
+}
+.iconButton {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--et-radius-md);
+  background: transparent;
+  color: var(--et-color-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color var(--et-dur-fast) var(--et-ease-out),
+    color var(--et-dur-fast) var(--et-ease-out);
+}
+.iconButton:hover {
+  background: var(--et-color-surface);
+  color: var(--et-color-text);
+}

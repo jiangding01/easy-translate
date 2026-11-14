@@ -18,7 +18,8 @@
     "test:watch": "vitest",
     "check:build": "node scripts/check-build.mjs",
     "check:size": "node scripts/check-size.mjs",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:build && npm run check:size",
+    "check:contrast": "node scripts/check-contrast.mjs",
+    "check": "npm run lint && npm run typecheck && npm run check:contrast && npm run test && npm run build && npm run check:build && npm run check:size",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

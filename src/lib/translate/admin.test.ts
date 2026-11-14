@@ -133,6 +133,23 @@ describe('secrets', () => {
     expect(JSON.stringify(bad)).not.toContain('SECRET');
   });
 
+  it('lets the popup read the status, but nothing else', async () => {
+    const { handlers } = setup({}, { popupUrl: 'chrome-extension://abc/popup.html' });
+    const popup = { url: 'chrome-extension://abc/popup.html' };
+    expect(await handlers['secrets.status'](popup)).toMatchObject({ ok: true });
+    expect(
+      await handlers['secrets.set'](popup, { provider: 'openai', key: SAVED_KEY }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'validation/forbidden-sender' },
+    });
+    expect(
+      await handlers['secrets.status']({ url: 'https://evil.example/popup.html' }),
+    ).toMatchObject({
+      ok: false,
+    });
+  });
+
   it('accepts custom provider ids and rejects the bare word custom', async () => {
     const { handlers } = setup();
     expect(
