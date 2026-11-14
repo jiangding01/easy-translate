@@ -50,7 +50,10 @@ export default defineBackground(() => {
 
   // A key lives exactly as long as its custom provider, however the provider went
   // away (deleted on any page, reset, dropped by repair). The background owns this.
-  const pruneSecrets = (snapshot: ConfigSnapshot) => {
+  // A config written by a newer build is read-only here: its defaults stand in for
+  // providers that still exist, so it must never decide which keys to delete.
+  const pruneSecrets = (snapshot: ConfigSnapshot | undefined) => {
+    if (!snapshot) return;
     secrets.pruneCustom(new Set(Object.keys(snapshot.data.customProviders))).catch(() => {
       console.warn('[secrets] prune failed');
     });
@@ -58,7 +61,7 @@ export default defineBackground(() => {
   const load = () => {
     // Shares the repository queue with patches, so it never races them.
     repo
-      .load()
+      .loadStored()
       .then(pruneSecrets)
       .catch((error: unknown) => {
         console.warn('[config] load failed:', toAppError(error).code);

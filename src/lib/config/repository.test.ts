@@ -163,6 +163,15 @@ describe('ConfigRepository', () => {
     });
   });
 
+  it('loadStored withholds the read-only snapshot of a newer build', async () => {
+    const newer = memoryStore({
+      config: { schemaVersion: 2, data: { customProviders: { 'custom-aaaaaaaa': {} } } },
+    });
+    expect(await createConfigRepository({ store: newer, uiLanguage }).loadStored()).toBeUndefined();
+    const fine = createConfigRepository({ store: memoryStore(), uiLanguage });
+    expect((await fine.loadStored())?.data.translation.engine).toBe('google');
+  });
+
   it('refuses patch and reset in read-only mode and never writes on load', async () => {
     const newer = { config: { schemaVersion: 2, data: { brandNew: true } } };
     const store = memoryStore(newer);

@@ -152,18 +152,20 @@ export function EngineItem(props: Props) {
   }
 
   const keyed = secret?.configured === true;
-  // The test runs on what is typed now, so readiness is judged on the drafts.
+  // The test runs on what is typed now, so readiness is judged on the drafts. A
+  // host typed but not saved yet has no known grant: the background checks it.
   const draftPattern = hasBase ? permissionPattern(draft.baseURL) : undefined;
   const testReadiness = engineReadiness({
     engine,
     baseURL: draft.baseURL,
     model: draft.model,
     secret,
-    granted: draftPattern === pattern ? granted : undefined,
+    granted: draftPattern === pattern ? granted : true,
     keyDraft: keyDraft.trim() !== '',
   });
   const blocked = testReadiness.reason ? TEST_BLOCKED_TEXT[testReadiness.reason] : undefined;
-  const testedWith = `${draft.baseURL.trim()}\n${draft.model.trim()}\n${keyed}`;
+  // Key saves are not part of it: a key saved mid-test must not discard that result.
+  const testedWith = `${draft.baseURL.trim()}\n${draft.model.trim()}`;
 
   const sub = rowSubtitle(engine, saved);
   const link = builtin ? BUILTIN_META[engine].link : undefined;

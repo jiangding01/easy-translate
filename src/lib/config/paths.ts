@@ -38,7 +38,8 @@ export function isConfigPath(path: unknown): path is ConfigPath {
 export function getIn(target: unknown, segments: readonly string[]): unknown {
   let current = target;
   for (const key of segments) {
-    if (!isPlainObject(current)) return undefined;
+    // Own keys only: a record key like "constructor" must not reach Object.prototype.
+    if (!isPlainObject(current) || !Object.hasOwn(current, key)) return undefined;
     current = current[key];
   }
   return current;
