@@ -26,6 +26,11 @@ assert.deepEqual(
   ['http://127.0.0.1/*', 'http://localhost/*', 'https://*/*'].sort(),
 );
 assert.ok(!manifest.key && !manifest.update_url, 'Legacy extension identity must not be copied');
+assert.deepEqual(
+  manifest.commands?.['translate-page']?.suggested_key,
+  { default: 'Alt+A', mac: 'MacCtrl+Shift+A' },
+  'Missing or changed translate-page shortcut',
+);
 
 const files = [
   manifest.background.service_worker,
