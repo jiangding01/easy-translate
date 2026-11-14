@@ -27,6 +27,13 @@ export function badResponseError(detail = 'Unexpected response shape'): AppError
   return appError('validation', 'validation/bad-response', detail);
 }
 
+/**
+ * Ceiling on accumulated model output. One provider request carries at most 3000
+ * source characters (the scheduler splits page batches to the provider's limits),
+ * so a real translation stays far below this; past it the model is looping.
+ */
+export const MAX_LLM_OUTPUT_CHARS = 64_000;
+
 /** The model stopped at its output limit; a smaller batch may fit. Not retryable as is. */
 export function outputTruncatedError(): AppError {
   return appError('provider', 'provider/output-truncated', 'Model output was truncated');

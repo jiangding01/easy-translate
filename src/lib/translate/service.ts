@@ -1,4 +1,4 @@
-import { type ConfigV1, type Engine, engineFamily } from '@/lib/config/types';
+import { type ConfigV1, type Engine, engineFamily, isEngineId } from '@/lib/config/types';
 import { type AppError, appError, type Result } from '@/lib/errors';
 import { isLanguageCode, type LanguageCode } from '@/lib/languages';
 import {
@@ -140,7 +140,9 @@ export function parseTranslateRequest(payload: unknown): TranslateRequest {
     throw invalidPayloadError();
   }
   if (target !== undefined && !isLanguageCode(target)) throw invalidPayloadError();
-  return { items, source, target };
+  const { engine } = payload;
+  if (engine !== undefined && !isEngineId(engine)) throw invalidPayloadError();
+  return { items, source, target, engine };
 }
 
 function throwIfAborted(signal: AbortSignal) {
@@ -215,7 +217,8 @@ export function createTranslateService(deps: TranslateServiceDeps): TranslateSer
     throwIfAborted(signal);
     const source: LanguageCode | 'auto' = request.source ?? config.language.source;
     const target: LanguageCode = request.target ?? config.language.target;
-    const engine = config.translation.engine;
+    // A one-off engine ("这次先用 Google") applies to this request only.
+    const engine = request.engine ?? config.translation.engine;
     const adapter = getAdapter(engine);
     const settings = resolveProviderSettings(engine, config);
 

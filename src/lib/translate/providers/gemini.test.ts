@@ -88,6 +88,15 @@ describe('gemini adapter', () => {
     },
   );
 
+  it('stops a runaway stream instead of accumulating without limit', async () => {
+    const parts = Array.from({ length: 70 }, () =>
+      chunk({ candidates: [{ content: { parts: [{ text: 'x'.repeat(1000) }] } }] }),
+    );
+    await expect(run(mockFetch(sseResponse(parts)))).rejects.toMatchObject({
+      code: 'provider/output-truncated',
+    });
+  });
+
   it('maps finishReason MAX_TOKENS to output-truncated', async () => {
     const fn = mockFetch(
       sseResponse([

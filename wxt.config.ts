@@ -16,7 +16,17 @@ export default defineConfig({
       'https://generativelanguage.googleapis.com/*',
     ],
     optional_host_permissions: ['https://*/*', 'http://localhost/*', 'http://127.0.0.1/*'],
+    // Popover (114) and entry animations with @starting-style (117) in the UI.
+    minimum_chrome_version: '117',
     action: { default_title: 'Easy Translate' },
+    commands: {
+      // Not Ctrl+Shift+A on Windows/Linux: Chrome's tab search owns it and the
+      // declaration would silently fail. See docs/plans/m2-page-translation.md 5.1.
+      'translate-page': {
+        suggested_key: { default: 'Alt+A', mac: 'MacCtrl+Shift+A' },
+        description: '翻译此页 / 显示原文',
+      },
+    },
     icons: {
       16: 'icon/16.png',
       48: 'icon/48.png',

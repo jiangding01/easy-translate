@@ -8,6 +8,7 @@ export function createDefaultConfig(uiLanguage: string): ConfigV1 {
     ui: { theme: 'system' },
     language: { target: defaultTargetLanguage(uiLanguage), source: 'auto' },
     translation: { engine: 'google' },
+    page: { style: 'faded', mode: 'bilingual' },
     providers: {
       openai: { baseURL: DEFAULT_OPENAI_BASE_URL, model: 'gpt-5-mini' },
       deepseek: { model: 'deepseek-chat' },
