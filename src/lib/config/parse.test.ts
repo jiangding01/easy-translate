@@ -75,6 +75,19 @@ describe('parseStoredConfig', () => {
     expect(result.resetPaths).toEqual(['customProviders.bad.key']);
   });
 
+  it.each(['constructor', 'toString', 'hasOwnProperty'])(
+    'removes an entry keyed %s instead of reaching Object.prototype',
+    (key) => {
+      const good = { name: 'A', baseURL: 'https://a.example.com/v1', model: 'm' };
+      const result = parse(
+        stored({ ...defaults, ui: { theme: 'dark' }, customProviders: { [key]: good } }),
+      );
+      expect(result.fallback).toBe(false);
+      expect(result.snapshot.data.ui.theme).toBe('dark');
+      expect(result.snapshot.data.customProviders).toEqual({});
+    },
+  );
+
   it('keeps more than ten stored providers (the limit applies when adding)', () => {
     const good = { name: 'A', baseURL: 'https://a.example.com/v1', model: 'm' };
     const customProviders = Object.fromEntries(

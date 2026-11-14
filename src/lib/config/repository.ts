@@ -29,6 +29,12 @@ export interface ConfigRepositoryDeps {
 export interface ConfigRepository {
   /** Reads and leniently parses; writes the repaired value back once if needed. */
   load(): Promise<ConfigSnapshot>;
+  /**
+   * Like `load`, but undefined when the config was written by a newer build: the
+   * read-only defaults then do not reflect storage. Housekeeping that deletes data
+   * (secret pruning) must use this, never `load`.
+   */
+  loadStored(): Promise<ConfigSnapshot | undefined>;
   patch(changes: readonly ConfigChange[]): Promise<ConfigSnapshot>;
   /** Resets the given paths, or every known path, to defaults. Unknown keys survive. */
   reset(paths?: readonly ConfigPath[]): Promise<ConfigSnapshot>;
@@ -91,20 +97,27 @@ export function createConfigRepository(deps: ConfigRepositoryDeps): ConfigReposi
     return current.snapshot.data;
   }
 
-  return {
-    load: () =>
-      enqueue(async () => {
-        const current = await read();
-        if (current.repaired && !current.readOnly) {
-          try {
-            await store.set(CONFIG_STORAGE_KEY, current.snapshot);
-          } catch {
-            // The repaired snapshot is still valid in memory; the next write persists it.
-            console.warn('[config] failed to write back the repaired config');
-          }
+  const loadParsed = () =>
+    enqueue(async () => {
+      const current = await read();
+      if (current.repaired && !current.readOnly) {
+        try {
+          await store.set(CONFIG_STORAGE_KEY, current.snapshot);
+        } catch {
+          // The repaired snapshot is still valid in memory; the next write persists it.
+          console.warn('[config] failed to write back the repaired config');
         }
-        return current.snapshot;
-      }),
+      }
+      return current;
+    });
+
+  return {
+    load: async () => (await loadParsed()).snapshot,
+
+    loadStored: async () => {
+      const current = await loadParsed();
+      return current.readOnly ? undefined : current.snapshot;
+    },
 
     patch: (changes) =>
       enqueue(async () => {
