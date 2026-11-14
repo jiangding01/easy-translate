@@ -19,6 +19,7 @@
     "check:build": "node scripts/check-build.mjs",
     "check:size": "node scripts/check-size.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
+    "build:icons": "node scripts/build-icons.mjs",
     "check": "npm run lint && npm run typecheck && npm run check:contrast && npm run test && npm run build && npm run check:build && npm run check:size",
     "postinstall": "wxt prepare"
   },
