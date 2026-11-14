@@ -143,25 +143,28 @@ export type StyleReader = (el: Element) => { display: string } | undefined;
 
 const FLEX_OR_GRID = /^(inline-)?(flex|grid)$/;
 
+/** Tag-only guess when no usable style is known. */
+function inlineByTag(el: Element): boolean {
+  if (INLINE_TAGS.has(el.tagName) || el.tagName.includes('-')) return true;
+  return el.tagName !== 'DIV';
+}
+
 /**
- * Block or inline for unit boundaries. Semantic tags decide first; other
- * elements use computed display, except children of flex/grid containers,
- * whose computed display is always blockified: those use their inline
- * `style.display`, defaulting to inline.
+ * Block or inline for unit boundaries, by how the element is actually laid out
+ * (as FluentRead's `isBlockBoundary` does): sites style `<a>` and `<span>` as
+ * rows and cards, so the tag alone is not enough. Semantic block tags are always
+ * boundaries; images, code and breaks are always inline content. Everything else
+ * follows its computed display, so flex and grid items, which the browser
+ * blockifies, are each their own unit: merging them would also glue their text
+ * together, since the gaps between items are drawn by CSS, not written in text.
  */
 export function isInlineElement(el: Element, readStyle: StyleReader): boolean {
   if (BLOCK_TAGS.has(el.tagName)) return false;
-  if (INLINE_TAGS.has(el.tagName)) return true;
-  const parent = el.parentElement;
-  const parentDisplay = parent ? readStyle(parent)?.display : undefined;
-  if (parentDisplay && FLEX_OR_GRID.test(parentDisplay)) {
-    const own = (el as HTMLElement).style?.display;
-    return !own || own.startsWith('inline');
-  }
+  if (VERBATIM_TAGS.has(el.tagName)) return true;
   const display = readStyle(el)?.display;
   // 'none' says nothing about the box it would have (and translation-only mode
   // hides children itself): fall back to the tag, as when no style is known.
-  if (!display || display === 'none') return el.tagName.includes('-') ? true : el.tagName !== 'DIV';
+  if (!display || display === 'none') return inlineByTag(el);
   return display.startsWith('inline') || display === 'contents';
 }
 
