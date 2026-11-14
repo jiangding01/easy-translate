@@ -177,3 +177,36 @@ describe('renderer: failures and lifecycle', () => {
     expect(renderer.has(unit)).toBe(false);
   });
 });
+
+describe('renderer: writes racing a restore', () => {
+  it('drops an insert still waiting for its frame when the restore begins', async () => {
+    const { units, renderer, before } = await setup('<p>The best tools disappear.</p>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    const inflight = renderer.insert([{ unit, translation: '最好的工具会消失。' }]);
+    await renderer.restoreAll();
+    await inflight;
+    expect(document.body.innerHTML).toBe(before);
+  });
+
+  it('drops a failure notice still waiting for its frame', async () => {
+    const { units, renderer, before } = await setup('<p>Another paragraph of text.</p>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    const inflight = renderer.fail(unit, () => undefined, 'boom');
+    await renderer.restoreAll();
+    await inflight;
+    expect(document.body.innerHTML).toBe(before);
+  });
+
+  it('never pins spacing after a restore began during a mode switch', async () => {
+    const { units, renderer, before } = await setup('<p>Pinned margins stay behind.</p>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    await renderer.insert([{ unit, translation: '钉住的边距会留下来。' }]);
+    const inflight = renderer.setMode('translation');
+    await renderer.restoreAll();
+    await inflight;
+    expect(document.body.innerHTML).toBe(before);
+  });
+});

@@ -23,9 +23,11 @@ et-tr[data-et-state="error"] button:focus-visible{outline:2px solid currentColor
 [data-et-unclamp][data-et-unclamp]{-webkit-line-clamp:unset!important;line-clamp:unset!important}
 `;
 
+/**
+ * Adds our stylesheet and returns the node; callers remove that exact node. A page
+ * can plant its own `<style data-et>`, so an existing one is never trusted as ours.
+ */
 export function injectStyles(doc: Document): HTMLStyleElement {
-  const existing = doc.querySelector<HTMLStyleElement>(`style[${STYLE_ATTR}]`);
-  if (existing) return existing;
   const style = doc.createElement('style');
   style.setAttribute(STYLE_ATTR, '');
   style.textContent = CSS;
@@ -33,6 +35,6 @@ export function injectStyles(doc: Document): HTMLStyleElement {
   return style;
 }
 
-export function removeStyles(doc: Document): void {
-  doc.querySelector(`style[${STYLE_ATTR}]`)?.remove();
+export function removeStyles(style: HTMLStyleElement | undefined): void {
+  style?.remove();
 }

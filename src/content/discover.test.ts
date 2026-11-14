@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
 import { createPacer, discoverUnits } from './discover';
-import type { StyleReader } from './dom-rules';
+import { isInlineElement, type StyleReader } from './dom-rules';
 
 /** Display from the inline style, else a tag default: deterministic across DOM shims. */
 const readStyle: StyleReader = (el) => {
@@ -116,5 +116,13 @@ describe('discoverUnits', () => {
     document.body.innerHTML = '<p>One sentence.</p><p>Two sentences.</p>';
     const found = await discoverUnits(document.body, { readStyle, cancelled: () => true });
     expect(found).toEqual([]);
+  });
+});
+
+describe('isInlineElement with display none', () => {
+  it('falls back to the tag instead of treating a hidden element as a block', () => {
+    const none = () => ({ display: 'none' });
+    expect(isInlineElement(document.createElement('relative-time'), none)).toBe(true);
+    expect(isInlineElement(document.createElement('div'), none)).toBe(false);
   });
 });

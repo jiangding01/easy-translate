@@ -16,6 +16,7 @@ export function createIntersectionViewport(
   );
   return {
     observe: (target) => observer.observe(target),
+    unobserve: (target) => observer.unobserve(target),
     disconnect: () => observer.disconnect(),
   };
 }
