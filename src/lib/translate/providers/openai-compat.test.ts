@@ -77,6 +77,21 @@ describe('openai-compat adapter', () => {
     await expect(run(fn)).rejects.toMatchObject({ code, retryable });
   });
 
+  it('tells a local server rejecting the extension origin apart from a bad key', async () => {
+    const local = { settings: { baseURL: 'http://localhost:11434/v1', model: 'm' } };
+    await expect(run(mockFetch(new Response('', { status: 403 })), local)).rejects.toMatchObject({
+      code: 'provider/local-origin-rejected',
+      retryable: false,
+    });
+    // A remote 403 and a local 401 stay key problems.
+    await expect(run(mockFetch(new Response('', { status: 403 })))).rejects.toMatchObject({
+      code: 'provider/unauthorized',
+    });
+    await expect(run(mockFetch(new Response('', { status: 401 })), local)).rejects.toMatchObject({
+      code: 'provider/unauthorized',
+    });
+  });
+
   it('maps 429 with retry-after as retryable rate limiting', async () => {
     const fn = mockFetch(
       jsonResponse({ error: { code: 'rate_limit' } }, 429, { 'retry-after': '2' }),

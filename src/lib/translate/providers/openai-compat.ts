@@ -1,3 +1,4 @@
+import { isLocalEndpoint } from '@/lib/endpoint';
 import { appError } from '@/lib/errors';
 import { decodeLlmOutput, renderUserMessage } from '../codec';
 import { readSse } from '../sse';
@@ -37,7 +38,14 @@ async function* translate(batch: string[], ctx: ProviderContext): AsyncGenerator
       ],
     }),
   });
-  if (!response.ok) throw await errorFromResponse(response);
+  if (!response.ok) {
+    // Local servers (Ollama) answer 403 to an extension origin they do not allow;
+    // that is a setup step, not a bad key.
+    if (response.status === 403 && isLocalEndpoint(settings.baseURL)) {
+      throw appError('provider', 'provider/local-origin-rejected', 'HTTP 403 from a local server');
+    }
+    throw await errorFromResponse(response);
+  }
 
   let text = '';
   let finished = false;
