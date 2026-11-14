@@ -1,6 +1,6 @@
 # M1 翻译核心：技术方案
 
-> 状态：**实施中，暂停于 3b 之前**（第一、二段与 3a 已完成并通过 Deep 审查；3b 设置页待按「隐中生岛」原型重做后实现）（已吸收 Fable 5.2 对抗式审查的 2 条阻断、4 条重要、5 条建议，以及旧方案、FluentRead、yezi 的参考项） · 2026-11-13 · 分支 `feat/m1-translation-core` · 1 个 PR，内部按主题拆分提交，CI 通过后由用户手动合并
+> 状态：**已完成，待合并**（第一、二段、3a 与 3b 均已完成并通过审查；3b 的修订见 4.11 节）（已吸收 Fable 5.2 对抗式审查的 2 条阻断、4 条重要、5 条建议，以及旧方案、FluentRead、yezi 的参考项） · 2026-11-13 · 分支 `feat/m1-translation-core` · 1 个 PR，内部按主题拆分提交，CI 通过后由用户手动合并
 > 依据：`HANDOFF.md` 第 3、5、6 节（含 M1 开工前必须决定的 3 项）；`docs/reviews/2026-11-13-final-plan.md` 第 1、6、7 节和文末验收意见；`docs/design/01-translation-core.md`（旧版协议参考）；M0 代码（`src/lib/config`、`src/lib/messaging`）
 > 调研：外部接口事实核实（Google、OpenAI 兼容、Gemini、SW 生命周期、权限、idb）；开源实现机制研究（kiss-translator、read-frog、Traduzir-paginas）
 
