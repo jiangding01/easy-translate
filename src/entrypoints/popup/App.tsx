@@ -4,10 +4,15 @@ import { Select, type SelectOption } from '@/components/Select';
 import { engineFields, hasEditableBaseURL } from '@/lib/config/engine-fields';
 import type { ConfigV1, Engine } from '@/lib/config/types';
 import { useConfig } from '@/lib/config/use-config';
-import { engineEntries, engineReadiness, permissionPattern } from '@/lib/engine-view';
+import {
+  type EngineReadiness,
+  engineEntries,
+  engineReadiness,
+  permissionPattern,
+} from '@/lib/engine-view';
 import { describeError } from '@/lib/error-messages';
 import { appError, fail } from '@/lib/errors';
-import { useHostPermission } from '@/lib/host-permission';
+import { useHostPermission, useHostPermissions } from '@/lib/host-permission';
 import { LANGUAGES, type LanguageCode, languageName } from '@/lib/languages';
 import { call } from '@/lib/messaging/handle';
 import {
@@ -233,6 +238,12 @@ function EngineNotice({
   );
 }
 
+/** Grey while the key status or grant is still unknown; green when ready, coral when not. */
+function dotFor(state: EngineReadiness, statuses: Statuses | undefined): 'ok' | 'warn' | 'idle' {
+  if (statuses === undefined || state.reason === 'checking-grant') return 'idle';
+  return state.problem ? 'warn' : 'ok';
+}
+
 function EngineSelect({
   config,
   statuses,
@@ -242,23 +253,21 @@ function EngineSelect({
   statuses: Statuses | undefined;
   onChange: (engine: Engine) => void;
 }) {
-  const readiness = useReadiness(config, statuses);
   const current = config.translation.engine;
-  const dot = (problem: boolean): 'ok' | 'warn' | 'idle' =>
-    statuses === undefined ? 'idle' : problem ? 'warn' : 'ok';
-  // Other engines' grants are not looked up here: their rows show key and model state only.
-  const options = engineEntries(config).map((entry): SelectOption<Engine> => {
+  const entries = engineEntries(config).map((entry) => {
     const fields = engineFields(config, entry.id) ?? { baseURL: '', model: '' };
-    const state =
-      entry.id === current
-        ? readiness
-        : engineReadiness({
-            engine: entry.id,
-            ...fields,
-            secret: entry.id === 'google' ? undefined : statuses?.[entry.id],
-            granted: true,
-          });
-    return { value: entry.id, label: entry.name, sub: state.status, dot: dot(!!state.problem) };
+    const pattern = hasEditableBaseURL(entry.id) ? permissionPattern(fields.baseURL) : undefined;
+    return { entry, fields, pattern };
+  });
+  const grants = useHostPermissions(entries.flatMap(({ pattern }) => (pattern ? [pattern] : [])));
+  const options = entries.map(({ entry, fields, pattern }): SelectOption<Engine> => {
+    const state = engineReadiness({
+      engine: entry.id,
+      ...fields,
+      secret: entry.id === 'google' ? undefined : statuses?.[entry.id],
+      granted: pattern ? grants?.[pattern] : undefined,
+    });
+    return { value: entry.id, label: entry.name, sub: state.status, dot: dotFor(state, statuses) };
   });
   const selected = options.find((option) => option.value === current);
   return (
@@ -270,7 +279,7 @@ function EngineSelect({
       options={options}
       onChange={onChange}
     >
-      <span aria-hidden="true" className={`${styles.dot} ${styles[dot(!!readiness.problem)]}`} />
+      <span aria-hidden="true" className={`${styles.dot} ${styles[selected?.dot ?? 'idle']}`} />
       <span className={styles.engineName}>{selected?.label}</span>
     </Select>
   );

@@ -45,6 +45,10 @@ const TYPEAHEAD_MS = 500;
 export function Select<T extends string>(props: Props<T>) {
   const { value, options, onChange, variant = 'field', align = 'start' } = props;
   const listId = useId();
+  const nameId = `${listId}-name`;
+  const valueId = `${listId}-value`;
+  // Accessible name = label + current value, like a native select reads out.
+  const labelRef = props.labelledBy ?? nameId;
   const trigger = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -54,26 +58,34 @@ export function Select<T extends string>(props: Props<T>) {
   const selectedIndex = options.findIndex((option) => option.value === value);
   const selected = options[selectedIndex];
 
+  function place() {
+    const element = list.current;
+    if (!element || !trigger.current) return;
+    const placement = placeList({
+      trigger: trigger.current.getBoundingClientRect(),
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      listHeight: options.length * OPTION_HEIGHT + LIST_PADDING,
+      minWidth: props.minWidth ?? 0,
+      align,
+    });
+    const style = element.style;
+    style.left = `${placement.left}px`;
+    style.width = `${placement.width}px`;
+    style.maxHeight = `${placement.maxHeight}px`;
+    style.top = placement.side === 'below' ? `${placement.offset}px` : 'auto';
+    style.bottom = placement.side === 'above' ? `${placement.offset}px` : 'auto';
+    setSide(placement.side);
+  }
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `place` reads the same inputs listed here
   useEffect(() => {
     const element = list.current;
     if (!element) return;
     const onBeforeToggle = (event: Event) => {
-      if ((event as ToggleEvent).newState !== 'open' || !trigger.current) return;
-      const placement = placeList({
-        trigger: trigger.current.getBoundingClientRect(),
-        viewport: { width: window.innerWidth, height: window.innerHeight },
-        listHeight: options.length * OPTION_HEIGHT + LIST_PADDING,
-        minWidth: props.minWidth ?? 0,
-        align,
-      });
-      const style = element.style;
-      style.left = `${placement.left}px`;
-      style.width = `${placement.width}px`;
-      style.maxHeight = `${placement.maxHeight}px`;
-      style.top = placement.side === 'below' ? `${placement.offset}px` : 'auto';
-      style.bottom = placement.side === 'above' ? `${placement.offset}px` : 'auto';
-      setSide(placement.side);
+      if ((event as ToggleEvent).newState !== 'open') return;
+      place();
       setActive(selectedIndex);
+      typed.current = { text: '', at: 0 };
     };
     const onToggle = (event: Event) => {
       const isOpen = (event as ToggleEvent).newState === 'open';
@@ -87,26 +99,35 @@ export function Select<T extends string>(props: Props<T>) {
         trigger.current?.focus({ preventScroll: true });
       }
     };
+    // A list too short to scroll must not pass the wheel on to the page (which closes it).
+    const onWheel = (event: WheelEvent) => {
+      if (element.scrollHeight <= element.clientHeight) event.preventDefault();
+    };
     element.addEventListener('beforetoggle', onBeforeToggle);
     element.addEventListener('toggle', onToggle);
+    element.addEventListener('wheel', onWheel, { passive: false });
     return () => {
       element.removeEventListener('beforetoggle', onBeforeToggle);
       element.removeEventListener('toggle', onToggle);
+      element.removeEventListener('wheel', onWheel);
     };
   }, [options.length, selectedIndex, align, props.minWidth]);
 
-  // The list is positioned once; scrolling or resizing would detach it, so it closes.
+  // Scrolling the page detaches the list, so it closes; a resize (the popup window
+  // growing with its content, say) only moves it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `place` is re-created each render with current inputs
   useEffect(() => {
     if (!open) return;
-    const close = (event: Event) => {
-      if (event.type === 'scroll' && list.current?.contains(event.target as Node)) return;
+    const onScroll = (event: Event) => {
+      if (list.current?.contains(event.target as Node)) return;
       hide(list.current);
     };
-    window.addEventListener('resize', close);
-    window.addEventListener('scroll', close, true);
+    const onResize = () => place();
+    window.addEventListener('resize', onResize);
+    window.addEventListener('scroll', onScroll, true);
     return () => {
-      window.removeEventListener('resize', close);
-      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('scroll', onScroll, true);
     };
   }, [open]);
 
@@ -122,8 +143,17 @@ export function Select<T extends string>(props: Props<T>) {
     if (option && option.value !== value) onChange(option.value);
   }
 
+  // Type-to-select also matches the code ("ja", "zh"), since most labels are not Latin.
+  const searchTerms = options.map((option) =>
+    [option.label, option.value, option.sub].filter((term): term is string => !!term),
+  );
+
   function onListKeyDown(event: React.KeyboardEvent) {
-    const result = listKey(event.key, active, options.length);
+    // Space continues a word being typed instead of choosing.
+    const typing = event.key === ' ' && Date.now() - typed.current.at < TYPEAHEAD_MS;
+    const result = typing
+      ? ({ type: 'none' } as const)
+      : listKey(event.key, active, options.length);
     if (result.type === 'move') {
       event.preventDefault();
       setActive(result.index);
@@ -135,14 +165,11 @@ export function Select<T extends string>(props: Props<T>) {
       hide(list.current);
       if (result.restoreFocus) trigger.current?.focus({ preventScroll: true });
     } else if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault();
       const now = Date.now();
       const text = (now - typed.current.at < TYPEAHEAD_MS ? typed.current.text : '') + event.key;
       typed.current = { text, at: now };
-      const index = typeahead(
-        options.map((option) => option.label),
-        active,
-        text,
-      );
+      const index = typeahead(searchTerms, active, text);
       if (index >= 0) setActive(index);
     }
   }
@@ -165,16 +192,22 @@ export function Select<T extends string>(props: Props<T>) {
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
-        aria-label={props.label}
-        aria-labelledby={props.labelledBy}
+        aria-labelledby={`${labelRef} ${valueId}`}
         popoverTarget={listId}
         onKeyDown={onTriggerKeyDown}
       >
-        {props.children ?? (
-          <span className={styles.value} lang={selected?.lang}>
-            {selected?.label ?? ''}
+        {props.label && !props.labelledBy && (
+          <span id={nameId} hidden>
+            {props.label}
           </span>
         )}
+        <span
+          id={valueId}
+          className={styles.value}
+          lang={props.children ? undefined : selected?.lang}
+        >
+          {props.children ?? selected?.label ?? ''}
+        </span>
         <svg
           aria-hidden="true"
           className={styles.chevron}
@@ -194,8 +227,7 @@ export function Select<T extends string>(props: Props<T>) {
         popover="auto"
         role="listbox"
         tabIndex={-1}
-        aria-label={props.label}
-        aria-labelledby={props.labelledBy}
+        aria-labelledby={labelRef}
         aria-activedescendant={open ? activeId : undefined}
         className={styles.list}
         data-side={side}

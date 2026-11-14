@@ -26,7 +26,7 @@ describe('listKey', () => {
 });
 
 describe('typeahead', () => {
-  const labels = ['English', '日本語', 'Español', 'Deutsch', 'easy'];
+  const labels = [['English', 'en'], ['日本語', 'ja'], ['Español'], ['Deutsch'], ['easy']];
 
   it('finds the next label starting with the typed text, case-insensitively, wrapping', () => {
     expect(typeahead(labels, -1, 'e')).toBe(0);
@@ -40,10 +40,16 @@ describe('typeahead', () => {
     expect(typeahead(labels, 0, 'ea')).toBe(4);
   });
 
+  it('matches any term of an option, such as its language code', () => {
+    expect(typeahead(labels, -1, 'j')).toBe(1);
+    expect(typeahead(labels, -1, 'ja')).toBe(1);
+  });
+
   it('cycles on a repeated letter and reports no match', () => {
     expect(typeahead(labels, 0, 'ee')).toBe(2);
     expect(typeahead(labels, 0, 'x')).toBe(-1);
     expect(typeahead(labels, 0, '')).toBe(-1);
+    expect(typeahead(labels, 0, ' ')).toBe(-1);
   });
 });
 
