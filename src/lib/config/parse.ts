@@ -101,13 +101,22 @@ function repairIssues(
       continue;
     }
 
+    // Inside something the defaults do not have (a record entry, an unknown key):
+    // remove the outermost such node, e.g. the whole custom provider, never more.
+    const segments = path.map(String);
+    const missingAt = segments.findIndex(
+      (_, index) => getPath(defaults, segments.slice(0, index + 1).join('.')) === undefined,
+    );
+    if (missingAt >= 0) {
+      const key = segments.slice(0, missingAt + 1).join('.');
+      next = deletePath(next, key);
+      resetPaths.push(key);
+      continue;
+    }
+
     // Invalid leaf, or a parent of the wrong type: reset that node to its default.
-    const key = path.map(String).join('.');
-    const fallback = getPath(defaults, key);
-    next =
-      fallback === undefined
-        ? deletePath(next, key)
-        : setPath(next, key, structuredClone(fallback));
+    const key = segments.join('.');
+    next = setPath(next, key, structuredClone(getPath(defaults, key)));
     resetPaths.push(key);
   }
 

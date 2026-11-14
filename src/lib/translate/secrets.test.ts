@@ -39,7 +39,28 @@ describe('secret store', () => {
 
   it('does not reveal short keys through last4', async () => {
     const store = createSecretStore(memory());
-    expect(await store.set('custom', 'abc123')).toEqual({ configured: true, last4: '' });
+    expect(await store.set('custom-aaaaaaaa', 'abc123')).toEqual({ configured: true, last4: '' });
+  });
+
+  it('keys custom providers by id, lists them only once they have a key, and deletes them', async () => {
+    const store = createSecretStore(memory());
+    expect(Object.keys(await store.status()).sort()).toEqual(['deepseek', 'gemini', 'openai']);
+    await store.set('custom-aaaaaaaa', 'sk-first-1111');
+    await store.set('custom-bbbbbbbb', 'sk-second-2222');
+    expect(await store.get('custom-aaaaaaaa')).toBe('sk-first-1111');
+    expect((await store.status())['custom-bbbbbbbb']).toEqual({ configured: true, last4: '2222' });
+    await store.set('custom-aaaaaaaa', null);
+    const status = await store.status();
+    expect(status['custom-aaaaaaaa']).toBeUndefined();
+    expect(await store.get('custom-bbbbbbbb')).toBe('sk-second-2222');
+  });
+
+  it('ignores stored entries that are not provider ids', async () => {
+    const backing = memory();
+    backing.data.set('secrets', { custom: 'sk-legacy-1234', 'custom-aaaaaaaa': 'sk-ok-123456' });
+    const status = await createSecretStore(backing).status();
+    expect(status).not.toHaveProperty('custom');
+    expect(status['custom-aaaaaaaa']?.configured).toBe(true);
   });
 
   it('is idempotent', async () => {
@@ -89,7 +110,7 @@ describe('secret store', () => {
     const backing = memory();
     backing.data.set('secrets', 'garbage');
     const store = createSecretStore(backing);
-    expect((await store.status()).openai.configured).toBe(false);
+    expect((await store.status()).openai?.configured).toBe(false);
   });
 });
 

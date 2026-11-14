@@ -1,5 +1,4 @@
-import type { ConfigV1, Engine } from '@/lib/config/types';
-import { ENGINES } from '@/lib/config/types';
+import { type ConfigV1, type Engine, isEngineId } from '@/lib/config/types';
 import { type AppError, appError, type Result } from '@/lib/errors';
 import { handle } from '@/lib/messaging/handle';
 import type {
@@ -13,9 +12,9 @@ import { forbiddenSenderError } from '@/lib/messaging/sender';
 import type { TranslationCache } from './cache';
 import { checkEngineEndpoint } from './permissions';
 import { buildPrompt } from './prompt';
-import { getAdapter as registryAdapter, resolveProviderSettings } from './providers/registry';
+import { getAdapter as registryAdapter, settingsFor } from './providers/registry';
 import type { Scheduler } from './scheduler';
-import { cleanApiKey, SECRET_PROVIDERS, type SecretStore } from './secrets';
+import { cleanApiKey, isSecretProvider, type SecretStore } from './secrets';
 import type { ProviderAdapter } from './types';
 
 // Background-only handlers for the settings page. Plain functions over injected
@@ -48,10 +47,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function isProvider(value: unknown): value is SecretProviderId {
-  return (SECRET_PROVIDERS as readonly unknown[]).includes(value);
-}
-
 /** Accepts only pages of this extension's options page (`options.html`, with query or hash). */
 export function isOptionsSender(sender: AdminSender | undefined, optionsUrl: string): boolean {
   const url = sender?.url;
@@ -65,14 +60,14 @@ function parseDraft(raw: unknown): ProviderTestDraft {
   if (!isRecord(raw)) throw invalidPayload();
   const { engine, baseURL, model, apiKey } = raw;
   if (
-    !(ENGINES as readonly unknown[]).includes(engine) ||
+    !isEngineId(engine) ||
     typeof baseURL !== 'string' ||
     typeof model !== 'string' ||
     (apiKey !== undefined && typeof apiKey !== 'string')
   ) {
     throw invalidPayload();
   }
-  return { engine: engine as ProviderTestDraft['engine'], baseURL, model, apiKey };
+  return { engine, baseURL, model, apiKey };
 }
 
 export function createAdminHandlers(deps: AdminDeps) {
@@ -93,12 +88,7 @@ export function createAdminHandlers(deps: AdminDeps) {
       throw appError('config', 'config/model-required', 'Model is required');
     }
     // Only the draft's own fields are used: nothing is read from or written to the config.
-    const settings = resolveProviderSettings(engine, {
-      openai: { baseURL: draft.baseURL, model },
-      deepseek: { model },
-      gemini: { model },
-      custom: { baseURL: draft.baseURL, model },
-    });
+    const settings = settingsFor(engine, { baseURL: draft.baseURL, model });
     const permission = await checkPermission(engine, settings.baseURL);
     if (!permission.ok) throw permission.error;
 
@@ -148,13 +138,13 @@ export function createAdminHandlers(deps: AdminDeps) {
   return {
     'secrets.set': wrap(
       (args: { provider: SecretProviderId; key: string | null }): Promise<SecretStatusInfo> => {
-        if (!isRecord(args) || !isProvider(args.provider)) throw invalidPayload();
+        if (!isRecord(args) || !isSecretProvider(args.provider)) throw invalidPayload();
         if (args.key !== null && typeof args.key !== 'string') throw invalidPayload();
         return deps.secrets.set(args.provider, args.key);
       },
     ),
     'secrets.status': wrap(
-      (): Promise<Record<SecretProviderId, SecretStatusInfo>> => deps.secrets.status(),
+      (): Promise<Partial<Record<SecretProviderId, SecretStatusInfo>>> => deps.secrets.status(),
     ),
     'provider.test': wrap(testProvider),
     'cache.stats': wrap((): Promise<CacheStatsInfo> => deps.cache.stats()),

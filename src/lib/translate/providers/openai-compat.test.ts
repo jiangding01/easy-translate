@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeBaseURL } from '../base-url';
+import { normalizeBaseURL } from '@/lib/endpoint';
 import { collect, jsonResponse, makeCtx, mockFetch, sseResponse } from '../test-utils';
 import { createOpenAICompatAdapter } from './openai-compat';
 

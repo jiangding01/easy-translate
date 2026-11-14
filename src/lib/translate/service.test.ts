@@ -10,6 +10,7 @@ import type { DetectLanguage } from './language';
 import { checkEngineEndpoint } from './permissions';
 import {
   classifyTranslation,
+  cooldownKeyFor,
   createTranslateService,
   parseTranslateRequest,
   preprocessText,
@@ -414,8 +415,12 @@ describe('translate service over the port', () => {
   it('reports a missing host permission for the custom endpoint without fetching', async () => {
     const denied = appError('config', 'config/permission-missing', 'denied');
     const { providers, config, run } = setup({ checkPermission: async () => fail(denied) });
-    config.translation.engine = 'custom';
-    config.providers.custom = { baseURL: 'https://llm.example.com/v1', model: 'm' };
+    config.translation.engine = 'custom-aaaaaaaa';
+    config.customProviders['custom-aaaaaaaa'] = {
+      name: 'LLM',
+      baseURL: 'https://llm.example.com/v1',
+      model: 'm',
+    };
     const result = await run({ items: items('Hello') });
     expect(result.outcome).toEqual({ status: 'done', data: { total: 1, failed: 1 } });
     expect(result.byId.i0).toMatchObject({ error: { code: 'config/permission-missing' } });
@@ -574,5 +579,17 @@ describe('translate service: preprocessing and results', () => {
       'GET /translate_a/single',
       'GET /translate_a/single',
     ]);
+  });
+});
+
+describe('cooldownKeyFor', () => {
+  it('scopes by engine family and origin, so custom providers on one server share it', () => {
+    expect(cooldownKeyFor('google', '')).toBe('google');
+    expect(cooldownKeyFor('openai', 'https://api.openai.com/v1')).toBe(
+      'openai|https://api.openai.com',
+    );
+    const a = cooldownKeyFor('custom-aaaaaaaa', 'http://localhost:11434/v1');
+    expect(a).toBe('custom|http://localhost:11434');
+    expect(cooldownKeyFor('custom-bbbbbbbb', 'http://localhost:11434/v2')).toBe(a);
   });
 });

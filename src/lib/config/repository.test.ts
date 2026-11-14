@@ -3,7 +3,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { createLocalStore } from './local-store';
 import { createConfigRepository, type KeyValueStore } from './repository';
 import { EXTRA_DEFAULTS } from './test-fixtures';
-import type { ConfigChange } from './types';
+import { type ConfigChange, type CustomProviderId, MAX_CUSTOM_PROVIDERS } from './types';
 
 const uiLanguage = 'en-US';
 
@@ -105,12 +105,10 @@ describe('ConfigRepository', () => {
       { path: 'translation.engine', value: 'gemini' },
       { path: 'language.source', value: 'ja' },
       { path: 'providers.gemini.model', value: 'some-model' },
-      { path: 'providers.custom.baseURL', value: 'http://localhost:11434/v1' },
     ]);
     expect(snapshot.data.translation.engine).toBe('gemini');
     expect(snapshot.data.language.source).toBe('ja');
     expect(snapshot.data.providers.gemini.model).toBe('some-model');
-    expect(snapshot.data.providers.custom.baseURL).toBe('http://localhost:11434/v1');
 
     const bad = { path: 'translation.engine', value: 'bing' } as unknown as ConfigChange;
     await expect(repo.patch([bad])).rejects.toMatchObject({ code: 'config/invalid-value' });
@@ -177,5 +175,106 @@ describe('ConfigRepository', () => {
     await expect(repo.reset()).rejects.toMatchObject({ code: 'config/newer-version' });
     expect(set).not.toHaveBeenCalled();
     expect(store.data.get('config')).toEqual(newer.config);
+  });
+});
+
+describe('ConfigRepository: custom providers', () => {
+  const entry = (name: string) => ({ name, baseURL: `https://${name}.example.com/v1`, model: 'm' });
+  const add = (key: CustomProviderId, name: string): ConfigChange => ({
+    path: 'customProviders',
+    key,
+    value: entry(name),
+  });
+  const remove = (key: CustomProviderId): ConfigChange => ({
+    path: 'customProviders',
+    key,
+    value: null,
+  });
+
+  it('adds, replaces in place and removes single entries', async () => {
+    const repo = createConfigRepository({ store: memoryStore(), uiLanguage });
+    await repo.patch([add('custom-aaaaaaaa', 'a')]);
+    await repo.patch([add('custom-bbbbbbbb', 'b')]);
+    const replaced = await repo.patch([add('custom-aaaaaaaa', 'a2')]);
+    expect(Object.keys(replaced.data.customProviders)).toEqual([
+      'custom-aaaaaaaa',
+      'custom-bbbbbbbb',
+    ]);
+    expect(replaced.data.customProviders['custom-aaaaaaaa']?.name).toBe('a2');
+    const removed = await repo.patch([remove('custom-aaaaaaaa')]);
+    expect(Object.keys(removed.data.customProviders)).toEqual(['custom-bbbbbbbb']);
+  });
+
+  it('keeps concurrent edits of different entries', async () => {
+    const repo = createConfigRepository({ store: memoryStore(), uiLanguage });
+    await Promise.all([
+      repo.patch([add('custom-aaaaaaaa', 'a')]),
+      repo.patch([add('custom-bbbbbbbb', 'b')]),
+    ]);
+    const { data } = await repo.load();
+    expect(Object.keys(data.customProviders).sort()).toEqual([
+      'custom-aaaaaaaa',
+      'custom-bbbbbbbb',
+    ]);
+  });
+
+  it('can make a new entry the default in the same patch', async () => {
+    const repo = createConfigRepository({ store: memoryStore(), uiLanguage });
+    const snapshot = await repo.patch([
+      add('custom-aaaaaaaa', 'a'),
+      { path: 'translation.engine', value: 'custom-aaaaaaaa' },
+    ]);
+    expect(snapshot.data.translation.engine).toBe('custom-aaaaaaaa');
+  });
+
+  it('falls back to Google when the default provider is removed', async () => {
+    const repo = createConfigRepository({ store: memoryStore(), uiLanguage });
+    await repo.patch([
+      add('custom-aaaaaaaa', 'a'),
+      { path: 'translation.engine', value: 'custom-aaaaaaaa' },
+    ]);
+    const snapshot = await repo.patch([remove('custom-aaaaaaaa')]);
+    expect(snapshot.data.translation.engine).toBe('google');
+  });
+
+  it('turns a default engine that does not exist into Google', async () => {
+    const repo = createConfigRepository({ store: memoryStore(), uiLanguage });
+    await expect(
+      repo.patch([{ path: 'translation.engine', value: 'custom-zzzzzzzz' }]),
+    ).resolves.toMatchObject({ data: { translation: { engine: 'google' } } });
+  });
+
+  it(`stops at ${MAX_CUSTOM_PROVIDERS} entries but still allows replacing one`, async () => {
+    const store = memoryStore();
+    const repo = createConfigRepository({ store, uiLanguage });
+    const ids = Array.from(
+      { length: MAX_CUSTOM_PROVIDERS },
+      (_, index) => `custom-${String(index).padStart(8, '0')}` as CustomProviderId,
+    );
+    await repo.patch(ids.map((id) => add(id, id)));
+    await expect(repo.patch([add('custom-zzzzzzzz', 'z')])).rejects.toMatchObject({
+      code: 'config/provider-limit',
+    });
+    await expect(repo.patch([add(ids[0] as CustomProviderId, 'again')])).resolves.toBeDefined();
+  });
+
+  it('rejects malformed ids and values, and replacing the whole record', async () => {
+    const store = memoryStore();
+    const repo = createConfigRepository({ store, uiLanguage });
+    const badId = {
+      path: 'customProviders',
+      key: 'custom',
+      value: entry('a'),
+    } as unknown as ConfigChange;
+    await expect(repo.patch([badId])).rejects.toMatchObject({ code: 'config/invalid-value' });
+    const badValue = {
+      path: 'customProviders',
+      key: 'custom-aaaaaaaa',
+      value: { name: 'x'.repeat(41), baseURL: '', model: '' },
+    } as unknown as ConfigChange;
+    await expect(repo.patch([badValue])).rejects.toMatchObject({ code: 'config/invalid-value' });
+    const whole = { path: 'customProviders', value: {} } as unknown as ConfigChange;
+    await expect(repo.patch([whole])).rejects.toMatchObject({ code: 'config/unknown-path' });
+    expect(store.data.has('config')).toBe(false);
   });
 });

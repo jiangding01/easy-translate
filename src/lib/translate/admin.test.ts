@@ -110,7 +110,6 @@ describe('secrets', () => {
         openai: { configured: true, last4: '1234' },
         deepseek: { configured: false, last4: '' },
         gemini: { configured: false, last4: '' },
-        custom: { configured: false, last4: '' },
       },
     });
     expect(JSON.stringify(status)).not.toContain('SECRET');
@@ -132,6 +131,22 @@ describe('secrets', () => {
     });
     expect(bad).toMatchObject({ ok: false, error: { code: 'validation/invalid-secret' } });
     expect(JSON.stringify(bad)).not.toContain('SECRET');
+  });
+
+  it('accepts custom provider ids and rejects the bare word custom', async () => {
+    const { handlers } = setup();
+    expect(
+      await handlers['secrets.set'](options, { provider: 'custom-aaaaaaaa', key: SAVED_KEY }),
+    ).toMatchObject({ ok: true, data: { configured: true } });
+    const status = await handlers['secrets.status'](options);
+    expect(status).toMatchObject({ ok: true, data: { 'custom-aaaaaaaa': { configured: true } } });
+    const bare = { provider: 'custom', key: SAVED_KEY } as unknown as Parameters<
+      (typeof handlers)['secrets.set']
+    >[1];
+    expect(await handlers['secrets.set'](options, bare)).toMatchObject({
+      ok: false,
+      error: { code: 'validation/invalid-payload' },
+    });
   });
 });
 
@@ -224,9 +239,9 @@ describe('provider.test', () => {
     const { handlers, submit } = setup({}, { checkPermission });
     const result = await handlers['provider.test'](
       options,
-      draft({ engine: 'custom', baseURL: 'https://llm.example.com/v1/chat/completions' }),
+      draft({ engine: 'custom-aaaaaaaa', baseURL: 'https://llm.example.com/v1/chat/completions' }),
     );
-    expect(checkPermission).toHaveBeenCalledWith('custom', 'https://llm.example.com/v1');
+    expect(checkPermission).toHaveBeenCalledWith('custom-aaaaaaaa', 'https://llm.example.com/v1');
     expect(result).toMatchObject({ ok: false, error: { code: 'config/permission-missing' } });
     expect(submit).not.toHaveBeenCalled();
   });
