@@ -1,6 +1,6 @@
 # Easy Translate 交接文档（HANDOFF）
 
-> 最后更新：2026-11-14 · 阶段：**M1 翻译核心已合并**（PR #2）；真机验收发现的问题在 PR #3（分支 `fix/m1-polish`）修复。下一步：M2 整页翻译
+> 最后更新：2026-11-14 · 阶段：**M2a 整页翻译已实现，待审查和合并**（分支 `feat/m2-page-translation`）；M1 已合并（PR #2、#3）。下一步：M2a 合并与真机验收 → M2b 灵岛 → M3 划词翻译
 > 本文给接手的 Agent 或开发者用，按顺序读完即可直接开工。文中凡与其他文档冲突的地方，以本文和「权威文档」为准。
 
 ## 1. 项目一句话
@@ -50,7 +50,11 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
   - 页面共用：`src/lib/engine-view.ts`（引擎列表与就绪判断）、`src/lib/endpoint.ts`（地址与权限判断）、`src/lib/host-permission.ts`、`src/components/Select.tsx`（自研下拉）。
   - 界面：设置页（通用 / 翻译服务）与工具栏面板，按「隐中生岛」加琥珀主题重做；token 在 `src/styles/tokens.css`，对比度由 `scripts/check-contrast.mjs` 校验。
 - **可用命令**：`npm run dev | build | lint | format | typecheck | test | check | check:contrast | check:size | zip`。`npm run check` 通过（416 个测试）。
-- **还没有**：网页上的任何翻译入口（从 M2 开始）。
+- **分支 `feat/m2-page-translation`（M2a，待合并）**：依据 `docs/plans/m2-page-translation.md`。
+  - 内容脚本：`src/content/`（`discover` 扫描与分段、`segment` 行内标记、`session` 视口队列与会话、`render` 渲染与动效、`anchor` 阅读位置、`mutations` 动态内容、`auto-start` 站点记忆、`viewport` IntersectionObserver）；`src/entrypoints/content.ts` 只在被唤起后才建立 Port 和观察器。
+  - 后台：快捷键 `translate-page`、图标状态点（`src/lib/action-icon.ts`）、`site.setAlways`（只接受扩展页面）。
+  - 界面：工具栏面板接通整页翻译；设置页「通用 · 译文」。
+- **还没有**：灵岛（M2b）、划词翻译（M3）。
 
 ## 5. 批次状态与下一步
 
@@ -71,6 +75,15 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
     - 审查：后台部分做过一轮 Deep 审查；3b 做过两轮 Deep 审查（安全、架构、四个对抗角度，再加修复后复查），下拉组件做过一轮 Standard 审查；确认的问题都已修复并补了回归测试。
   - **真机验收**（2026-11-14，用户在 Chrome 中用生产构建验证）：Google 测试连接、DeepSeek 保存密钥、添加本地 Ollama（授权提示、设置 `OLLAMA_ORIGINS` 后连通）、删除默认自定义服务回退到 Google、通用页下拉（含键盘）、亮暗主题、工具栏面板的各种状态都通过。清空缓存要等 M2 有网页翻译后才能测。发现的问题在 PR #3 修复。
   - **开发版提示**：WXT 的开发构建会给 manifest 加上 `http(s)://*/*`，Chrome 会提示可选权限多余；授权流程只能用生产构建（`npm run build`）测试。
+- **M2 整页翻译**：方案见 [`docs/plans/m2-page-translation.md`](docs/plans/m2-page-translation.md)。
+  - **M2a（分支 `feat/m2-page-translation`）**：已实现，check Deep 审查完成（安全、架构、对抗式三路，会话与渲染加 Fable 复查）。确认并修复的问题：停止与在途渲染写入的竞争（会留下孤儿译文）、会话译文记忆用 32 位哈希作键（可被碰撞顶替译文，改用完整原文）、对话框把应用根标为 `aria-hidden` 时整页译文被清掉、长会话里已卸载 DOM 被强引用、「仅译文」自身 CSS 干扰块级判断、停止时取消整个 Port、页面可伪造 `<style data-et>`、启动失败卡在运行中、面板轮询乱序。每项都有先红后绿的回归测试。第二轮 Fable 复查确认修复有效，并抓到一个由修复引入的重复译文问题（混合父元素失去块级子元素），已修复。共 515 个测试。
+  - **M2a 真机验收**：按方案第 10 节，包括 4 倍 CPU 降速下的动效检查；设置页「译文」卡片与面板的实际观感需要在真实 Chrome 里看。
+  - **M2b 灵岛，开工前要决定**：
+    - 内容脚本 gzip 已到 19.2/20KB，灵岛必须按需加载。MV3 下两条路：声明 `web_accessible_resources` 后动态 import（网页能探测到扩展存在），或后台用 `chrome.scripting` 注入（需新增 `scripting` 权限）。需用户拍板。
+    - 会话需要订阅接口：`PageSession` 现在只有拉取式 `state()`，面板靠 500ms 轮询；灵岛与会话同在内容脚本里，应加 `subscribe(listener)`，`reportStatus` 改为订阅者之一。
+    - 原型先补三种停靠（左、右、底）和琥珀材质的最终稿，经确认再出方案。
+  - **审查留下的结构建议（不阻塞）**：内容脚本的装配可抽成 `src/content/runtime.ts`，供 M3 划词共用 Port 与配置；`PageState` 与 `PageStatus` 可合并成一份；设置页预览引用了 `src/content/styles.ts`，样式常量可移到 `src/lib`；`site-memory.ts` 可拆读写两侧，给内容脚本减重。
+  - **图标**：用户会另找设计出稿。方向：暖黑超椭圆底板，一条暖白长线（原文）加一条琥珀短药丸（译文）；右下角给状态点留位置；16/32px 单独做像素对齐稿。
 - **界面方向已确认**：「隐中生岛」加琥珀主题色，完整规范见 [`docs/plans/ui-isle-direction.md`](docs/plans/ui-isle-direction.md)。原型在 https://claude.ai/artifact/GJTgsP7SFHmhP6M2SczwTp 。最高原则：人的感受第一、少打扰、近乎原生的沉浸阅读。
   - 默认在所有页面上都不留痕迹，由用户主动唤起。
   - 不常驻悬浮球。
@@ -94,9 +107,9 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
   - M3 的输入翻译要兼容 Lexical、ProseMirror、Draft.js、Slate、Quill 等富文本编辑器；M5 的字幕以当前时间 ±10 秒为滚动窗口预取。
   - **来自 M1 第 3b 步，留给 M2 的事项**：
   - 工具栏面板体积预算已从 80KB 调到 90KB（React 运行时是固定开销）。M2 往面板加功能时，如果超过 90KB，先评估更轻的运行时，不再直接调预算。
-  - 工具栏图标改成单色字形加状态小点（已翻译用琥珀色，有失败用珊瑚色），和 `action.setIcon` 一起做；面板上「翻译此页」「这次先用 Google 翻译」「总是翻译此站」随 M2 接入。
-  - manifest 没有设置 `minimum_chrome_version`。下拉用的 popover 需要 Chrome 114，对话框和下拉的入场动效需要 117；更旧的版本会退化。M2 决定是否设置最低版本。
-  - 兼容 OpenAI 接口的流式响应在后台累积时没有长度上限（M1 早期代码），M2 加上上限。
+  - 工具栏图标改成单色字形加状态小点（已翻译用琥珀色，有失败用珊瑚色），和 `action.setIcon` 一起做；面板上「翻译此页」「这次先用 Google 翻译」「总是翻译此站」随 M2 接入。**M2a 已接入状态点和面板；图标本身的重新设计待用户找设计出稿（方向：暖黑底板加两条线，右下角给状态点留位置）。**
+  - ~~manifest 没有设置 `minimum_chrome_version`~~：M2a 定为 117。
+  - ~~兼容 OpenAI 接口的流式响应在后台累积时没有长度上限~~：M2a 加了 64000 字上限（OpenAI 兼容与 Gemini），超过按截断处理。
   - 同一地址上的多个自定义服务共享限流冷却（有意为之）；如果用户反馈同一聚合平台上多个账号互相拖累，再改成按地址加密钥区分。
 - **来自 M1 架构审查，留到对应批次再做（现在做属于过度设计）**：
     - M2：视口优先由内容脚本控制提交顺序，调度器不加优先级。
@@ -148,6 +161,7 @@ M1 和 M2（整页翻译）完成后即构成 MVP。
 | 2026-11-13 | M0 方案 `docs/plans/m0-foundation.md` 经审查后获批。在 `feat/m0-foundation` 上实现 M0（工具链与 CI、配置仓库、消息协议与 Port 传输层、设计 token 与主题），`npm run check` 通过。状态：**已实现，待审查和合并**；第 9 节手工验收待在真实 Chrome 中执行。下一步：审查 → 推送并开 PR → CI 通过后由用户合并 → M1 |
 | 2026-11-13 | 已开 PR jiangding01/easy-translate#1。按 check skill 的 Deep 流程补做了完整审查：安全、架构 2 个专项审查，加上 4 个角度的对抗式审查。确认 13 项问题并修复，每项都先写回归测试；其中 Port 修了「无法序列化的响应会让请求永久挂起」等问题。M1 开工前必须决定的事项已记入第 5 节。状态：**等待用户合并** |
 | 2026-11-13 | **M0 已合并**（PR #1，合并提交 `c5b7bb2`，main 上的 CI 通过）。用户在真实 Chrome 中完成手工验收：第 1、2、3、4、5b、6 项通过；5a（`chrome://` 页面的提示）只有单元测试覆盖。LCU 的 URL 策略只允许 http/https，不能用来测试扩展页面。下一步：M1 翻译核心（分支 `feat/m1-translation-core`） |
+| 2026-11-14 | **M2a 整页翻译完成实现与审查**（分支 `feat/m2-page-translation`）。<br>**实现**：扫描与分段、视口队列与 Port 会话、渲染与动效（WAAPI，只动 opacity 和 filter）、双语与仅译文、动态内容、快捷键、图标状态点、站点记忆、面板与设置页「译文」。顺带完成 M1 留下的两项：大模型流式输出 64000 字上限、最低 Chrome 117。<br>**审查**：check Deep，三路专项（安全 Fable、架构 Sonnet、对抗式 Fable），修复后 Fable 复查；确认问题见第 5 节，全部修复并有回归测试；第二轮复查发现的新问题也已修复，515 个测试。<br>**下一步**：推送并开 PR → CI → 用户真机验收并合并 → 新会话开始 M2b（先定按需加载方式与原型） |
 | 2026-11-14 | **M1 已合并**（PR #2，CI 全绿，用户手动合并）。用户用生产构建做了真机验收，主要流程都通过。发现 7 个问题：展开行背景偏粉（白色 token 色相为 0，OKLCH 混合时被拉向粉色）、本地 Ollama 返回 403 被误报为密钥无效、对话框初始焦点、文字按钮焦点框、详情区首行焦点框被裁、下拉宽度、README 缺 Ollama 说明，都在 PR #3 修复。<br>**下一步**：PR #3 合并 → M2 整页翻译方案（先出原型） |
 | 2026-11-14 | **M1 第 3b 步完成**。<br>**原型**：设置页、工具栏面板，以及加宽的「添加服务」对话框和自研下拉，用户确认后实现。<br>**变更**：自定义服务从 1 个改成最多 10 个，按条目写入；主题换成琥珀，组件只引用 token；自研下拉取代原生下拉；工具栏面板体积预算调到 90KB。<br>**审查**：3b 做了两轮 Deep 审查（安全、架构、四个对抗角度，加修复后复查），下拉组件做了一轮 Standard 审查。修掉的主要问题：同一服务快速连改两处会互相覆盖；删除后的迟到修改会让服务复活；记录键名含「.」或叫 `constructor` 时会清空全部设置；孤儿密钥（改为后台负责清理，只读配置下不清理）；测试连接可能占住调度槽 180 秒。下拉组件的审查修了读屏读不出当前值、面板误把未授权服务标为可用等 8 项。共 416 个测试。<br>**下一步**：推送并开 PR → CI → 用户手工验收并合并 → M2 |
 | 2026-11-14 | **M1 后台能力完成，暂停于 3b 之前**（应用户要求，下次继续）。<br>**实现**：分三段完成。第一段 Sonnet：配置、provider、缓存。第二段 Opus：调度器与服务。3a Sonnet：后台接线。<br>**审查**：按 check skill 的 Deep 流程，做了安全、架构 2 个专项审查，加上 4 个角度的对抗式审查，确认的问题已全部修复。主要有：OpenAI baseURL 绕过权限检查；配置写入没有校验发送方；冷却作用域与超大 Retry-After；缓存淘汰阻塞读取，TTL 删除与写入有竞态；LLM 输出被截断或被拦截时，真实原因被掩盖。每项修复都有先红后绿的回归测试，目前共 356 个测试。<br>**设计**：界面方向确认为「隐中生岛」加琥珀主题色，见 `docs/plans/ui-isle-direction.md`。<br>**下一步**：3b 原型 → 3b 实现 → check → 推送并开 PR |
