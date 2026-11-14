@@ -5,6 +5,7 @@ import type { ProviderAdapter, ProviderContext, ProviderEvent } from '../types';
 import {
   contentBlockedError,
   errorFromResponse,
+  MAX_LLM_OUTPUT_CHARS,
   modelRequiredError,
   outputTruncatedError,
   safeFetch,
@@ -74,6 +75,7 @@ async function* translate(batch: string[], ctx: ProviderContext): AsyncGenerator
     for (const part of candidate?.content?.parts ?? []) {
       if (typeof part.text === 'string' && part.thought !== true) text += part.text;
     }
+    if (text.length > MAX_LLM_OUTPUT_CHARS) throw outputTruncatedError();
   }
 
   for (const [index, item] of decodeLlmOutput(text, batch.length).entries()) {

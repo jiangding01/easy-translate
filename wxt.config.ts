@@ -16,6 +16,8 @@ export default defineConfig({
       'https://generativelanguage.googleapis.com/*',
     ],
     optional_host_permissions: ['https://*/*', 'http://localhost/*', 'http://127.0.0.1/*'],
+    // Popover (114) and entry animations with @starting-style (117) in the UI.
+    minimum_chrome_version: '117',
     action: { default_title: 'Easy Translate' },
     commands: {
       // Not Ctrl+Shift+A on Windows/Linux: Chrome's tab search owns it and the
