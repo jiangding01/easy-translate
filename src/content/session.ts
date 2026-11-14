@@ -1,7 +1,7 @@
 import type { ConfigV1, Engine, PageMode } from '@/lib/config/types';
 import { describeError } from '@/lib/error-messages';
 import type { AppError } from '@/lib/errors';
-import type { PortClient } from '@/lib/messaging/port';
+import type { PortClient, PortRequest } from '@/lib/messaging/port';
 import type {
   PageState,
   PageStatus,
@@ -13,7 +13,7 @@ import { createPacer, discoverUnits, type Unit } from './discover';
 import { isInlineElement, OWN_TAG, type StyleReader } from './dom-rules';
 import { watchMutations } from './mutations';
 import { createRenderer, type Renderer } from './render';
-import { injectStyles, removeStyles, STYLE_ATTR } from './styles';
+import { injectStyles, removeStyles } from './styles';
 
 // One page-translation session: discovery → viewport queue → Port requests →
 // renderer, plus new content and self-healing. Every async step re-checks the
@@ -23,6 +23,7 @@ type TranslatePort = PortClient<TranslateRequest, TranslateChunk, TranslateDone>
 
 export interface ViewportObserver {
   observe(target: Element): void;
+  unobserve(target: Element): void;
   disconnect(): void;
 }
 
@@ -30,12 +31,13 @@ export interface SessionDeps {
   win: Window;
   port: TranslatePort;
   getConfig(): Promise<ConfigV1>;
+  /** Live config updates while a session runs (the translation style can change). */
+  watchConfig?(callback: (config: ConfigV1) => void): () => void;
   reportStatus(status: PageStatus): void;
   createReadStyle(): StyleReader;
   /** IntersectionObserver with rootMargin 1000px; injectable for tests. */
   createViewport(onChange: (targets: Element[], visible: boolean[]) => void): ViewportObserver;
   createMutationWatch?: typeof watchMutations;
-  now?: () => number;
 }
 
 export interface PageSession {
@@ -71,7 +73,7 @@ export function isEngineLevel(error: AppError): boolean {
 export function createPageSession(deps: SessionDeps): PageSession {
   const { win, port } = deps;
   const doc = win.document;
-  const now = deps.now ?? (() => Date.now());
+  const now = () => Date.now();
   const watch = deps.createMutationWatch ?? watchMutations;
 
   let epoch = 0;
@@ -83,6 +85,10 @@ export function createPageSession(deps: SessionDeps): PageSession {
   let renderer: Renderer | undefined;
   let viewport: ViewportObserver | undefined;
   let stopWatching: (() => void) | undefined;
+  let stopWatchingConfig: (() => void) | undefined;
+  let sheet: HTMLStyleElement | undefined;
+  /** This session's own Port requests: stop cancels these, never other features' requests. */
+  const requests = new Set<PortRequest<TranslateDone>>();
   let readStyle: StyleReader = deps.createReadStyle();
   let lastScroll = Number.NEGATIVE_INFINITY;
   let flushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -149,16 +155,16 @@ export function createPageSession(deps: SessionDeps): PageSession {
   }
 
   /** Repeated re-insertion of the same text means a framework fight: give up on it. */
-  function allowReinsert(digest: string): boolean {
+  function allowReinsert(text: string): boolean {
     const at = now();
-    const recent = (reinserts.get(digest) ?? []).filter((time) => at - time < LOOP_WINDOW_MS);
+    const recent = (reinserts.get(text) ?? []).filter((time) => at - time < LOOP_WINDOW_MS);
     if (recent.length >= LOOP_LIMIT) {
-      abandoned.add(digest);
+      abandoned.add(text);
       console.warn('[easy-translate] a page keeps removing a translation; leaving it alone');
       return false;
     }
     recent.push(at);
-    reinserts.set(digest, recent);
+    reinserts.set(text, recent);
     return true;
   }
 
@@ -179,7 +185,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
     ) {
       return false;
     }
-    const known = translations.get(unit.seg.digest);
+    const known = translations.get(unit.seg.text);
     if (known !== undefined) {
       queueRender(unit, known);
       return false;
@@ -192,7 +198,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
   function register(units: Unit[]) {
     let added = false;
     for (const unit of units) {
-      if (abandoned.has(unit.seg.digest)) continue;
+      if (abandoned.has(unit.seg.text)) continue;
       const list = unitsByRoot.get(unit.root);
       if (list) list.push(unit);
       else {
@@ -331,12 +337,14 @@ export function createPageSession(deps: SessionDeps): PageSession {
           settled.add(unit);
           return;
         }
-        translations.set(unit.seg.digest, chunk.text);
+        translations.set(unit.seg.text, chunk.text);
         failed.delete(unit);
         queueRender(unit, chunk.text);
       },
     );
+    requests.add(request);
     void request.outcome.then((outcome) => {
+      requests.delete(request);
       if (current !== epoch) return;
       inFlight -= 1;
       // Units the request never answered for (request-level failure or cancel).
@@ -422,23 +430,27 @@ export function createPageSession(deps: SessionDeps): PageSession {
           (known) =>
             !kept.has(known) &&
             known.kind === unit.kind &&
-            known.seg.digest === unit.seg.digest &&
-            known.nodes.every((node) => node.isConnected),
+            known.seg.text === unit.seg.text &&
+            renderer?.isCurrent(known) === true,
         );
         if (existing) kept.add(existing);
         else fresh.push(unit);
       }
       // Old units in this area that were not found again: their text changed or left.
+      // A dialog can mark the rest of the page aria-hidden or inert for a while:
+      // still-present, unchanged units are kept, not dropped.
       for (const [unitRoot, units] of [...unitsByRoot]) {
         if (!root.contains(unitRoot)) continue;
-        for (const unit of [...units]) if (!kept.has(unit)) forget(unit);
+        for (const unit of [...units]) {
+          if (!kept.has(unit) && !renderer.isCurrent(unit)) forget(unit);
+        }
       }
       register(fresh);
     }
     // Translations a framework threw away come back from memory, a few times at most.
     for (const unit of renderer.detached()) {
       forget(unit);
-      if (allowReinsert(unit.seg.digest) && unit.root.isConnected) await rescan([unit.root]);
+      if (allowReinsert(unit.seg.text) && unit.root.isConnected) await rescan([unit.root]);
       if (current !== epoch) return;
     }
     report();
@@ -456,19 +468,24 @@ export function createPageSession(deps: SessionDeps): PageSession {
     failed.delete(unit);
     queued.delete(unit);
     renderer?.drop(unit);
+    // Long-lived pages: nothing may keep a gone unit (and its detached DOM) alive.
+    const id = ids.get(unit);
+    if (id !== undefined) byId.delete(id);
+    ids.delete(unit);
+    if (list?.length === 0) {
+      unitsByRoot.delete(unit.root);
+      if (!unit.root.isConnected) {
+        visibleRoots.delete(unit.root);
+        viewport?.unobserve(unit.root);
+      }
+    }
   }
 
   const isOwn = (node: Node): boolean => {
     let current: Node | null = node;
     while (current) {
       if (current.nodeName === OWN_TAG) return true;
-      if (
-        current.nodeType === Node.ELEMENT_NODE &&
-        (current as Element).hasAttribute(STYLE_ATTR) &&
-        current.nodeName === 'STYLE'
-      ) {
-        return true;
-      }
+      if (current === sheet) return true;
       current = current.parentNode;
     }
     return false;
@@ -480,6 +497,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
     epoch += 1;
     viewport?.disconnect();
     stopWatching?.();
+    stopWatchingConfig?.();
     win.removeEventListener('scroll', onScroll, true);
   }
 
@@ -504,7 +522,17 @@ export function createPageSession(deps: SessionDeps): PageSession {
     engineError = undefined;
   }
 
+  /** A failed start (config unreadable) leaves nothing behind. */
   async function start(options: { engine?: Engine } = {}): Promise<PageState> {
+    try {
+      return await begin(options);
+    } catch (error) {
+      if (phase !== 'idle') await stop();
+      throw error;
+    }
+  }
+
+  async function begin(options: { engine?: Engine }): Promise<PageState> {
     if (halted) return state();
     if (options.engine !== undefined && options.engine !== engine && phase !== 'idle') {
       // "这次先用 Google": switch the running session's engine and resend what is left.
@@ -527,7 +555,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
     config = await deps.getConfig();
     if (current !== epoch) return state();
     readStyle = deps.createReadStyle();
-    injectStyles(doc);
+    sheet = injectStyles(doc);
     renderer = createRenderer({
       win,
       style: config.page.style,
@@ -545,7 +573,23 @@ export function createPageSession(deps: SessionDeps): PageSession {
     });
     if (current !== epoch) return state();
     register(units);
-    stopWatching = watch({ root: doc.body, isOwn, onDirty: (elements) => void rescan(elements) });
+    stopWatching = watch({
+      root: doc.body,
+      isOwn,
+      onDirty: (elements) => {
+        // Fresh computed styles for each round: cached ones go stale on live pages.
+        readStyle = deps.createReadStyle();
+        void rescan(elements);
+      },
+    });
+    // Only the style follows the setting live; language and engine stay fixed for
+    // the session so one page never mixes two target languages.
+    let style = config.page.style;
+    stopWatchingConfig = deps.watchConfig?.((next) => {
+      if (current !== epoch || next.page.style === style) return;
+      style = next.page.style;
+      renderer?.setStyle(style);
+    });
     scheduleFlush(true);
     return state();
   }
@@ -553,13 +597,18 @@ export function createPageSession(deps: SessionDeps): PageSession {
   async function stop(): Promise<PageState> {
     if (phase === 'idle') return state();
     epoch += 1;
-    port.cancelAll();
+    for (const request of requests) request.cancel();
+    requests.clear();
+    stopWatchingConfig?.();
+    stopWatchingConfig = undefined;
     viewport?.disconnect();
     viewport = undefined;
     stopWatching?.();
     stopWatching = undefined;
     win.removeEventListener('scroll', onScroll, true);
     const rendererToRestore = renderer;
+    const sheetToRemove = sheet;
+    sheet = undefined;
     clearState();
     phase = 'idle';
     engine = undefined;
@@ -567,7 +616,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
     renderer = undefined;
     const done = (async () => {
       await rendererToRestore?.restoreAll();
-      removeStyles(doc);
+      removeStyles(sheetToRemove);
     })();
     stopping = done;
     await done;

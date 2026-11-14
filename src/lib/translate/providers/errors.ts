@@ -28,7 +28,8 @@ export function badResponseError(detail = 'Unexpected response shape'): AppError
 }
 
 /**
- * Ceiling on accumulated model output. A batch is at most 3000 source characters,
+ * Ceiling on accumulated model output. One provider request carries at most 3000
+ * source characters (the scheduler splits page batches to the provider's limits),
  * so a real translation stays far below this; past it the model is looping.
  */
 export const MAX_LLM_OUTPUT_CHARS = 64_000;

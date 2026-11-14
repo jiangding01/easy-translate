@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import type { Engine, PageMode } from '@/lib/config/types';
 import { type AppError, appError, fail, type Result } from '@/lib/errors';
@@ -37,12 +37,19 @@ export interface PageSessionControls {
 
 export function usePageSession(tabId: number | undefined): PageSessionControls {
   const [state, setState] = useState<PageState>();
+  // A poll answered after a newer action must not move the controls back.
+  const sequence = useRef({ sent: 0, applied: 0 });
 
   const run = useCallback(
     async (send: (to: { tabId: number; frameId: number }) => Promise<Result<PageState>>) => {
       if (tabId === undefined) return fail(appError('internal', 'internal/no-tab', 'No tab'));
+      sequence.current.sent += 1;
+      const order = sequence.current.sent;
       const result = await call(() => send({ tabId, frameId: 0 }));
-      if (result.ok) setState(result.data);
+      if (result.ok && order > sequence.current.applied) {
+        sequence.current.applied = order;
+        setState(result.data);
+      }
       return result;
     },
     [tabId],

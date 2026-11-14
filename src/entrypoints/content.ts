@@ -1,10 +1,10 @@
 import { browser } from 'wxt/browser';
 import { defineContentScript } from 'wxt/utils/define-content-script';
-import { pageIsInLanguage, sampleText } from '@/content/auto-start';
+import { sampleText, startIfRemembered } from '@/content/auto-start';
 import { createStyleReader } from '@/content/dom-rules';
 import { createPageSession, type PageSession } from '@/content/session';
 import { createIntersectionViewport } from '@/content/viewport';
-import { readConfig } from '@/lib/config/client';
+import { readConfig, watchConfig } from '@/lib/config/client';
 import { handle } from '@/lib/messaging/handle';
 import { createPortClient } from '@/lib/messaging/port';
 import {
@@ -15,7 +15,7 @@ import {
   type TranslateDone,
   type TranslateRequest,
 } from '@/lib/messaging/protocol';
-import { readSiteMemory, SITE_MEMORY_KEY, siteEntry } from '@/lib/site-memory';
+import { SITE_MEMORY_KEY } from '@/lib/site-memory';
 
 // Runs on every page but leaves no trace until invoked: no Port, no observers,
 // no DOM writes. The session (and its Port) is created on first use.
@@ -32,6 +32,7 @@ export default defineContentScript({
           browser.runtime.connect({ name: TRANSLATE_PORT_NAME }),
         ),
         getConfig: async () => (await readConfig()).data,
+        watchConfig: (callback) => watchConfig((snapshot) => callback(snapshot.data)),
         reportStatus: (status) => {
           sendMessage('page.status', status).catch(() => {
             // Background unreachable or extension reloaded: the dot is cosmetic.
@@ -54,9 +55,17 @@ export default defineContentScript({
       'page.getState',
       handle(() => ensure().state()),
     );
+    // Answers as soon as the session is running, so the panel can close at once;
+    // discovery continues in the page.
     onMessage(
       'page.start',
-      handle(({ data }) => ensure().start(data ?? {})),
+      handle(({ data }) => {
+        const session = ensure();
+        session.start(data ?? {}).catch(() => {
+          // A failed start already restored the page; the panel shows idle next time.
+        });
+        return session.state();
+      }),
     );
     onMessage(
       'page.stop',
@@ -75,21 +84,16 @@ export default defineContentScript({
       handle(() => ensure().retryFailed()),
     );
 
-    void autoStart().catch(() => {
+    startIfRemembered({
+      origin: location.origin,
+      readMemory: async () => (await browser.storage.local.get(SITE_MEMORY_KEY))[SITE_MEMORY_KEY],
+      getConfig: async () => (await readConfig()).data,
+      declared: document.documentElement.lang,
+      sample: () => sampleText(document.body),
+      detect: (text) => browser.i18n.detectLanguage(text),
+      start: () => (ensure().state().phase === 'idle' ? ensure().start() : Promise.resolve()),
+    }).catch(() => {
       // Storage unavailable or extension reloaded: stay untouched.
     });
-
-    async function autoStart() {
-      const stored = await browser.storage.local.get(SITE_MEMORY_KEY);
-      const entry = siteEntry(readSiteMemory(stored[SITE_MEMORY_KEY]), location.origin);
-      if (!entry?.always) return;
-      const { data: config } = await readConfig();
-      const native = await pageIsInLanguage(config.language.target, {
-        declared: document.documentElement.lang,
-        sample: () => sampleText(document.body),
-        detect: (text) => browser.i18n.detectLanguage(text),
-      });
-      if (!native && ensure().state().phase === 'idle') await ensure().start();
-    }
   },
 });

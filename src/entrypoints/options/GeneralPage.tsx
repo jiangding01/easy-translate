@@ -166,8 +166,8 @@ function TranslationSection({
   const { style, mode } = config.page;
 
   useEffect(() => {
-    injectStyles(document);
-    return () => removeStyles(document);
+    const sheet = injectStyles(document);
+    return () => removeStyles(sheet);
   }, []);
 
   return (

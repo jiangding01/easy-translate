@@ -43,10 +43,14 @@ export interface Renderer {
   /** Removes one unit's translation at once (source changed, retry). */
   drop(unit: Unit): void;
   setMode(mode: PageMode): Promise<void>;
+  /** Restyles every translation in place (the setting changed while translating). */
+  setStyle(style: PageStyle): void;
   /** Fades visible translations out, then removes everything in one frame. */
   restoreAll(): Promise<void>;
   has(unit: Unit): boolean;
   isFailed(unit: Unit): boolean;
+  /** The unit's source is still in the page with the same text (it may be hidden for now). */
+  isCurrent(unit: Unit): boolean;
   /** Units whose translation is no longer in the page (framework re-render). */
   detached(): Unit[];
   readonly mode: PageMode;
@@ -125,6 +129,12 @@ export function createRenderer(options: RenderOptions): Renderer {
   const rendered = new Map<Unit, Rendered>();
   const hostDark = new WeakMap<Element, boolean>();
   let mode: PageMode = 'bilingual';
+  let style = options.style;
+  /**
+   * Set when the restore begins. Writes still waiting for their frame (insert,
+   * fail, a mode switch) must not land after it, or they would outlive the session.
+   */
+  let disposed = false;
 
   const reduced = () => win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const frame = () =>
@@ -143,7 +153,7 @@ export function createRenderer(options: RenderOptions): Renderer {
 
   function makeElement(dark: boolean, inline: boolean): HTMLElement {
     const el = doc.createElement('et-tr');
-    el.setAttribute('data-et-s', options.style);
+    el.setAttribute('data-et-s', style);
     el.setAttribute('lang', options.target);
     el.setAttribute('translate', 'no');
     el.setAttribute('dir', 'auto');
@@ -261,6 +271,7 @@ export function createRenderer(options: RenderOptions): Renderer {
 
     has: (unit) => rendered.has(unit) && !rendered.get(unit)?.failed,
     isFailed: (unit) => rendered.get(unit)?.failed === true,
+    isCurrent: (unit) => stillSame(unit),
 
     detached: () =>
       [...rendered.values()].filter((record) => !record.el.isConnected).map((r) => r.unit),
@@ -290,8 +301,9 @@ export function createRenderer(options: RenderOptions): Renderer {
           clamp: findClamp(unit.root, win),
         });
       }
-      if (plans.length === 0) return stale;
+      if (plans.length === 0 || disposed) return stale;
       await frame();
+      if (disposed) return stale;
 
       // Write phase: one frame for the whole batch.
       const onlyReadings: OnlyReading[] = [];
@@ -335,7 +347,9 @@ export function createRenderer(options: RenderOptions): Renderer {
       if (!unit.root.isConnected) return;
       const dark = isDark(unit.root);
       const flexRoot = unit.kind === 'block' && isFlexOrGrid(unit.root, readStyle);
+      if (disposed) return;
       await frame();
+      if (disposed) return;
       const previous = rendered.get(unit);
       if (previous) detach(previous);
       const inline = unit.kind === 'run' || flexRoot;
@@ -363,6 +377,11 @@ export function createRenderer(options: RenderOptions): Renderer {
       appear(record, 0);
     },
 
+    setStyle(next) {
+      style = next;
+      for (const record of rendered.values()) record.el.setAttribute('data-et-s', next);
+    },
+
     drop(unit) {
       const record = rendered.get(unit);
       if (!record) return;
@@ -371,10 +390,10 @@ export function createRenderer(options: RenderOptions): Renderer {
     },
 
     async setMode(next) {
-      if (next === mode) return;
-      const records = [...rendered.values()].filter(
-        (record) => record.el.isConnected && canBeOnly(record),
-      );
+      if (next === mode || disposed) return;
+      const switchable = () =>
+        [...rendered.values()].filter((record) => record.el.isConnected && canBeOnly(record));
+      const records = switchable();
       const anchor = captureAnchor(win);
       const visibleRoots = records.map((r) => r.unit.root).filter((root) => inViewport(root, win));
       const animated = typeof doc.body.animate === 'function' && !reduced();
@@ -392,11 +411,17 @@ export function createRenderer(options: RenderOptions): Renderer {
           );
         }
         await Promise.all(fades.map((fade) => fade.finished.catch(() => undefined)));
+        if (disposed) {
+          for (const fade of fades) fade.cancel();
+          return;
+        }
       }
-      const readings = next === 'translation' ? records.map(readOnly) : [];
+      // Re-read: translations inserted during the fade must switch too.
+      const current = switchable();
+      const readings = next === 'translation' ? current.map(readOnly) : [];
       mode = next;
       if (next === 'translation') for (const reading of readings) applyOnly(reading);
-      else for (const record of records) removeOnly(record);
+      else for (const record of current) removeOnly(record);
       restoreAnchor(anchor, win);
       // Second half: fade back in, then drop our animations so host styles rule again.
       if (animated && visibleRoots.length > 0) {
@@ -408,6 +433,7 @@ export function createRenderer(options: RenderOptions): Renderer {
     },
 
     async restoreAll() {
+      disposed = true;
       const records = [...rendered.values()];
       const anchor = captureAnchor(win);
       const animated = typeof doc.body.animate === 'function';

@@ -159,7 +159,9 @@ export function isInlineElement(el: Element, readStyle: StyleReader): boolean {
     return !own || own.startsWith('inline');
   }
   const display = readStyle(el)?.display;
-  if (!display) return el.tagName.includes('-') ? true : el.tagName !== 'DIV';
+  // 'none' says nothing about the box it would have (and translation-only mode
+  // hides children itself): fall back to the tag, as when no style is known.
+  if (!display || display === 'none') return el.tagName.includes('-') ? true : el.tagName !== 'DIV';
   return display.startsWith('inline') || display === 'contents';
 }
 

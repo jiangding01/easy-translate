@@ -1,4 +1,6 @@
+import type { ConfigV1 } from '@/lib/config/types';
 import { type LanguageCode, normalizeLanguage } from '@/lib/languages';
+import { readSiteMemory, siteEntry } from '@/lib/site-memory';
 import { SKIP_TAGS } from './dom-rules';
 
 // "总是翻译此站": start on load unless the page is already in the target language.
@@ -53,4 +55,22 @@ export async function pageIsInLanguage(
     // Unknown language: the user asked for this site, so translate.
     return false;
   }
+}
+
+export interface AutoStartDeps extends LanguageCheckDeps {
+  origin: string;
+  /** The raw `storage.local.siteMemory` value. */
+  readMemory(): Promise<unknown>;
+  getConfig(): Promise<ConfigV1>;
+  start(): Promise<unknown>;
+}
+
+/** On page load: start only for a remembered site whose page is not already in the target language. */
+export async function startIfRemembered(deps: AutoStartDeps): Promise<boolean> {
+  const entry = siteEntry(readSiteMemory(await deps.readMemory()), deps.origin);
+  if (!entry?.always) return false;
+  const config = await deps.getConfig();
+  if (await pageIsInLanguage(config.language.target, deps)) return false;
+  await deps.start();
+  return true;
 }

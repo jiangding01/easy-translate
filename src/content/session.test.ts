@@ -63,23 +63,32 @@ function fakePort() {
   return port;
 }
 
-function setup(markup: string) {
+function setup(markup: string, getConfig = async () => createDefaultConfig('zh-CN')) {
+  const configListeners: ((config: ReturnType<typeof createDefaultConfig>) => void)[] = [];
   document.body.innerHTML = markup;
   const before = document.body.innerHTML;
   const port = fakePort();
   const statuses: PageStatus[] = [];
   const observed: Element[] = [];
+  const unobserved: Element[] = [];
   let notify: ((targets: Element[], visible: boolean[]) => void) | undefined;
   const session = createPageSession({
     win: window,
     port,
-    getConfig: async () => createDefaultConfig('zh-CN'),
+    getConfig,
+    watchConfig: (callback) => {
+      configListeners.push(callback);
+      return () => configListeners.splice(configListeners.indexOf(callback), 1);
+    },
     reportStatus: (status) => statuses.push(status),
     createReadStyle: () => readStyle,
     createViewport: (onChange) => {
       notify = onChange;
       return {
         observe: (target) => observed.push(target),
+        unobserve: (target) => {
+          unobserved.push(target);
+        },
         disconnect: () => {
           observed.length = 0;
         },
@@ -94,7 +103,17 @@ function setup(markup: string) {
       targets.map(() => true),
     );
   const sentTexts = () => port.calls.flatMap((call) => call.payload.items.map((item) => item.text));
-  return { session, port, statuses, observed, show, before, sentTexts };
+  return {
+    session,
+    port,
+    statuses,
+    observed,
+    unobserved,
+    show,
+    before,
+    sentTexts,
+    configListeners,
+  };
 }
 
 const wait = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -158,6 +177,23 @@ describe('page session: happy path', () => {
     expect(port.calls).toHaveLength(1);
   });
 
+  it('never reuses a translation for a different text that shares its digest', async () => {
+    // A real FNV-1a 32-bit collision: a page comment must not plant a "translation" on other text.
+    const { session, port, show, observed, sentTexts } = setup(
+      '<p>Reader comment number 7123 says hello.</p><p>Reader comment number 260100 says hello.</p>',
+    );
+    await session.start();
+    show(observed.slice(0, 1));
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    port.calls[0]?.answer();
+    await vi.waitFor(() => expect(translations()).toHaveLength(1));
+    show(observed.slice(1));
+    await vi.waitFor(() =>
+      expect(sentTexts()).toContain('Reader comment number 260100 says hello.'),
+    );
+    expect(translations()).toEqual(['译:Reader comment number 7123 says hello.']);
+  });
+
   it('switches the mode and keeps the state in sync', async () => {
     const { session, port, show } = setup('<p>Mode switch paragraph.</p>');
     await session.start();
@@ -167,6 +203,55 @@ describe('page session: happy path', () => {
     await vi.waitFor(() => expect(translations()).toHaveLength(1));
     expect((await session.setMode('translation')).mode).toBe('translation');
     expect(document.querySelector('p')?.hasAttribute('data-et-only')).toBe(true);
+  });
+});
+
+describe('page session: lifecycle', () => {
+  it('removes only its own stylesheet, never one the page planted', async () => {
+    const { session } = setup('<p>Stylesheet ownership text.</p>');
+    const planted = document.createElement('style');
+    planted.setAttribute('data-et', '');
+    document.head.append(planted);
+    await session.start();
+    expect(document.querySelectorAll('style[data-et]')).toHaveLength(2);
+    await session.stop();
+    expect([...document.querySelectorAll('style[data-et]')]).toEqual([planted]);
+  });
+
+  it('cancels its own requests on stop without touching the shared Port', async () => {
+    const { session, port, show } = setup('<p>Own requests only text.</p>');
+    const cancelAll = vi.spyOn(port, 'cancelAll');
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    await session.stop();
+    expect(cancelAll).not.toHaveBeenCalled();
+  });
+
+  it('restyles translations when the setting changes, keeping the language fixed', async () => {
+    const { session, port, show, configListeners } = setup('<p>Live style paragraph.</p>');
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    port.calls[0]?.answer();
+    await vi.waitFor(() => expect(translations()).toHaveLength(1));
+    const next = createDefaultConfig('zh-CN');
+    next.page.style = 'highlight';
+    for (const listener of configListeners) listener(next);
+    expect(document.querySelector('et-tr')?.getAttribute('data-et-s')).toBe('highlight');
+    await session.stop();
+    expect(configListeners).toHaveLength(0);
+  });
+
+  it('leaves the page untouched when the config cannot be read', async () => {
+    const { session, before, statuses } = setup('<p>Unreadable config text.</p>', async () => {
+      throw new Error('storage gone');
+    });
+    await expect(session.start()).rejects.toThrow('storage gone');
+    expect(session.state().phase).toBe('idle');
+    expect(statuses.at(-1)).toBe('idle');
+    expect(document.body.innerHTML).toBe(before);
+    expect(document.querySelector('style[data-et]')).toBeNull();
   });
 });
 
@@ -324,6 +409,44 @@ describe('page session: dynamic content', () => {
     await vi.waitFor(() => expect(sentTexts()).toContain('Score is two to nil.'));
     port.calls.at(-1)?.answer();
     await vi.waitFor(() => expect(translations()).toEqual(['译:Score is two to nil.']));
+  });
+
+  it('keeps translations while a dialog marks the page aria-hidden', async () => {
+    const { session, port, show } = setup('<main><p>Behind the dialog text.</p></main>');
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    port.calls[0]?.answer();
+    await vi.waitFor(() => expect(translations()).toHaveLength(1));
+    const shown = document.querySelector('et-tr');
+    const main = document.querySelector('main') as HTMLElement;
+    main.setAttribute('aria-hidden', 'true');
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    document.body.append(dialog);
+    await wait(100);
+    // The same node: never dropped and re-inserted (a flash, and a strike toward the loop guard).
+    expect(document.querySelector('et-tr')).toBe(shown);
+    dialog.remove();
+    main.removeAttribute('aria-hidden');
+    await wait(100);
+    expect(translations()).toEqual(['译:Behind the dialog text.']);
+    expect(port.calls).toHaveLength(1);
+  });
+
+  it('lets go of paragraphs the page removed', async () => {
+    const { session, port, show, unobserved } = setup(
+      '<div><p id="gone">Soon removed text.</p></div>',
+    );
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    port.calls[0]?.answer();
+    await vi.waitFor(() => expect(translations()).toHaveLength(1));
+    const gone = document.getElementById('gone') as HTMLElement;
+    gone.remove();
+    await vi.waitFor(() => expect(unobserved).toContain(gone));
+    expect(session.state().translated).toBe(0);
   });
 
   it('puts back a translation a framework removed, but gives up after three times', async () => {
