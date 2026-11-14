@@ -20,6 +20,9 @@ export const SKIP_TAGS: ReadonlySet<string> = new Set([
   'BUTTON',
   'PRE',
   'HEAD',
+  // Ruby readings (furigana) are pronunciation, not text to translate.
+  'RT',
+  'RP',
   'OBJECT',
   'EMBED',
 ]);
@@ -139,7 +142,13 @@ export function isSkipped(el: Element): boolean {
   return false;
 }
 
-export type StyleReader = (el: Element) => { display: string } | undefined;
+export interface LayoutStyle {
+  display: string;
+  position?: string;
+  float?: string;
+}
+
+export type StyleReader = (el: Element) => LayoutStyle | undefined;
 
 const FLEX_OR_GRID = /^(inline-)?(flex|grid)$/;
 
@@ -157,15 +166,30 @@ function inlineByTag(el: Element): boolean {
  * follows its computed display, so flex and grid items, which the browser
  * blockifies, are each their own unit: merging them would also glue their text
  * together, since the gaps between items are drawn by CSS, not written in text.
+ *
+ * Three blockified cases stay inside their sentence:
+ * - out-of-flow boxes (screen-reader-only text, floated badges) are not lines
+ *   of their own, so the tag decides, as before;
+ * - items of an `inline-flex` / `inline-grid` chip belong to that one inline box;
+ * - ruby (`display: ruby*`) is inline text with annotations.
  */
 export function isInlineElement(el: Element, readStyle: StyleReader): boolean {
   if (BLOCK_TAGS.has(el.tagName)) return false;
   if (VERBATIM_TAGS.has(el.tagName)) return true;
-  const display = readStyle(el)?.display;
+  const style = readStyle(el);
+  const display = style?.display;
   // 'none' says nothing about the box it would have (and translation-only mode
   // hides children itself): fall back to the tag, as when no style is known.
-  if (!display || display === 'none') return inlineByTag(el);
-  return display.startsWith('inline') || display === 'contents';
+  if (!style || !display || display === 'none') return inlineByTag(el);
+  const outOfFlow =
+    style.position === 'absolute' ||
+    style.position === 'fixed' ||
+    (style.float !== undefined && style.float !== 'none');
+  if (outOfFlow) return inlineByTag(el);
+  const parent = el.parentElement;
+  const parentDisplay = parent ? readStyle(parent)?.display : undefined;
+  if (parentDisplay === 'inline-flex' || parentDisplay === 'inline-grid') return true;
+  return display.startsWith('inline') || display.startsWith('ruby') || display === 'contents';
 }
 
 /** Whether the element lays its children out as flex or grid items. */
@@ -176,12 +200,12 @@ export function isFlexOrGrid(el: Element, readStyle: StyleReader): boolean {
 
 /** A cached getComputedStyle: one read per element per pass. */
 export function createStyleReader(view: Window = window): StyleReader {
-  const cache = new WeakMap<Element, { display: string }>();
+  const cache = new WeakMap<Element, LayoutStyle>();
   return (el) => {
     let style = cache.get(el);
     if (!style) {
       const computed = view.getComputedStyle(el);
-      style = { display: computed.display };
+      style = { display: computed.display, position: computed.position, float: computed.cssFloat };
       cache.set(el, style);
     }
     return style;
