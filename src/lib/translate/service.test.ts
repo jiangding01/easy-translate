@@ -239,6 +239,13 @@ describe('preprocessing and classification', () => {
     ).toThrow(expect.objectContaining({ code: 'validation/invalid-payload' }));
   });
 
+  it('accepts a one-off engine and rejects an unknown one', () => {
+    expect(parseTranslateRequest({ items: [], engine: 'google' }).engine).toBe('google');
+    expect(() => parseTranslateRequest({ items: [], engine: 'bing' })).toThrow(
+      expect.objectContaining({ code: 'validation/invalid-payload' }),
+    );
+  });
+
   it('repairs lone surrogates', () => {
     expect(preprocessText('a\uD800b\uDC00')).toBe('a\uFFFDb\uFFFD');
   });
@@ -247,6 +254,15 @@ describe('preprocessing and classification', () => {
 // ------------------------------------------------------------ integration
 
 describe('translate service over the port', () => {
+  it('uses a one-off engine for the request without touching the config', async () => {
+    const { providers, config, run } = setup();
+    config.translation.engine = 'openai';
+    const result = await run({ items: items('Hello'), source: 'en', engine: 'google' });
+    expect(result.byId.i0).toMatchObject({ text: 'G:Hello', disposition: 'translated' });
+    expect(providers.calls[0]?.url).toContain('/translate_a/t?');
+    expect(config.translation.engine).toBe('openai');
+  });
+
   it('runs req → chunk → done, then serves the second request from the cache', async () => {
     const { providers, cache, run } = setup();
     const first = await run({ items: items('Hello', 'World') });

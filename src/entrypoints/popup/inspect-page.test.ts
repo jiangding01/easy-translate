@@ -14,6 +14,8 @@ describe('inspectActivePage', () => {
     const result = await inspectActivePage();
     expect(result).toEqual({
       host: 'example.com',
+      tabId: 1,
+      origin: 'https://example.com',
       info: {
         ok: false,
         error: expect.objectContaining({ code: 'network/page-unreachable', retryable: false }),

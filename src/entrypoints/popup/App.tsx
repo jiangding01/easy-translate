@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { Select, type SelectOption } from '@/components/Select';
 import { engineFields, hasEditableBaseURL } from '@/lib/config/engine-fields';
-import type { ConfigV1, Engine } from '@/lib/config/types';
+import type { ConfigV1, Engine, PageMode } from '@/lib/config/types';
 import { useConfig } from '@/lib/config/use-config';
 import {
   type EngineReadiness,
@@ -16,12 +16,14 @@ import { useHostPermission, useHostPermissions } from '@/lib/host-permission';
 import { LANGUAGES, type LanguageCode, languageName } from '@/lib/languages';
 import { call } from '@/lib/messaging/handle';
 import {
+  type PageState,
   type SecretProviderId,
   type SecretStatusInfo,
   sendMessage,
 } from '@/lib/messaging/protocol';
 import { useTheme } from '@/styles/theme';
 import { type ActivePage, inspectActivePage } from './inspect-page';
+import { pausedReason, usePageSession, useShortcut, useSiteAlways } from './page-session';
 import { panelState } from './panel-state';
 import styles from './popup.module.css';
 
@@ -38,6 +40,9 @@ export function App() {
   const [page, setPage] = useState<ActivePage>();
   const [statuses, setStatuses] = useState<Statuses>();
   const [error, setError] = useState<string>();
+  const session = usePageSession(page?.tabId);
+  const shortcut = useShortcut();
+  const site = useSiteAlways(page?.origin);
   useTheme(state.status === 'ready' ? state.snapshot.data.ui.theme : undefined);
 
   useEffect(() => {
@@ -78,6 +83,17 @@ export function App() {
   const openSettings = () => {
     void browser.runtime.openOptionsPage().catch(() => setError('无法打开设置页，请重试。'));
   };
+
+  const report = (result: { ok: boolean; error?: Parameters<typeof describeError>[0] }) => {
+    setError(result.ok || !result.error ? undefined : describeError(result.error));
+    return result.ok;
+  };
+  // Starting hands the page back to the reader: the panel gets out of the way.
+  const start = async (engine?: Engine) => {
+    if (report(await session.start(engine))) window.close();
+  };
+  const active = session.state !== undefined && session.state.phase !== 'idle';
+  const canAlways = page?.origin !== undefined && (active || view.kind === 'foreign');
 
   return (
     <main className={styles.panel}>
@@ -123,23 +139,30 @@ export function App() {
       </div>
 
       <div className={styles.body}>
-        {view.kind === 'foreign' && (
-          <>
-            <EngineNotice config={config} statuses={statuses} onOpenSettings={openSettings} />
-            <button
-              type="button"
-              className={styles.primary}
-              disabled
-              aria-describedby="translate-soon"
-            >
-              翻译此页
-            </button>
-            <span id="translate-soon" className={styles.quiet}>
-              整页翻译将在下一个版本接入。
-            </span>
-          </>
+        {active && session.state && (
+          <SessionActions
+            key="session"
+            state={session.state}
+            config={config}
+            shortcut={shortcut}
+            onStop={async () => report(await session.stop())}
+            onMode={async (mode) => report(await session.setMode(mode))}
+            onRetry={async () => report(await session.retryFailed())}
+            onGoogle={() => void start('google')}
+            onOpenSettings={openSettings}
+          />
         )}
-        {view.kind === 'native' && (
+        {!active && view.kind === 'foreign' && (
+          <IdleActions
+            key="idle"
+            config={config}
+            statuses={statuses}
+            shortcut={shortcut}
+            onStart={(engine) => void start(engine)}
+            onOpenSettings={openSettings}
+          />
+        )}
+        {!active && view.kind === 'native' && (
           <div className={styles.message}>
             <strong>这一页已经是{languageName(view.language)}</strong>
             <span>不需要翻译。</span>
@@ -158,6 +181,26 @@ export function App() {
           </div>
         )}
         {view.kind === 'loading' && <span className={styles.quiet}>正在读取页面…</span>}
+        {canAlways && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={site.always === true}
+            disabled={site.always === undefined}
+            className={styles.switchRow}
+            onClick={() => void site.toggle().then((result) => result && report(result))}
+          >
+            <span className={styles.switchText}>
+              <span>总是翻译此站</span>
+              <span className={styles.switchHint}>
+                {site.always ? `打开 ${page?.host} 时自动翻译` : '只在你唤起时翻译'}
+              </span>
+            </span>
+            <span aria-hidden="true" className={styles.switchTrack}>
+              <span className={styles.switchKnob} />
+            </span>
+          </button>
+        )}
         {error && (
           <p className={styles.error} role="alert">
             {error}
@@ -211,28 +254,177 @@ function useReadiness(config: ConfigV1, statuses: Statuses | undefined) {
   });
 }
 
-/** A quiet line when the default engine cannot translate yet; never a dead end. */
-function EngineNotice({
+function engineName(config: ConfigV1, engine: Engine): string {
+  return engineEntries(config).find((entry) => entry.id === engine)?.name ?? engine;
+}
+
+function Kbd({ shortcut }: { shortcut: string | undefined }) {
+  return shortcut ? <span className={styles.kbd}>{shortcut}</span> : null;
+}
+
+/** Not translated yet: one main action. A default engine that cannot translate is never a dead end. */
+function IdleActions({
   config,
   statuses,
+  shortcut,
+  onStart,
   onOpenSettings,
 }: {
   config: ConfigV1;
   statuses: Statuses | undefined;
+  shortcut: string | undefined;
+  onStart: (engine?: Engine) => void;
   onOpenSettings: () => void;
 }) {
   const readiness = useReadiness(config, statuses);
-  if (statuses === undefined || !readiness.problem) return null;
-  const name = engineEntries(config).find((entry) => entry.id === config.translation.engine)?.name;
+  const blocked = statuses !== undefined && readiness.problem !== undefined;
   return (
-    <div className={styles.notice}>
-      <span aria-hidden="true" className={styles.warnDot} />
-      <span className={styles.noticeText}>
-        {name}
-        {readiness.problem}
-      </span>
-      <button type="button" className={styles.textButton} onClick={onOpenSettings}>
-        去设置
+    <div className={styles.stage}>
+      {blocked && (
+        <div className={styles.notice}>
+          <span aria-hidden="true" className={styles.warnDot} />
+          <span className={styles.noticeText}>
+            {engineName(config, config.translation.engine)}
+            {readiness.problem}
+          </span>
+          <button type="button" className={styles.textButton} onClick={onOpenSettings}>
+            去设置
+          </button>
+        </div>
+      )}
+      {blocked ? (
+        <button type="button" className={styles.primary} onClick={() => onStart('google')}>
+          <span className={styles.grow}>这次先用 Google 翻译</span>
+        </button>
+      ) : (
+        <button type="button" className={styles.primary} onClick={() => onStart()}>
+          <span className={styles.grow}>翻译此页</span>
+          <Kbd shortcut={shortcut} />
+        </button>
+      )}
+      {shortcut === '' && (
+        <span className={styles.quiet}>
+          还没有快捷键 ·{' '}
+          <button
+            type="button"
+            className={styles.textButton}
+            onClick={() => void browser.tabs.create({ url: 'chrome://extensions/shortcuts' })}
+          >
+            设置快捷键 ↗
+          </button>
+        </span>
+      )}
+    </div>
+  );
+}
+
+const MODES: { value: PageMode; label: string }[] = [
+  { value: 'bilingual', label: '双语' },
+  { value: 'translation', label: '仅译文' },
+];
+
+/** A session is on: progress, mode, failures, and the way back to the original. */
+function SessionActions({
+  state,
+  config,
+  shortcut,
+  onStop,
+  onMode,
+  onRetry,
+  onGoogle,
+  onOpenSettings,
+}: {
+  state: PageState;
+  config: ConfigV1;
+  shortcut: string | undefined;
+  onStop: () => void;
+  onMode: (mode: PageMode) => void;
+  onRetry: () => void;
+  onGoogle: () => void;
+  onOpenSettings: () => void;
+}) {
+  // Optimistic: the thumb moves on click, the page follows a frame later.
+  const [mode, setMode] = useState(state.mode);
+  useEffect(() => setMode(state.mode), [state.mode]);
+  const engine = state.engine ?? config.translation.engine;
+  const running = state.phase === 'running' && !state.engineError;
+
+  if (state.engineError) {
+    return (
+      <div className={styles.stage}>
+        <div className={styles.notice} title={describeError(state.engineError)}>
+          <span aria-hidden="true" className={styles.warnDot} />
+          <span className={styles.noticeText}>
+            {engineName(config, engine)} {pausedReason(state.engineError)}，翻译已暂停
+          </span>
+          <button type="button" className={styles.textButton} onClick={onOpenSettings}>
+            去设置
+          </button>
+        </div>
+        {engine === 'google' ? (
+          <button type="button" className={styles.primary} onClick={onRetry}>
+            <span className={styles.grow}>重试</span>
+          </button>
+        ) : (
+          <button type="button" className={styles.primary} onClick={onGoogle}>
+            <span className={styles.grow}>这次先用 Google 翻译</span>
+          </button>
+        )}
+        <button type="button" className={styles.secondary} onClick={onStop}>
+          <span className={styles.grow}>显示原文</span>
+          <Kbd shortcut={shortcut} />
+        </button>
+      </div>
+    );
+  }
+
+  const index = MODES.findIndex((item) => item.value === mode);
+  return (
+    <div className={styles.stage}>
+      {running && (
+        <div className={styles.progress} role="status">
+          <span>正在翻译眼前的段落，往下读时继续</span>
+          <span aria-hidden="true" className={styles.track}>
+            <span className={styles.sweep} />
+          </span>
+        </div>
+      )}
+      {state.failed > 0 && (
+        <div className={styles.failRow}>
+          <span aria-hidden="true" className={styles.warnDot} />
+          <span className={styles.grow}>{state.failed} 段没有译出</span>
+          <button type="button" className={styles.textButton} onClick={onRetry}>
+            重试
+          </button>
+        </div>
+      )}
+      {state.translated > 0 && (
+        <fieldset
+          aria-label="显示方式"
+          className={styles.segmented}
+          style={{ '--index': index } as React.CSSProperties}
+        >
+          <span aria-hidden="true" className={styles.segmentThumb} />
+          {MODES.map((item) => (
+            <label key={item.value} className={styles.segment}>
+              <input
+                type="radio"
+                name="page-mode"
+                className={styles.radioInput}
+                checked={mode === item.value}
+                onChange={() => {
+                  setMode(item.value);
+                  onMode(item.value);
+                }}
+              />
+              {item.label}
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <button type="button" className={styles.secondary} onClick={onStop}>
+        <span className={styles.grow}>{running ? '停止并显示原文' : '显示原文'}</span>
+        <Kbd shortcut={shortcut} />
       </button>
     </div>
   );

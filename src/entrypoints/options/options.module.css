@@ -784,7 +784,10 @@
 .segmented {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(3, 72px);
+  grid-auto-flow: column;
+  grid-auto-columns: var(--seg-w, 72px);
+  margin: 0;
+  border: 0;
   padding: 3px;
   gap: 2px;
   border-radius: var(--et-radius-lg);
@@ -796,14 +799,14 @@
   position: absolute;
   top: 3px;
   left: 3px;
-  width: 72px;
+  width: var(--seg-w, 72px);
   height: var(--et-h-control-sm);
   border-radius: var(--et-radius-md);
   background: var(--et-color-elevated);
   box-shadow:
     0 1px 2px oklch(0.2 0.02 70 / 0.12),
     0 0 0 1px var(--et-color-border);
-  transform: translateX(calc(var(--index, 0) * 74px));
+  transform: translateX(calc(var(--index, 0) * (var(--seg-w, 72px) + 2px)));
   transition: transform var(--et-dur-slide) var(--et-ease-spring);
 }
 .segment {
@@ -1049,4 +1052,121 @@ fieldset.segmented {
 }
 fieldset.chips {
   padding: 0;
+}
+
+/* ---------------------------------------------------------- 译文样式 */
+
+.styleBlock {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-bottom: 1px solid var(--et-color-border);
+}
+.styleHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.styleGrid {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.styleOption {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 12px 14px;
+  border: 1px solid var(--et-color-border);
+  border-radius: var(--et-radius-lg);
+  background: var(--et-color-elevated);
+  cursor: pointer;
+  transition:
+    border-color var(--et-dur-fast) var(--et-ease-out),
+    background-color var(--et-dur-base) var(--et-ease-out),
+    transform var(--et-dur-fast) var(--et-ease-out);
+}
+.styleOption:hover {
+  border-color: var(--et-color-border-strong);
+}
+.styleOption:active {
+  transform: scale(0.985);
+}
+.styleOption:has(:checked) {
+  border-color: var(--et-color-accent-ink);
+  background: color-mix(in oklch, var(--et-color-accent-soft) 45%, var(--et-color-elevated));
+}
+.styleOption:has(:focus-visible) {
+  outline: 2px solid var(--et-color-focus);
+  outline-offset: 2px;
+}
+.styleName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--et-fs-page-sm);
+  font-weight: var(--et-fw-medium);
+}
+.defaultTag {
+  padding: 0 7px;
+  border-radius: var(--et-radius-full);
+  background: var(--et-color-accent-soft);
+  color: var(--et-color-accent-ink);
+  font-size: var(--et-fs-inject-xs);
+  line-height: 18px;
+  font-weight: var(--et-fw-semibold);
+}
+
+/* A stand-in web page, deliberately outside our theme: the sample shows how
+   translations sit on someone else's light or dark page. */
+.sample {
+  --host-bg: #fff;
+  --host-text: #242424;
+  display: block;
+  padding: 8px 10px;
+  border-radius: var(--et-radius-md);
+  background: var(--host-bg);
+  color: var(--host-text);
+  box-shadow: inset 0 0 0 1px var(--et-color-border);
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 13.5px;
+  line-height: 1.55;
+  transition:
+    background-color var(--et-dur-base) var(--et-ease-out),
+    color var(--et-dur-base) var(--et-ease-out);
+}
+.sample[data-host="dark"] {
+  --host-bg: #0f1115;
+  --host-text: #e6e8eb;
+}
+.preview {
+  padding: 14px 16px;
+  border-radius: var(--et-radius-lg);
+  font-size: 16px;
+}
+/* A new style "develops" in place, the same way translations appear on pages. */
+.previewIn {
+  animation: develop var(--et-dur-appear) var(--et-ease-out) both;
+}
+@keyframes develop {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .previewIn {
+    animation-name: fade-only;
+  }
+  @keyframes fade-only {
+    from {
+      opacity: 0;
+    }
+  }
 }

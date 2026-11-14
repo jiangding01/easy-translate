@@ -44,17 +44,223 @@
   flex-direction: column;
   gap: 10px;
 }
-.primary {
+/* Each state's actions fade in as one group when the session changes phase. */
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: stage-in var(--et-dur-appear) var(--et-ease-out) both;
+}
+@keyframes stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+.grow {
+  flex-grow: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.primary,
+.secondary {
   width: 100%;
   height: var(--et-h-control-xl);
   padding: 0 14px;
-  border: 0;
   border-radius: var(--et-radius-lg);
+  font-size: var(--et-fs-page-md);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition:
+    background-color var(--et-dur-fast) var(--et-ease-out),
+    transform var(--et-dur-fast) var(--et-ease-out);
+}
+.primary:active,
+.secondary:active {
+  transform: scale(0.985);
+}
+.primary {
+  border: 0;
   background: var(--et-color-accent);
   color: var(--et-color-on-accent);
-  font-size: var(--et-fs-page-md);
   font-weight: var(--et-fw-semibold);
+}
+.primary:hover {
+  background: var(--et-color-accent-hover);
+}
+.secondary {
+  border: 1px solid var(--et-color-border-strong);
+  background: var(--et-color-elevated);
+  color: var(--et-color-text);
+  font-weight: var(--et-fw-medium);
+}
+.secondary:hover {
+  background: var(--et-color-surface);
+}
+.kbd {
+  flex-shrink: 0;
+  font-size: var(--et-fs-inject-xs);
+  letter-spacing: 0.04em;
+  font-weight: var(--et-fw-medium);
+  opacity: 0.62;
+}
+
+/* Running: a thin amber light sweeping a hairline, no numbers to watch. */
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--et-fs-caption);
+  color: var(--et-color-muted);
+}
+.track {
+  height: 2px;
+  border-radius: var(--et-radius-full);
+  background: var(--et-color-surface);
+  overflow: hidden;
+}
+.sweep {
+  display: block;
+  width: 36%;
+  height: 100%;
+  border-radius: var(--et-radius-full);
+  background: var(--et-color-accent);
+  animation: sweep 1.2s var(--et-ease-emphasized) infinite;
+}
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(280%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sweep {
+    width: 100%;
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+.failRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--et-fs-caption);
+  color: var(--et-color-muted);
+}
+
+.segmented {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 3px;
+  gap: 2px;
+  border: 0;
+  border-radius: var(--et-radius-lg);
+  background: var(--et-color-surface);
+  box-shadow: inset 0 0 0 1px var(--et-color-border);
+}
+.segmentThumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 4px);
+  border-radius: var(--et-radius-md);
+  background: var(--et-color-elevated);
+  box-shadow:
+    0 1px 2px oklch(0.2 0.02 70 / 0.12),
+    0 0 0 1px var(--et-color-border);
+  transform: translateX(calc(var(--index, 0) * (100% + 2px)));
+  transition: transform var(--et-dur-slide) var(--et-ease-spring);
+}
+.segment {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--et-h-control-sm);
+  border-radius: var(--et-radius-md);
+  color: var(--et-color-muted);
+  font-size: var(--et-fs-page-sm);
+  cursor: pointer;
+  transition: color var(--et-dur-base) var(--et-ease-out);
+}
+.segment:has(:checked) {
+  color: var(--et-color-text);
+  font-weight: var(--et-fw-medium);
+}
+.segment:has(:focus-visible) {
+  outline: 2px solid var(--et-color-focus);
+  outline-offset: 2px;
+}
+.radioInput {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--et-color-text);
   text-align: left;
+}
+.switchRow:disabled {
+  opacity: 0.6;
+}
+.switchText {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--et-fs-page-sm);
+}
+.switchHint {
+  font-size: var(--et-fs-page-xs);
+  line-height: 17px;
+  color: var(--et-color-faint);
+}
+.switchTrack {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: var(--et-radius-full);
+  background: var(--et-color-border-strong);
+  transition: background-color var(--et-dur-base) var(--et-ease-out);
+}
+.switchKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--et-radius-full);
+  background: var(--et-color-elevated);
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.2);
+  transition:
+    transform var(--et-dur-spring) var(--et-ease-spring),
+    background-color var(--et-dur-base) var(--et-ease-out);
+}
+.switchRow[aria-checked="true"] .switchTrack {
+  background: var(--et-color-accent);
+}
+.switchRow[aria-checked="true"] .switchKnob {
+  transform: translateX(14px);
+  background: var(--et-color-on-accent);
 }
 .quiet {
   margin: 0;

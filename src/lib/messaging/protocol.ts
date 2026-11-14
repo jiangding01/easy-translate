@@ -5,9 +5,11 @@ import type {
   ConfigSnapshot,
   CustomProviderId,
   Engine,
+  PageMode,
 } from '@/lib/config/types';
 import type { AppError, Result } from '@/lib/errors';
 import type { LanguageCode } from '@/lib/languages';
+import type { SiteMemory } from '@/lib/site-memory';
 
 export interface PageInfo {
   title: string;
@@ -40,6 +42,23 @@ export interface ProviderTestResult {
   text: string;
 }
 
+/** A page-translation session as the toolbar panel sees it (content script → popup). */
+export interface PageState {
+  phase: 'idle' | 'running' | 'done';
+  mode: PageMode;
+  /** Units with a rendered translation. */
+  translated: number;
+  /** Units whose last attempt failed and can be retried. */
+  failed: number;
+  /** Engine-level problem that paused the session; it is shown once, not per paragraph. */
+  engineError?: AppError;
+  /** One-off engine used by this session instead of the configured one. */
+  engine?: Engine;
+}
+
+/** Status the content script reports so the toolbar icon can show its dot. */
+export type PageStatus = 'idle' | 'running' | 'done' | 'error';
+
 export interface CacheStatsInfo {
   count: number;
   totalBytes: number;
@@ -65,6 +84,18 @@ export interface ProtocolMap {
   'cache.clear'(): Result<null>;
   /** popup → top frame (frameId 0) of a given tab. */
   'page.getInfo'(): Result<PageInfo>;
+  /** popup → content (frameId 0): page-translation session control. */
+  'page.getState'(): Result<PageState>;
+  'page.start'(args: { engine?: Engine }): Result<PageState>;
+  'page.stop'(): Result<PageState>;
+  'page.setMode'(mode: PageMode): Result<PageState>;
+  'page.retryFailed'(): Result<PageState>;
+  /** background → content: the translate-page shortcut. */
+  'page.toggle'(): Result<PageState>;
+  /** content → background: drives the toolbar icon's status dot for the sender tab. */
+  'page.status'(status: PageStatus): Result<null>;
+  /** extension pages → background: "总是翻译此站". */
+  'site.setAlways'(args: { origin: string; always: boolean }): Result<SiteMemory>;
 }
 
 export const { sendMessage, onMessage } = defineExtensionMessaging<ProtocolMap>();
@@ -87,6 +118,8 @@ export interface TranslateRequest {
   /** Defaults to the configured source / target language. */
   source?: LanguageCode | 'auto';
   target?: LanguageCode;
+  /** One-off engine for this request ("这次先用 Google"); never written to the config. */
+  engine?: Engine;
 }
 
 /**

@@ -11,7 +11,7 @@ import { ServicesPage } from './ServicesPage';
 type Page = 'general' | 'services';
 
 const PAGES: { id: Page; title: string; sub: string }[] = [
-  { id: 'general', title: '通用', sub: '语言与外观，改动会立即生效。' },
+  { id: 'general', title: '通用', sub: '语言、外观与译文样式，改动会立即生效。' },
   {
     id: 'services',
     title: '翻译服务',
