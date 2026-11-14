@@ -5,17 +5,25 @@ import { isInlineElement, type StyleReader } from './dom-rules';
 
 /**
  * Display from the inline style, else a tag default: deterministic across DOM
- * shims. Flex and grid items are blockified, as browsers compute them.
+ * shims. Like browsers, it blockifies flex and grid items and out-of-flow
+ * (absolute, fixed, floated) boxes.
  */
 const readStyle: StyleReader = (el) => {
+  const style = (el as HTMLElement).style;
   const own =
-    (el as HTMLElement).style?.display ||
-    (el.tagName === 'DIV' || el.tagName === 'BODY' ? 'block' : 'inline');
+    style?.display || (el.tagName === 'DIV' || el.tagName === 'BODY' ? 'block' : 'inline');
+  const position = style?.position || 'static';
+  const float = style?.cssFloat || 'none';
   const parentDisplay = el.parentElement?.style?.display ?? '';
-  if (/^(inline-)?(flex|grid)$/.test(parentDisplay) && own.startsWith('inline')) {
-    return { display: own.replace(/^inline-?/, '') || 'block' };
+  const blockified =
+    /^(inline-)?(flex|grid)$/.test(parentDisplay) ||
+    position === 'absolute' ||
+    position === 'fixed' ||
+    float !== 'none';
+  if (blockified && own.startsWith('inline')) {
+    return { display: own.replace(/^inline-?/, '') || 'block', position, float };
   }
-  return { display: own };
+  return { display: own, position, float };
 };
 
 async function units(markup: string) {
@@ -193,6 +201,32 @@ describe('layout boundaries (claude.dev blog structures)', () => {
     ]) {
       expect(isTranslatableText(prose)).toBe(true);
     }
+  });
+});
+
+describe('layout boundaries inside a sentence', () => {
+  it('keeps screen-reader-only and floated spans inside their sentence', async () => {
+    expect(
+      await units(
+        '<p>Check out <a href="/x">the guide<span style="position:absolute">about pricing</span></a> and <span style="float:right">this badge</span> today.</p>',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('keeps an inline-flex chip and its inner spans inside the sentence', async () => {
+    expect(
+      await units(
+        '<p>Press <span style="display:inline-flex">the <span>Ctrl key</span></span> to continue.</p>',
+      ),
+    ).toEqual([{ kind: 'block', root: 'P', text: 'Press the Ctrl key to continue.' }]);
+  });
+
+  it('treats ruby as inline and leaves the reading out of the text', async () => {
+    expect(
+      await units(
+        '<p>日本語の<ruby style="display:ruby">漢字<rt style="display:ruby-text">かんじ</rt></ruby>を読む</p>',
+      ),
+    ).toEqual([{ kind: 'block', root: 'P', text: '日本語の漢字を読む' }]);
   });
 });
 
