@@ -16,6 +16,8 @@ import {
   type CustomProvider,
   isBuiltinEngine,
   isCustomProviderId,
+  PAGE_MODES,
+  PAGE_STYLES,
   THEMES,
   type Theme,
 } from './types';
@@ -28,6 +30,10 @@ const STORAGE_ITEM = `local:${CONFIG_STORAGE_KEY}` as const;
 
 function isTheme(value: unknown): value is Theme {
   return typeof value === 'string' && (THEMES as readonly string[]).includes(value);
+}
+
+function oneOf<T extends string>(values: readonly T[], value: unknown): T | undefined {
+  return (values as readonly unknown[]).includes(value) ? (value as T) : undefined;
 }
 
 function isCustomProvider(value: unknown): value is CustomProvider {
@@ -59,6 +65,7 @@ export function normalizeConfig(raw: unknown, uiLanguage: string): ConfigSnapsho
   const ui = isPlainObject(merged.ui) ? merged.ui : {};
   const language = isPlainObject(merged.language) ? merged.language : {};
   const translation = isPlainObject(merged.translation) ? merged.translation : {};
+  const page = isPlainObject(merged.page) ? merged.page : {};
   const customProviders = normalizeCustomProviders(merged.customProviders);
   const engine = translation.engine;
   const engineOk =
@@ -79,6 +86,11 @@ export function normalizeConfig(raw: unknown, uiLanguage: string): ConfigSnapsho
       },
       providers: merged.providers as ConfigV1['providers'],
       customProviders,
+      page: {
+        ...page,
+        style: oneOf(PAGE_STYLES, page.style) ?? defaults.data.page.style,
+        mode: oneOf(PAGE_MODES, page.mode) ?? defaults.data.page.mode,
+      },
       translation: {
         ...translation,
         engine: engineOk ? engine : defaults.data.translation.engine,

@@ -7,6 +7,7 @@ import {
   contentBlockedError,
   errorFromResponse,
   interruptedError,
+  MAX_LLM_OUTPUT_CHARS,
   modelRequiredError,
   outputTruncatedError,
   safeFetch,
@@ -67,6 +68,7 @@ async function* translate(batch: string[], ctx: ProviderContext): AsyncGenerator
     }
     const choice = chunk.choices?.[0];
     if (typeof choice?.delta?.content === 'string') text += choice.delta.content;
+    if (text.length > MAX_LLM_OUTPUT_CHARS) throw outputTruncatedError();
     if (choice?.finish_reason === 'length') throw outputTruncatedError();
     if (choice?.finish_reason === 'content_filter') throw contentBlockedError();
     if (choice?.finish_reason) finished = true;

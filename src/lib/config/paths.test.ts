@@ -60,6 +60,8 @@ describe('whitelist', () => {
       'language.target',
       'language.source',
       'translation.engine',
+      'page.style',
+      'page.mode',
       'providers.openai.baseURL',
       'providers.openai.model',
       'providers.deepseek.model',
