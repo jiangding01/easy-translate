@@ -1,6 +1,13 @@
 import { defineExtensionMessaging } from '@webext-core/messaging';
-import type { ConfigChange, ConfigPath, ConfigSnapshot } from '@/lib/config/types';
-import type { Result } from '@/lib/errors';
+import type {
+  ConfigChange,
+  ConfigPath,
+  ConfigSnapshot,
+  CustomProviderId,
+  Engine,
+} from '@/lib/config/types';
+import type { AppError, Result } from '@/lib/errors';
+import type { LanguageCode } from '@/lib/languages';
 
 export interface PageInfo {
   title: string;
@@ -8,18 +15,93 @@ export interface PageInfo {
   language: string;
 }
 
+/** Built-in engines that take a key, or a custom provider id. */
+export type SecretProviderId = 'openai' | 'deepseek' | 'gemini' | CustomProviderId;
+
+/** Never carries the key itself: `last4` is empty for short keys. */
+export interface SecretStatusInfo {
+  configured: boolean;
+  last4: string;
+}
+
+/**
+ * Unsaved settings-page values; `apiKey` falls back to the key saved for `engine`
+ * when omitted or blank. A custom id need not exist in the config yet.
+ */
+export interface ProviderTestDraft {
+  engine: Engine;
+  baseURL: string;
+  model: string;
+  apiKey?: string;
+}
+
+export interface ProviderTestResult {
+  latencyMs: number;
+  text: string;
+}
+
+export interface CacheStatsInfo {
+  count: number;
+  totalBytes: number;
+}
+
 /**
  * One-shot messages between contexts. Every reply is a `Result`: handlers are
  * wrapped with `handle()` and senders go through `call()`, so nothing throws
  * across a context boundary. Payloads are not validated: every sender is this
- * extension's own code (config writes are validated by the repository).
+ * extension's own code (config writes are validated by the repository, and
+ * accepted from extension pages only).
  */
 export interface ProtocolMap {
   'app.getStatus'(): Result<{ version: string }>;
   'config.patch'(changes: ConfigChange[]): Result<ConfigSnapshot>;
   'config.reset'(paths?: ConfigPath[]): Result<ConfigSnapshot>;
+  /** Settings page only (`validation/forbidden-sender` otherwise). */
+  'secrets.set'(args: { provider: SecretProviderId; key: string | null }): Result<SecretStatusInfo>;
+  /** Every built-in provider, plus each custom provider that has a key. */
+  'secrets.status'(): Result<Partial<Record<SecretProviderId, SecretStatusInfo>>>;
+  'provider.test'(draft: ProviderTestDraft): Result<ProviderTestResult>;
+  'cache.stats'(): Result<CacheStatsInfo>;
+  'cache.clear'(): Result<null>;
   /** popup → top frame (frameId 0) of a given tab. */
   'page.getInfo'(): Result<PageInfo>;
 }
 
 export const { sendMessage, onMessage } = defineExtensionMessaging<ProtocolMap>();
+
+// ---------------------------------------------------------------- Port et-translate
+
+/** Long-lived Port served by the background: req → chunk* → done (see lib/messaging/port). */
+export const TRANSLATE_PORT_NAME = 'et-translate';
+
+/** Larger payloads are rejected with `validation/payload-too-large`. */
+export const TRANSLATE_PAYLOAD_LIMITS = { maxItems: 200, maxChars: 50_000 } as const;
+
+export interface TranslateItem {
+  id: string;
+  text: string;
+}
+
+export interface TranslateRequest {
+  items: TranslateItem[];
+  /** Defaults to the configured source / target language. */
+  source?: LanguageCode | 'auto';
+  target?: LanguageCode;
+}
+
+/**
+ * - `translated`: `text` is the translation.
+ * - `unchanged`: nothing to translate (blank input) or the translation equals the source.
+ * - `same-language`: detected as already in the target language; `text` is the source.
+ */
+export type TranslateDisposition = 'translated' | 'unchanged' | 'same-language';
+
+/** One per item, in completion order. */
+export type TranslateChunk =
+  | { id: string; text: string; disposition: TranslateDisposition; cached: boolean }
+  | { id: string; error: AppError };
+
+export interface TranslateDone {
+  total: number;
+  failed: number;
+}

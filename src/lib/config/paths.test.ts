@@ -55,9 +55,20 @@ describe('whitelist', () => {
   });
 
   it('matches the ConfigPath type exactly', () => {
-    const expected = ['ui.theme', 'language.target'] as const satisfies readonly ConfigPath[];
+    const expected = [
+      'ui.theme',
+      'language.target',
+      'language.source',
+      'translation.engine',
+      'providers.openai.baseURL',
+      'providers.openai.model',
+      'providers.deepseek.model',
+      'providers.gemini.model',
+      'customProviders',
+    ] as const satisfies readonly ConfigPath[];
     // Type side: every ConfigPath is listed (and `satisfies` checks the reverse).
     expectTypeOf<Exclude<ConfigPath, (typeof expected)[number]>>().toEqualTypeOf<never>();
+    expectTypeOf<ConfigPath>().toEqualTypeOf<(typeof expected)[number]>();
     // Runtime side: the schema-derived whitelist is the same set.
     expect([...CONFIG_PATHS].sort()).toEqual([...expected].sort());
   });

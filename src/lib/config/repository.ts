@@ -1,5 +1,6 @@
 import { appError, isAppError } from '@/lib/errors';
 import { createDefaultConfig } from './defaults';
+import { isPlainObject } from './merge';
 import { parseStoredConfig } from './parse';
 import { CONFIG_PATHS, getPath, isConfigPath, setPath } from './paths';
 import { configSchema } from './schema';
@@ -10,6 +11,9 @@ import {
   type ConfigPath,
   type ConfigSnapshot,
   type ConfigV1,
+  type CustomProviderChange,
+  isCustomProviderId,
+  MAX_CUSTOM_PROVIDERS,
 } from './types';
 
 export interface KeyValueStore {
@@ -25,6 +29,12 @@ export interface ConfigRepositoryDeps {
 export interface ConfigRepository {
   /** Reads and leniently parses; writes the repaired value back once if needed. */
   load(): Promise<ConfigSnapshot>;
+  /**
+   * Like `load`, but undefined when the config was written by a newer build: the
+   * read-only defaults then do not reflect storage. Housekeeping that deletes data
+   * (secret pruning) must use this, never `load`.
+   */
+  loadStored(): Promise<ConfigSnapshot | undefined>;
   patch(changes: readonly ConfigChange[]): Promise<ConfigSnapshot>;
   /** Resets the given paths, or every known path, to defaults. Unknown keys survive. */
   reset(paths?: readonly ConfigPath[]): Promise<ConfigSnapshot>;
@@ -87,31 +97,45 @@ export function createConfigRepository(deps: ConfigRepositoryDeps): ConfigReposi
     return current.snapshot.data;
   }
 
-  return {
-    load: () =>
-      enqueue(async () => {
-        const current = await read();
-        if (current.repaired && !current.readOnly) {
-          try {
-            await store.set(CONFIG_STORAGE_KEY, current.snapshot);
-          } catch {
-            // The repaired snapshot is still valid in memory; the next write persists it.
-            console.warn('[config] failed to write back the repaired config');
-          }
+  const loadParsed = () =>
+    enqueue(async () => {
+      const current = await read();
+      if (current.repaired && !current.readOnly) {
+        try {
+          await store.set(CONFIG_STORAGE_KEY, current.snapshot);
+        } catch {
+          // The repaired snapshot is still valid in memory; the next write persists it.
+          console.warn('[config] failed to write back the repaired config');
         }
-        return current.snapshot;
-      }),
+      }
+      return current;
+    });
+
+  return {
+    load: async () => (await loadParsed()).snapshot,
+
+    loadStored: async () => {
+      const current = await loadParsed();
+      return current.readOnly ? undefined : current.snapshot;
+    },
 
     patch: (changes) =>
       enqueue(async () => {
         let data: unknown = await readWritable();
+        let engineSet = false;
         for (const change of changes) {
-          if (!isConfigPath(change.path)) {
+          if (isCustomProviderChange(change)) {
+            data = applyCustomProviderChange(data, change);
+            continue;
+          }
+          // The record itself is never replaced wholesale through a patch.
+          if (!isConfigPath(change.path) || (change.path as string) === 'customProviders') {
             throw appError('config', 'config/unknown-path', `Unknown config path: ${change.path}`);
           }
+          if (change.path === 'translation.engine') engineSet = true;
           data = setPath(data, change.path, change.value);
         }
-        return write(data);
+        return write(fallBackFromMissingEngine(data, { explicit: engineSet }));
       }),
 
     reset: (paths) =>
@@ -124,9 +148,67 @@ export function createConfigRepository(deps: ConfigRepositoryDeps): ConfigReposi
           }
           data = setPath(data, path, structuredClone(getPath(defaults, path)));
         }
-        return write(data);
+        return write(fallBackFromMissingEngine(data, { explicit: false }));
       }),
   };
+}
+
+function isCustomProviderChange(change: ConfigChange): change is CustomProviderChange {
+  return change.path === 'customProviders' && 'key' in change;
+}
+
+const CUSTOM_FIELDS = ['name', 'baseURL', 'model'] as const;
+
+function applyCustomProviderChange(data: unknown, change: CustomProviderChange): unknown {
+  if (!isCustomProviderId(change.key)) {
+    throw appError('config', 'config/invalid-value', 'Invalid custom provider id');
+  }
+  const current = getPath(data, 'customProviders');
+  const providers: Record<string, unknown> = isPlainObject(current) ? { ...current } : {};
+  const exists = Object.hasOwn(providers, change.key);
+
+  if ('remove' in change) {
+    delete providers[change.key];
+  } else if ('add' in change) {
+    if (exists) throw appError('config', 'config/invalid-value', 'Custom provider id is taken');
+    if (Object.keys(providers).length >= MAX_CUSTOM_PROVIDERS) {
+      throw appError(
+        'config',
+        'config/provider-limit',
+        `At most ${MAX_CUSTOM_PROVIDERS} custom providers`,
+      );
+    }
+    providers[change.key] = structuredClone(change.add);
+  } else {
+    // Updating a provider another page just removed must not bring it back.
+    const existing = providers[change.key];
+    if (!exists || !isPlainObject(existing)) {
+      throw appError('config', 'config/provider-missing', 'Custom provider not found');
+    }
+    const fields: Record<string, unknown> = {};
+    for (const field of CUSTOM_FIELDS) {
+      if (field in change.update) fields[field] = change.update[field];
+    }
+    // Merge field by field, so quick successive edits of one provider all survive.
+    providers[change.key] = { ...existing, ...fields };
+  }
+  return setPath(data, 'customProviders', providers);
+}
+
+/**
+ * The default engine must exist. When its provider went away (removed, reset)
+ * the default falls back to Google in the same write; choosing a provider that
+ * does not exist is an error instead, so the page never reports a false success.
+ */
+function fallBackFromMissingEngine(data: unknown, options: { explicit: boolean }): unknown {
+  const engine = getPath(data, 'translation.engine');
+  const providers = getPath(data, 'customProviders');
+  if (!isCustomProviderId(engine)) return data;
+  if (isPlainObject(providers) && Object.hasOwn(providers, engine)) return data;
+  if (options.explicit) {
+    throw appError('config', 'config/provider-missing', 'Custom provider not found');
+  }
+  return setPath(data, 'translation.engine', 'google');
 }
 
 function describe(error: unknown): string {

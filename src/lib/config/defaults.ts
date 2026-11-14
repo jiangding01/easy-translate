@@ -1,10 +1,19 @@
 import { defaultTargetLanguage } from '@/lib/languages';
 import { CONFIG_SCHEMA_VERSION, type ConfigSnapshot, type ConfigV1 } from './types';
 
+export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
+
 export function createDefaultConfig(uiLanguage: string): ConfigV1 {
   return {
     ui: { theme: 'system' },
-    language: { target: defaultTargetLanguage(uiLanguage) },
+    language: { target: defaultTargetLanguage(uiLanguage), source: 'auto' },
+    translation: { engine: 'google' },
+    providers: {
+      openai: { baseURL: DEFAULT_OPENAI_BASE_URL, model: 'gpt-5-mini' },
+      deepseek: { model: 'deepseek-chat' },
+      gemini: { model: '' },
+    },
+    customProviders: {},
   };
 }
 
