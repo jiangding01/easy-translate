@@ -39,3 +39,9 @@ button:disabled {
   outline: 2px solid var(--et-color-focus);
   outline-offset: 2px;
 }
+
+/* The ring follows the element's radius; inline links and text buttons have none,
+   so they get a small one. :where() keeps it below any component's own radius. */
+:where(a, button):focus-visible {
+  border-radius: var(--et-radius-xs);
+}
