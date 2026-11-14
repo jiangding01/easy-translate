@@ -26,6 +26,7 @@ assert.deepEqual(
   ['http://127.0.0.1/*', 'http://localhost/*', 'https://*/*'].sort(),
 );
 assert.ok(!manifest.key && !manifest.update_url, 'Legacy extension identity must not be copied');
+assert.equal(manifest.minimum_chrome_version, '117');
 assert.deepEqual(
   manifest.commands?.['translate-page']?.suggested_key,
   { default: 'Alt+A', mac: 'MacCtrl+Shift+A' },
