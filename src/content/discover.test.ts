@@ -183,7 +183,14 @@ describe('layout boundaries (claude.dev blog structures)', () => {
     ]) {
       expect(isTranslatableText(date)).toBe(false);
     }
-    for (const prose of ['May the best tool win', 'March', 'Published on Nov 9, 2026 by Addy']) {
+    for (const prose of [
+      'May the best tool win',
+      'March',
+      'Published on Nov 9, 2026 by Addy',
+      'Maybe 2',
+      'Mark 2',
+      'Octopus 8',
+    ]) {
       expect(isTranslatableText(prose)).toBe(true);
     }
   });
