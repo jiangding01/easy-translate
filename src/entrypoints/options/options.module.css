@@ -310,6 +310,12 @@
   color: var(--et-color-text);
   text-align: left;
 }
+.rowMain:focus-visible {
+  /* Inset: the card clips its rounded corners, and an outside ring would also
+     spill over the neighbouring rows. */
+  outline-offset: -2px;
+  border-radius: var(--et-radius-md);
+}
 .rowText {
   flex-grow: 1;
   min-width: 0;
