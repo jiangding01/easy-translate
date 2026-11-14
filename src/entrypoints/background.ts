@@ -74,8 +74,8 @@ export default defineBackground(() => {
   const loadBase = (size: 16 | 32) => {
     let base = bases.get(size);
     if (!base) {
-      const file = size === 16 ? 'icon/16.png' : 'icon/48.png';
-      base = fetch(browser.runtime.getURL(`/${file}`))
+      // 16 and 32 are each drawn on their own pixel grid (scripts/build-icons.mjs).
+      base = fetch(browser.runtime.getURL(`/icon/${size}.png`))
         .then((response) => response.blob())
         .then((blob) => createImageBitmap(blob));
       bases.set(size, base);

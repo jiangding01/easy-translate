@@ -26,6 +26,9 @@ assert.deepEqual(
   ['http://127.0.0.1/*', 'http://localhost/*', 'https://*/*'].sort(),
 );
 assert.ok(!manifest.key && !manifest.update_url, 'Legacy extension identity must not be copied');
+// The background draws the toolbar status dot over icon/16.png and icon/32.png.
+assert.equal(manifest.icons?.['16'], 'icon/16.png');
+assert.equal(manifest.icons?.['32'], 'icon/32.png');
 assert.equal(manifest.minimum_chrome_version, '117');
 assert.deepEqual(
   manifest.commands?.['translate-page']?.suggested_key,
