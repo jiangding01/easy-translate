@@ -22,8 +22,10 @@
   --et-color-on-accent: oklch(0.22 0.04 65);
   --et-color-bg: oklch(0.99 0.003 75);
   --et-color-surface: oklch(0.965 0.006 75);
-  --et-color-elevated: oklch(1 0 0);
-  --et-color-field: oklch(1 0 0);
+  /* Hue 75 at zero chroma is still pure white, but keeps color-mix() in OKLCH warm
+     (a hue of 0 pulled amber mixes toward pink). */
+  --et-color-elevated: oklch(1 0 75);
+  --et-color-field: oklch(1 0 75);
   --et-color-border: oklch(0.9 0.008 75);
   --et-color-border-strong: oklch(0.84 0.01 75);
   --et-color-text: oklch(0.22 0.012 70);
