@@ -74,6 +74,7 @@ src/
     popup/              # 工具栏面板
     options/            # 设置页（通用、翻译服务、添加服务对话框、连接测试）
   content/              # 整页翻译（内容脚本侧）：引导与加载器、扫描与分段、视口队列与会话、渲染与动效、还原、动态内容
+    isle/               # 灵岛：弹簧、外形几何、悬停意图、碰撞与亮暗探测、Shadow DOM 宿主
   components/           # 共享界面组件（自研下拉 Select）
   lib/
     config/             # 配置：schema、宽松解析、仓库（后台）、客户端与 useConfig（页面）、引擎字段映射
@@ -89,6 +90,7 @@ src/
     action-icon.ts      # 工具栏图标的状态小点
   styles/
     tokens.css          # 设计 token（唯一来源，:root 与 :host；琥珀主题）
+    tokens-isle.css     # 灵岛用到的 token（由 tokens.css 引入，按需模块单独内联）
     base.css            # 扩展页面的全局基础样式
     theme.ts            # 主题切换（data-et-theme）
 public/icon/            # 扩展图标

@@ -10,7 +10,7 @@ import type {
   TranslateRequest,
 } from '@/lib/messaging/protocol';
 import { createPacer, discoverUnits, type Unit } from './discover';
-import { isInlineElement, OWN_TAG, type StyleReader } from './dom-rules';
+import { ISLE_TAG, isInlineElement, OWN_TAG, type StyleReader } from './dom-rules';
 import { watchMutations } from './mutations';
 import { createRenderer, type Renderer } from './render';
 import { injectStyles, removeStyles } from './styles';
@@ -38,6 +38,11 @@ export interface SessionDeps {
   /** IntersectionObserver with rootMargin 1000px; injectable for tests. */
   createViewport(onChange: (targets: Element[], visible: boolean[]) => void): ViewportObserver;
   createMutationWatch?: typeof watchMutations;
+  /**
+   * Runs `callback` on the next frame and returns a canceller; subscribers are notified
+   * through it, so a burst of changes pushes once per frame. Defaults to rAF.
+   */
+  scheduleFrame?(callback: () => void): () => void;
 }
 
 export interface PageSession {
@@ -47,6 +52,11 @@ export interface PageSession {
   setMode(mode: PageMode): Promise<PageState>;
   retryFailed(): PageState;
   state(): PageState;
+  /**
+   * Called with the current state at most once per frame after anything visible changed.
+   * Not called on subscribe; read `state()` for the initial value. Returns an unsubscriber.
+   */
+  subscribe(listener: (state: PageState) => void): () => void;
 }
 
 const BATCH_ITEMS = 50;
@@ -75,6 +85,12 @@ export function createPageSession(deps: SessionDeps): PageSession {
   const doc = win.document;
   const now = () => Date.now();
   const watch = deps.createMutationWatch ?? watchMutations;
+  const scheduleFrame =
+    deps.scheduleFrame ??
+    ((callback: () => void) => {
+      const handle = win.requestAnimationFrame(callback);
+      return () => win.cancelAnimationFrame(handle);
+    });
 
   let epoch = 0;
   let phase: PageState['phase'] = 'idle';
@@ -113,6 +129,30 @@ export function createPageSession(deps: SessionDeps): PageSession {
   const queued = new Set<Unit>();
   const toRender: { unit: Unit; translation: string }[] = [];
 
+  const listeners = new Set<(state: PageState) => void>();
+  let cancelFrame: (() => void) | undefined;
+
+  /** Coalesces to one push per frame; listeners read the state when the frame fires. */
+  function notify() {
+    if (cancelFrame || listeners.size === 0) return;
+    cancelFrame = scheduleFrame(() => {
+      cancelFrame = undefined;
+      const snapshot = state();
+      for (const listener of [...listeners]) listener(snapshot);
+    });
+  }
+
+  function subscribe(listener: (state: PageState) => void): () => void {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) {
+        cancelFrame?.();
+        cancelFrame = undefined;
+      }
+    };
+  }
+
   const onScroll = () => {
     lastScroll = now();
   };
@@ -124,6 +164,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
   }
 
   function report() {
+    notify();
     if (phase === 'idle' || halted) return;
     phase = pending.size > 0 || inFlight > 0 ? 'running' : 'done';
     deps.reportStatus(status());
@@ -141,6 +182,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
       failed: failed.size,
       engineError,
       engine,
+      ...(halted ? { halted: true as const } : {}),
     };
   }
 
@@ -316,12 +358,14 @@ export function createPageSession(deps: SessionDeps): PageSession {
       sent.add(unit);
     }
     inFlight += 1;
+    // The engine this request went to: the session may switch while it is out.
+    const used = engine;
     const request = port.request(
       {
         items: batch.map((unit) => ({ id: idOf(unit), text: unit.seg.text })),
         target: config.language.target,
         source: config.language.source,
-        engine,
+        engine: used,
       },
       (chunk) => {
         if (current !== epoch) return;
@@ -329,7 +373,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
         if (!unit) return;
         sent.delete(unit);
         if ('error' in chunk) {
-          if (isEngineLevel(chunk.error)) pause(chunk.error, [unit]);
+          if (isEngineLevel(chunk.error)) engineFailed(chunk.error, [unit], used);
           else markFailed(unit, chunk.error);
           return;
         }
@@ -350,21 +394,28 @@ export function createPageSession(deps: SessionDeps): PageSession {
       // Units the request never answered for (request-level failure or cancel).
       const unanswered = batch.filter((unit) => sent.has(unit));
       for (const unit of unanswered) sent.delete(unit);
-      if (outcome.status === 'error') onRequestError(outcome.error, unanswered, attempt);
+      if (outcome.status === 'error') onRequestError(outcome.error, unanswered, attempt, used);
       else if (outcome.status === 'cancelled') for (const unit of unanswered) pending.add(unit);
+      // Halted just now: nothing more to send or report.
+      if (current !== epoch) return;
       scheduleFlush();
       report();
     });
   }
 
   /** A whole request failed: never turn that into per-paragraph errors directly. */
-  function onRequestError(error: AppError, units: Unit[], attempt: number) {
+  function onRequestError(
+    error: AppError,
+    units: Unit[],
+    attempt: number,
+    used: Engine | undefined,
+  ) {
     if (error.code === 'internal/context-invalidated') {
       halt();
       return;
     }
     if (isEngineLevel(error)) {
-      pause(error, units);
+      engineFailed(error, units, used);
       return;
     }
     if (error.code === 'validation/payload-too-large' && units.length > 1) {
@@ -388,6 +439,19 @@ export function createPageSession(deps: SessionDeps): PageSession {
     failed.add(unit);
     void renderer?.fail(unit, () => retry([unit]), describeError(error));
     report();
+  }
+
+  /**
+   * An engine-level error pauses the session only if it came from the engine in use:
+   * one from an engine switched away from ("这次先用") just sends those paragraphs again.
+   */
+  function engineFailed(error: AppError, units: Unit[], used: Engine | undefined) {
+    if (used === engine) {
+      pause(error, units);
+      return;
+    }
+    for (const unit of units) pending.add(unit);
+    scheduleFlush();
   }
 
   function pause(error: AppError, units: Unit[]) {
@@ -489,7 +553,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
   const isOwn = (node: Node): boolean => {
     let current: Node | null = node;
     while (current) {
-      if (current.nodeName === OWN_TAG) return true;
+      if (current.nodeName === OWN_TAG || current.nodeName === ISLE_TAG) return true;
       if (current === sheet) return true;
       current = current.parentNode;
     }
@@ -500,6 +564,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
   function halt() {
     halted = true;
     epoch += 1;
+    notify();
     viewport?.disconnect();
     stopWatching?.();
     stopWatchingConfig?.();
@@ -545,6 +610,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
       engineError = undefined;
       retry([...failed]);
       scheduleFlush(true);
+      notify();
       return state();
     }
     if (phase !== 'idle') return state();
@@ -552,6 +618,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
     const current = epoch;
     clearState();
     phase = 'running';
+    notify();
     // A restore still fading out must finish before new styles go in.
     if (stopping) await stopping;
     if (current !== epoch) return state();
@@ -570,6 +637,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
     });
     await renderer.setMode(config.page.mode);
     if (current !== epoch) return state();
+    // The mode now comes from the config, not the default: push it right away.
+    notify();
     viewport = deps.createViewport(onViewportChunked);
     win.addEventListener('scroll', onScroll, { capture: true, passive: true });
     const units = await discoverUnits(doc.body, {
@@ -620,6 +689,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
     engine = undefined;
     deps.reportStatus('idle');
     renderer = undefined;
+    notify();
     const done = (async () => {
       await rendererToRestore?.restoreAll();
       removeStyles(sheetToRemove);
@@ -637,6 +707,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
     async setMode(mode) {
       if (!renderer || phase === 'idle') return state();
       await renderer.setMode(mode);
+      notify();
       return state();
     },
     retryFailed() {
@@ -645,8 +716,10 @@ export function createPageSession(deps: SessionDeps): PageSession {
         scheduleFlush(true);
       }
       retry([...failed]);
+      notify();
       return state();
     },
     state,
+    subscribe,
   };
 }

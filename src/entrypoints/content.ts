@@ -34,6 +34,11 @@ export default defineContentScript({
       runtime: {
         getConfig,
         watchConfig: (callback) => watchConfig((snapshot) => callback(snapshot.data)),
+        listEngines: async () => {
+          const result = await sendMessage('engine.options');
+          if (!result.ok) throw result.error;
+          return result.data;
+        },
         reportStatus: (status) => {
           sendMessage('page.status', status).catch(() => {
             // Background unreachable or extension reloaded: the dot is cosmetic.
