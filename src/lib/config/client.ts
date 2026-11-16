@@ -1,4 +1,4 @@
-import { storage } from 'wxt/utils/storage';
+import { browser } from 'wxt/browser';
 import type { Result } from '@/lib/errors';
 import { browserUiLanguage, isLanguageCode } from '@/lib/languages';
 import { call } from '@/lib/messaging/handle';
@@ -24,9 +24,8 @@ import {
 
 // Config access for extension pages and content scripts. Deliberately zod-free:
 // the background is the only writer and validates everything it stores, so
-// this layer only guards against version skew.
-
-const STORAGE_ITEM = `local:${CONFIG_STORAGE_KEY}` as const;
+// this layer only guards against version skew. It reads through the native
+// storage API (not `wxt/utils/storage`) to keep the content script small.
 
 function isTheme(value: unknown): value is Theme {
   return typeof value === 'string' && (THEMES as readonly string[]).includes(value);
@@ -100,15 +99,21 @@ export function normalizeConfig(raw: unknown, uiLanguage: string): ConfigSnapsho
 }
 
 export async function readConfig(): Promise<ConfigSnapshot> {
-  const raw = await storage.getItem<unknown>(STORAGE_ITEM);
-  return normalizeConfig(raw, browserUiLanguage());
+  const stored = await browser.storage.local.get(CONFIG_STORAGE_KEY);
+  return normalizeConfig(stored[CONFIG_STORAGE_KEY], browserUiLanguage());
 }
 
 /** Calls `callback` whenever the stored config changes; returns the unsubscribe function. */
 export function watchConfig(callback: (snapshot: ConfigSnapshot) => void): () => void {
-  return storage.watch<unknown>(STORAGE_ITEM, (value) => {
-    callback(normalizeConfig(value, browserUiLanguage()));
-  });
+  const listener = (
+    changes: Record<string, { newValue?: unknown } | undefined>,
+    area: string,
+  ): void => {
+    if (area !== 'local' || !Object.hasOwn(changes, CONFIG_STORAGE_KEY)) return;
+    callback(normalizeConfig(changes[CONFIG_STORAGE_KEY]?.newValue, browserUiLanguage()));
+  };
+  browser.storage.onChanged.addListener(listener);
+  return () => browser.storage.onChanged.removeListener(listener);
 }
 
 export function patchConfig(changes: ConfigChange[]): Promise<Result<ConfigSnapshot>> {

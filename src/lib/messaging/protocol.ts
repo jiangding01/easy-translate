@@ -102,8 +102,7 @@ export const { sendMessage, onMessage } = defineExtensionMessaging<ProtocolMap>(
 
 // ---------------------------------------------------------------- Port et-translate
 
-/** Long-lived Port served by the background: req → chunk* → done (see lib/messaging/port). */
-export const TRANSLATE_PORT_NAME = 'et-translate';
+export { TRANSLATE_PORT_NAME } from './port-name';
 
 /** Larger payloads are rejected with `validation/payload-too-large`. */
 export const TRANSLATE_PAYLOAD_LIMITS = { maxItems: 200, maxChars: 50_000 } as const;

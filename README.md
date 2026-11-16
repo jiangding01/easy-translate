@@ -69,10 +69,11 @@ GitHub Actions（`.github/workflows/ci.yml`）在 PR 和推送到 `main` 时运�
 src/
   entrypoints/
     background.ts       # 后台 Service Worker：配置唯一写入点、翻译服务、消息与 Port handler
-    content.ts          # 网页内容脚本：装配整页翻译会话、站点记忆自动翻译
+    content.ts          # 网页内容脚本（首屏引导，约 5KB）：收消息、站点记忆自动翻译、按需加载 page-runtime
+    page-runtime.ts     # 按需模块：唤起后由内容脚本 import()，装配整页翻译会话（动态 URL 的 web accessible resource）
     popup/              # 工具栏面板
     options/            # 设置页（通用、翻译服务、添加服务对话框、连接测试）
-  content/              # 整页翻译（内容脚本侧）：扫描与分段、视口队列与会话、渲染与动效、还原、动态内容
+  content/              # 整页翻译（内容脚本侧）：引导与加载器、扫描与分段、视口队列与会话、渲染与动效、还原、动态内容
   components/           # 共享界面组件（自研下拉 Select）
   lib/
     config/             # 配置：schema、宽松解析、仓库（后台）、客户端与 useConfig（页面）、引擎字段映射
@@ -92,7 +93,7 @@ src/
     theme.ts            # 主题切换（data-et-theme）
 public/icon/            # 扩展图标
 scripts/
-  check-build.mjs       # manifest 与入口资源校验
+  check-build.mjs       # manifest 与入口资源校验；按需模块单文件、严格模式可执行、不含扩展地址
   check-size.mjs        # gzip 体积预算（零依赖）
   check-contrast.mjs    # 颜色 token 对比度校验（零依赖）
 .github/workflows/      # CI

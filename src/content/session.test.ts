@@ -11,6 +11,7 @@ import type {
 } from '@/lib/messaging/protocol';
 import type { StyleReader } from './dom-rules';
 import { watchMutations } from './mutations';
+import { IDLE_PAGE_STATE } from './runtime-contract';
 import { createPageSession, isEngineLevel } from './session';
 
 const readStyle: StyleReader = (el) => {
@@ -126,6 +127,12 @@ beforeEach(() => {
 });
 
 describe('page session: happy path', () => {
+  it('reports IDLE_PAGE_STATE before it has started', () => {
+    const { session } = setup('<p>Hello</p>');
+    // toEqual: state() carries keys whose value is undefined.
+    expect(session.state()).toEqual(IDLE_PAGE_STATE);
+  });
+
   it('translates only what the viewport reports, then restores the page exactly', async () => {
     const { session, port, show, before, statuses, observed } = setup(
       '<p>First paragraph text.</p><p>Second paragraph text.</p>',
