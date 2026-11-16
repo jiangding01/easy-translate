@@ -1,6 +1,6 @@
 # Easy Translate 交接文档（HANDOFF）
 
-> 最后更新：2026-11-14 · 阶段：**M2a 整页翻译已合并**（PR #4，真机验收修复 PR #6），扩展图标已合并（PR #5）。下一步：M2b 灵岛（开工前先定按需加载方式与订阅接口，见第 5 节）→ M3 划词翻译
+> 最后更新：2026-11-16 · 阶段：**M2b PR1 按需加载已实现并审查**（分支 `feat/m2b-lazy-runtime`，待真机验收和提交）。下一步：PR1 真机验收 → 开 PR → M2b PR2 灵岛（先出原型）→ M3 划词翻译
 > 本文给接手的 Agent 或开发者用，按顺序读完即可直接开工。文中凡与其他文档冲突的地方，以本文和「权威文档」为准。
 
 ## 1. 项目一句话
@@ -49,12 +49,13 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
   - 配置：内置引擎字段，加最多 10 个自定义服务 `customProviders`，按条目 `add` / `update` / `remove` 写入；字段映射只在 `src/lib/config/engine-fields.ts` 一处。
   - 页面共用：`src/lib/engine-view.ts`（引擎列表与就绪判断）、`src/lib/endpoint.ts`（地址与权限判断）、`src/lib/host-permission.ts`、`src/components/Select.tsx`（自研下拉）。
   - 界面：设置页（通用 / 翻译服务）与工具栏面板，按「隐中生岛」加琥珀主题重做；token 在 `src/styles/tokens.css`，对比度由 `scripts/check-contrast.mjs` 校验。
-- **可用命令**：`npm run dev | build | lint | format | typecheck | test | check | check:contrast | check:size | zip`。`npm run check` 通过（416 个测试）。
+- **可用命令**：`npm run dev | build | lint | format | typecheck | test | check | check:contrast | check:size | zip`。`npm run check` 通过（M2b PR1 分支上为 550 个测试）。
 - **main**：M2a 整页翻译已合并（PR #4，合并提交 `29bc384`）；真机验收发现的分段边界问题在 PR #6 修复（`cbd7a3b`）；扩展图标「暗岛微光」在 PR #5 合并（`4b61fca`）。依据 `docs/plans/m2-page-translation.md`。
   - 内容脚本：`src/content/`（`discover` 扫描与分段、`segment` 行内标记、`session` 视口队列与会话、`render` 渲染与动效、`anchor` 阅读位置、`mutations` 动态内容、`auto-start` 站点记忆、`viewport` IntersectionObserver）；`src/entrypoints/content.ts` 只在被唤起后才建立 Port 和观察器。
   - 后台：快捷键 `translate-page`、图标状态点（`src/lib/action-icon.ts`）、`site.setAlways`（只接受扩展页面）。
   - 界面：工具栏面板接通整页翻译；设置页「通用 · 译文」。
-- **还没有**：灵岛（M2b）、划词翻译（M3）。
+- **分支 `feat/m2b-lazy-runtime`（M2b PR1，未提交）**：内容脚本拆成首屏引导 `src/entrypoints/content.ts` 加 `src/content/bootstrap.ts`（4.88KB），以及按需模块 `src/entrypoints/page-runtime.ts`（12.29KB，WXT unlisted script，动态 URL 的 WAR）。由 `src/content/loader.ts` 在第一次唤起时 `import()`。最低 Chrome 130；配置读取改用原生 storage。依据 [`docs/plans/m2b-lazy-runtime-and-isle.md`](docs/plans/m2b-lazy-runtime-and-isle.md)。
+- **还没有**：灵岛（M2b PR2）、划词翻译（M3）。
 
 ## 5. 批次状态与下一步
 
@@ -81,10 +82,13 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
   - **分段边界规则（2026-11-14 真机验收后修订）**：块级还是行内只看计算样式（`src/content/dom-rules.ts` 的 `isInlineElement`，对齐 FluentRead `isBlockBoundary`）：语义块标签总是边界，`code`/`img`/`br` 等总是行内，其余按 `display`（`inline*`、`contents` 为行内）。弹性布局和网格的子元素会被浏览器块级化，因此各自成为单元；M2a 原先「横向弹性布局合成一个单元」的做法已放弃：项之间的间距由 CSS 绘制，合并会把文字粘在一起（如「01Home PAGE」）。
     - 例外（仍留在句子里）：脱离文档流的元素（`sr-only`、浮动徽章）按标签判断；`inline-flex`/`inline-grid` 小块内部的项算行内；`display: ruby*` 算行内，注音 `rt`/`rp` 不翻译。
     - 已知取舍（与 FluentRead 相同）：弹性容器里「直接写的文字 + 链接」会被分成两段翻译，行内片段的译文还会成为容器的一个新项，在 `justify-content: space-between` 的容器里可能被推到中间。FluentRead 靠把原文包进一个合成 span 来避免，我们不移动网页节点，暂不做；真机验收时留意。
-  - **M2b 灵岛，开工前要决定**：
-    - 内容脚本 gzip 已到 19.2/20KB，灵岛必须按需加载。MV3 下两条路：声明 `web_accessible_resources` 后动态 import（网页能探测到扩展存在），或后台用 `chrome.scripting` 注入（需新增 `scripting` 权限）。需用户拍板。
-    - 会话需要订阅接口：`PageSession` 现在只有拉取式 `state()`，面板靠 500ms 轮询；灵岛与会话同在内容脚本里，应加 `subscribe(listener)`，`reportStatus` 改为订阅者之一。
-    - 原型先补三种停靠（左、右、底）和琥珀材质的最终稿，经确认再出方案。
+  - **M2b**：方案见 [`docs/plans/m2b-lazy-runtime-and-isle.md`](docs/plans/m2b-lazy-runtime-and-isle.md)，拆成两个 PR。
+    - **加载方式已定（2026-11-16，用户拍板）**：内容脚本 `import()` 声明了 `use_dynamic_url` 的单文件 WAR。后台注入被否决：`executeScript` 只认 `host_permissions`，内容脚本的 `matches` 不算，必须申请全部网站权限。调研和实测见方案附录 A。
+      - 硬约束：按触发时机分包；按需文件是单文件、零 import；跨包只共享类型和无副作用的常量；灵岛等 UI 里**禁止出现任何扩展地址**（图片、CSS `url()`、字体），否则网页能截获动态地址；自定义品牌字体基本不可用。
+    - **PR1 按需加载与首屏瘦身**：已实现，check Deep 审查完成（方案附录 C）。自动验收 8 条通过，第 6 条和版面观感由用户手动确认通过（方案附录 D），待提交并开 PR。
+    - **PR2 灵岛**：先出左、右、底三种停靠方式和琥珀材质的原型最终稿，确认后补方案细节。会话要加 `subscribe(listener)`，`reportStatus` 改为订阅者之一。
+    - **已知限制**：WXT 内容脚本包装层仍会在 `document` 上派发带扩展 ID 的 CustomEvent，已知 ID 的网页可以借它确认扩展存在；`postMessage` 广播已关闭。带 `CSP: sandbox` 头的本地页面实测能正常加载按需模块并翻译，没有回归。
+    - **另开事项**：`src/lib/translate/cache.test.ts` 的「keeps serving reads while a large eviction runs in batches」是时序敏感用例，全量跑时偶发失败。
   - **审查留下的结构建议（不阻塞）**：内容脚本的装配可抽成 `src/content/runtime.ts`，供 M3 划词共用 Port 与配置；`PageState` 与 `PageStatus` 可合并成一份；设置页预览引用了 `src/content/styles.ts`，样式常量可移到 `src/lib`；`site-memory.ts` 可拆读写两侧，给内容脚本减重。
   - **图标**：已完成「暗岛微光」（PR #5）：暖黑超椭圆底板，一条暖白长线（原文）加一条琥珀短药丸（译文），右下角给状态点留位置；16/32/48 各自按像素网格绘制，128 四周留 16px。PNG 与 `docs/assets/icon/` 的 SVG 都由 `scripts/build-icons.mjs` 生成（`npm run build:icons`）；状态点的底图读 `icon/16.png` 和 `icon/32.png`。
 - **界面方向已确认**：「隐中生岛」加琥珀主题色，完整规范见 [`docs/plans/ui-isle-direction.md`](docs/plans/ui-isle-direction.md)。原型在 https://claude.ai/artifact/GJTgsP7SFHmhP6M2SczwTp 。最高原则：人的感受第一、少打扰、近乎原生的沉浸阅读。
@@ -160,6 +164,7 @@ M1 和 M2（整页翻译）完成后即构成 MVP。
 
 | 日期 | 事项 |
 | --- | --- |
+| 2026-11-16 | **M2b PR1 按需加载完成实现与审查**（分支 `feat/m2b-lazy-runtime`）。<br>**调研**：灵岛加载方式由 Fable 5.2 裁决，选动态 URL + 单文件按需模块；实测否决后台注入（需全站权限）。<br>**方案**：`docs/plans/m2b-lazy-runtime-and-isle.md`，经 Opus 对抗式审查修订。<br>**实现**：内容脚本 19.43KB → 4.88KB，会话代码拆进按需模块 `page-runtime.js`（12.29KB）；配置读取改原生 storage；最低 Chrome 130；构建检查用 `node:vm` 验证单文件、严格模式下可执行和注册生效。<br>**审查**：check Deep（安全与架构、对抗式各一位 Opus），修了 WXT 默认向网页广播扩展 ID 等 5 项，550 个测试。<br>**下一步**：真机验收 → 提交并开 PR → PR2 灵岛原型 |
 | 2026-11-13 | 熟悉骨架与旧方案；Fable 5.2 完成两轮评审，产出最终方案和 UI/UX 规范；用户拍板全部决策（见第 3 节）；暂不做高保真设计稿；创建本文和 `CHANGELOG.md`，提交并推送到 main。约定开发流程（见第 8 节）。下一步：M0 |
 | 2026-11-13 | M0 方案 `docs/plans/m0-foundation.md` 经审查后获批。在 `feat/m0-foundation` 上实现 M0（工具链与 CI、配置仓库、消息协议与 Port 传输层、设计 token 与主题），`npm run check` 通过。状态：**已实现，待审查和合并**；第 9 节手工验收待在真实 Chrome 中执行。下一步：审查 → 推送并开 PR → CI 通过后由用户合并 → M1 |
 | 2026-11-13 | 已开 PR jiangding01/easy-translate#1。按 check skill 的 Deep 流程补做了完整审查：安全、架构 2 个专项审查，加上 4 个角度的对抗式审查。确认 13 项问题并修复，每项都先写回归测试；其中 Port 修了「无法序列化的响应会让请求永久挂起」等问题。M1 开工前必须决定的事项已记入第 5 节。状态：**等待用户合并** |
