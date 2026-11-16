@@ -26,7 +26,7 @@ describe('parseStoredConfig', () => {
       ui: { theme: 'dark' },
       language: { target: 'ko', source: 'ja' },
       translation: { engine: 'openai' },
-      page: { style: 'highlight', mode: 'translation' },
+      page: { style: 'highlight', mode: 'translation', isleDock: 'left' },
       providers: { ...EXTRA_DEFAULTS.providers, gemini: { model: 'm' } },
       customProviders: {},
     };
@@ -97,6 +97,15 @@ describe('parseStoredConfig', () => {
     const result = parse(stored({ ...defaults, customProviders }));
     expect(Object.keys(result.snapshot.data.customProviders)).toHaveLength(11);
     expect(result.repaired).toBe(false);
+  });
+
+  it('repairs an unknown isle dock to the default and fills it when missing', () => {
+    const broken = parse(stored({ ...defaults, page: { ...defaults.page, isleDock: 'top' } }));
+    expect(broken.resetPaths).toContain('page.isleDock');
+    expect(broken.snapshot.data.page.isleDock).toBe('right');
+    const { isleDock: _omitted, ...rest } = defaults.page;
+    const missing = parse(stored({ ...defaults, page: rest }));
+    expect(missing.snapshot.data.page.isleDock).toBe('right');
   });
 
   it('resets a default engine that points at a missing custom provider to Google', () => {

@@ -62,6 +62,7 @@ describe('whitelist', () => {
       'translation.engine',
       'page.style',
       'page.mode',
+      'page.isleDock',
       'providers.openai.baseURL',
       'providers.openai.model',
       'providers.deepseek.model',

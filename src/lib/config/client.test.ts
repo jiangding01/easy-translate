@@ -52,6 +52,17 @@ describe('readConfig', () => {
     expect((await readConfig()).data).toEqual(defaults);
   });
 
+  it('guards the isle dock and keeps a valid one', async () => {
+    await fakeBrowser.storage.local.set({
+      config: { schemaVersion: 1, data: { page: { isleDock: 'top' } } },
+    });
+    expect((await readConfig()).data.page.isleDock).toBe('right');
+    await fakeBrowser.storage.local.set({
+      config: { schemaVersion: 1, data: { page: { isleDock: 'bottom' } } },
+    });
+    expect((await readConfig()).data.page.isleDock).toBe('bottom');
+  });
+
   it('guards the engine and source language enums', async () => {
     await fakeBrowser.storage.local.set({
       config: {

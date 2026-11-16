@@ -1,6 +1,6 @@
 # Easy Translate 交接文档（HANDOFF）
 
-> 最后更新：2026-11-16 · 阶段：**M2b PR1 按需加载已实现并审查**（分支 `feat/m2b-lazy-runtime`，待真机验收和提交）。下一步：PR1 真机验收 → 开 PR → M2b PR2 灵岛（先出原型）→ M3 划词翻译
+> 最后更新：2026-11-16 · 阶段：**M2b PR2 灵岛已开 PR**（分支 `feat/m2b-isle`；PR1 按需加载已合并为 PR #8）。下一步：PR2 合并 → M3 划词翻译
 > 本文给接手的 Agent 或开发者用，按顺序读完即可直接开工。文中凡与其他文档冲突的地方，以本文和「权威文档」为准。
 
 ## 1. 项目一句话
@@ -86,7 +86,7 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
     - **加载方式已定（2026-11-16，用户拍板）**：内容脚本 `import()` 声明了 `use_dynamic_url` 的单文件 WAR。后台注入被否决：`executeScript` 只认 `host_permissions`，内容脚本的 `matches` 不算，必须申请全部网站权限。调研和实测见方案附录 A。
       - 硬约束：按触发时机分包；按需文件是单文件、零 import；跨包只共享类型和无副作用的常量；灵岛等 UI 里**禁止出现任何扩展地址**（图片、CSS `url()`、字体），否则网页能截获动态地址；自定义品牌字体基本不可用。
     - **PR1 按需加载与首屏瘦身**：已实现，check Deep 审查完成（方案附录 C）。自动验收 8 条通过，第 6 条和版面观感由用户手动确认通过（方案附录 D），待提交并开 PR。
-    - **PR2 灵岛**：先出左、右、底三种停靠方式和琥珀材质的原型最终稿，确认后补方案细节。会话要加 `subscribe(listener)`，`reportStatus` 改为订阅者之一。
+    - **PR2 灵岛**：原型已确认（Design artifact 的 `IsleM2` 页），方案见第 9 节；已实现，check Deep 审查完成（附录 F）；自动验收和用户真机验收通过（附录 G）；真机验收后，按新原型把底部停靠改为右下角，并补上横幅抬升、避让对齐、提示框淡出和小点暗边的修复，已经过增量审查（附录 H），用户复验通过，已提交并开 PR。分支 `feat/m2b-isle`。新增配置 `page.isleDock`、后台只读消息 `engine.options`、会话的 `subscribe`，以及 `src/content/isle/`、`src/styles/tokens-isle.css`。
     - **已知限制**：WXT 内容脚本包装层仍会在 `document` 上派发带扩展 ID 的 CustomEvent，已知 ID 的网页可以借它确认扩展存在；`postMessage` 广播已关闭。带 `CSP: sandbox` 头的本地页面实测能正常加载按需模块并翻译，没有回归。
     - **另开事项**：`src/lib/translate/cache.test.ts` 的「keeps serving reads while a large eviction runs in batches」是时序敏感用例，全量跑时偶发失败。
   - **审查留下的结构建议（不阻塞）**：内容脚本的装配可抽成 `src/content/runtime.ts`，供 M3 划词共用 Port 与配置；`PageState` 与 `PageStatus` 可合并成一份；设置页预览引用了 `src/content/styles.ts`，样式常量可移到 `src/lib`；`site-memory.ts` 可拆读写两侧，给内容脚本减重。
@@ -164,6 +164,7 @@ M1 和 M2（整页翻译）完成后即构成 MVP。
 
 | 日期 | 事项 |
 | --- | --- |
+| 2026-11-16 | **M2b PR1 已合并**（PR #8）。**M2b PR2 灵岛完成实现与审查**（分支 `feat/m2b-isle`）。<br>**原型**：在 Design artifact 新增 `IsleM2` 页，用户确认；规范第 2 节第 7 条改为「暗色网页上也用深岛加描边」。<br>**方案**：m2b 方案第 9 节，经 Opus 对抗式审查（3 项阻断、14 项应修）修订，再由主会话对照代码复核。<br>**实现**：分两段（Sonnet 做接口和配置，Opus 做灵岛），page-runtime 21.34KB。<br>**审查**：check Deep，修了停靠来回切换后隐身、换引擎后错误算错引擎等，633 个测试。<br>**验收**：自动 10 条通过；用户真机 4 倍降速下 INP 40ms。<br>**真机后调整**：底部停靠改右下角、横幅抬升、避让对齐、提示框淡出、小点暗边（附录 H），增量审查修 5 项，682 个测试，用户复验通过。<br>**下一步**：PR 合并 → M3 |
 | 2026-11-16 | **M2b PR1 按需加载完成实现与审查**（分支 `feat/m2b-lazy-runtime`）。<br>**调研**：灵岛加载方式由 Fable 5.2 裁决，选动态 URL + 单文件按需模块；实测否决后台注入（需全站权限）。<br>**方案**：`docs/plans/m2b-lazy-runtime-and-isle.md`，经 Opus 对抗式审查修订。<br>**实现**：内容脚本 19.43KB → 4.88KB，会话代码拆进按需模块 `page-runtime.js`（12.29KB）；配置读取改原生 storage；最低 Chrome 130；构建检查用 `node:vm` 验证单文件、严格模式下可执行和注册生效。<br>**审查**：check Deep（安全与架构、对抗式各一位 Opus），修了 WXT 默认向网页广播扩展 ID 等 5 项，550 个测试。<br>**下一步**：真机验收 → 提交并开 PR → PR2 灵岛原型 |
 | 2026-11-13 | 熟悉骨架与旧方案；Fable 5.2 完成两轮评审，产出最终方案和 UI/UX 规范；用户拍板全部决策（见第 3 节）；暂不做高保真设计稿；创建本文和 `CHANGELOG.md`，提交并推送到 main。约定开发流程（见第 8 节）。下一步：M0 |
 | 2026-11-13 | M0 方案 `docs/plans/m0-foundation.md` 经审查后获批。在 `feat/m0-foundation` 上实现 M0（工具链与 CI、配置仓库、消息协议与 Port 传输层、设计 token 与主题），`npm run check` 通过。状态：**已实现，待审查和合并**；第 9 节手工验收待在真实 Chrome 中执行。下一步：审查 → 推送并开 PR → CI 通过后由用户合并 → M1 |

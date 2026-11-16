@@ -13,6 +13,10 @@ export type PageStyle = (typeof PAGE_STYLES)[number];
 export const PAGE_MODES = ['bilingual', 'translation'] as const;
 export type PageMode = (typeof PAGE_MODES)[number];
 
+/** Where the page-translation isle docks on the viewport edge (M2b). */
+export const ISLE_DOCKS = ['right', 'left', 'bottom'] as const;
+export type IsleDock = (typeof ISLE_DOCKS)[number];
+
 export const BUILTIN_ENGINES = ['google', 'openai', 'deepseek', 'gemini'] as const;
 export type BuiltinEngine = (typeof BUILTIN_ENGINES)[number];
 
@@ -58,7 +62,7 @@ export interface ConfigV1 {
   ui: { theme: Theme };
   language: { target: LanguageCode; source: 'auto' | LanguageCode };
   translation: { engine: Engine };
-  page: { style: PageStyle; mode: PageMode };
+  page: { style: PageStyle; mode: PageMode; isleDock: IsleDock };
   providers: {
     openai: { baseURL: string; model: string };
     deepseek: { model: string };
