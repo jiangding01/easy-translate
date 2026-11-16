@@ -20,6 +20,14 @@ describe('readConfig', () => {
     expect(await readConfig()).toEqual({ schemaVersion: 1, data: defaults });
   });
 
+  it('returns defaults after the key is removed', async () => {
+    await fakeBrowser.storage.local.set({
+      config: { schemaVersion: 1, data: { ui: { theme: 'dark' } } },
+    });
+    await fakeBrowser.storage.local.remove('config');
+    expect((await readConfig()).data).toEqual(defaults);
+  });
+
   it('merges stored data with defaults', async () => {
     await fakeBrowser.storage.local.set({
       config: { schemaVersion: 1, data: { ui: { theme: 'dark' } } },
@@ -128,5 +136,27 @@ describe('watchConfig', () => {
     await fakeBrowser.storage.local.set({ config: { schemaVersion: 1, data: {} } });
     await flush();
     expect(callback).toHaveBeenCalledOnce();
+  });
+
+  it('falls back to defaults when the key is deleted', async () => {
+    await fakeBrowser.storage.local.set({
+      config: { schemaVersion: 1, data: { ui: { theme: 'dark' } } },
+    });
+    const callback = vi.fn();
+    watchConfig(callback);
+    await fakeBrowser.storage.local.remove('config');
+    await flush();
+    expect(callback).toHaveBeenCalledOnce();
+    expect(callback).toHaveBeenLastCalledWith({ schemaVersion: 1, data: defaults });
+  });
+
+  it('ignores changes in other storage areas', async () => {
+    const callback = vi.fn();
+    watchConfig(callback);
+    await fakeBrowser.storage.sync.set({
+      config: { schemaVersion: 1, data: { ui: { theme: 'dark' } } },
+    });
+    await flush();
+    expect(callback).not.toHaveBeenCalled();
   });
 });

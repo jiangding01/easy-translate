@@ -27,11 +27,21 @@ async function pageScripts(htmlFile) {
   return [...files];
 }
 
+// Files listed as web accessible resources: the on-demand modules (page runtime).
+const runtimeFiles = (manifest.web_accessible_resources ?? []).flatMap((entry) => entry.resources);
+
 const entries = [
   {
     name: 'content',
-    budget: 20 * KB,
+    // First-screen bootstrap only; the session lives in the on-demand module below.
+    budget: 6 * KB,
     files: manifest.content_scripts?.flatMap((script) => script.js ?? []) ?? [],
+  },
+  {
+    name: 'page-runtime',
+    // Raise explicitly when the island UI lands (M2b PR2).
+    budget: 16 * KB,
+    files: runtimeFiles,
   },
   {
     name: 'background',
@@ -68,16 +78,16 @@ for (const entry of entries) {
   rows.push({ entry: entry.name, gzip: total, budget: entry.budget, status: ok ? 'ok' : 'OVER' });
   entry.files.forEach((file, index) => {
     console.log(
-      `  ${entry.name.padEnd(10)} ${(sizes[index] / KB).toFixed(2).padStart(8)} KB  ${file}`,
+      `  ${entry.name.padEnd(12)} ${(sizes[index] / KB).toFixed(2).padStart(8)} KB  ${file}`,
     );
   });
 }
 
 const format = (value) => (typeof value === 'number' ? `${(value / KB).toFixed(2)} KB` : value);
-console.log('\nentry       gzip         budget       status');
+console.log('\nentry        gzip         budget       status');
 for (const row of rows) {
   console.log(
-    `${row.entry.padEnd(11)} ${format(row.gzip).padEnd(12)} ${format(row.budget).padEnd(12)} ${row.status}`,
+    `${row.entry.padEnd(13)} ${format(row.gzip).padEnd(12)} ${format(row.budget).padEnd(12)} ${row.status}`,
   );
 }
 
