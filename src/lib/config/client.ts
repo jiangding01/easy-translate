@@ -14,6 +14,7 @@ import {
   type ConfigV1,
   CUSTOM_PROVIDER_ID_PATTERN,
   type CustomProvider,
+  ISLE_DOCKS,
   isBuiltinEngine,
   isCustomProviderId,
   PAGE_MODES,
@@ -89,6 +90,7 @@ export function normalizeConfig(raw: unknown, uiLanguage: string): ConfigSnapsho
         ...page,
         style: oneOf(PAGE_STYLES, page.style) ?? defaults.data.page.style,
         mode: oneOf(PAGE_MODES, page.mode) ?? defaults.data.page.mode,
+        isleDock: oneOf(ISLE_DOCKS, page.isleDock) ?? defaults.data.page.isleDock,
       },
       translation: {
         ...translation,

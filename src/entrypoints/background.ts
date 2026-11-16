@@ -20,6 +20,7 @@ import {
 import { createSiteMemoryStore } from '@/lib/site-memory';
 import { createAdminHandlers } from '@/lib/translate/admin';
 import { createTranslationCache } from '@/lib/translate/cache';
+import { buildEngineOptions } from '@/lib/translate/engine-options';
 import { createTranslatePortHost } from '@/lib/translate/port-host';
 import { createSecretStore } from '@/lib/translate/secrets';
 import { createTranslateService } from '@/lib/translate/service';
@@ -57,6 +58,18 @@ export default defineBackground(() => {
   onMessage('provider.test', ({ data, sender }) => admin['provider.test'](sender, data));
   onMessage('cache.stats', ({ sender }) => admin['cache.stats'](sender));
   onMessage('cache.clear', ({ sender }) => admin['cache.clear'](sender));
+  // Engine list for the page isle (content scripts cannot query permissions or key status).
+  // Read directly from the stores, not through `secrets.status`, which stays extension-page only.
+  onMessage(
+    'engine.options',
+    handle(async () =>
+      buildEngineOptions({
+        config: (await repo.load()).data,
+        secrets: await secrets.status(),
+        hasPermission: (pattern) => browser.permissions.contains({ origins: [pattern] }),
+      }),
+    ),
+  );
   browser.runtime.onConnect.addListener(createTranslatePortHost(service, TRANSLATE_PORT_NAME));
 
   // Site memory ("总是翻译此站"): written here only, on behalf of extension pages.

@@ -5,6 +5,7 @@ import {
   CUSTOM_PROVIDER_ID_PATTERN,
   CUSTOM_PROVIDER_LIMITS,
   type Engine,
+  ISLE_DOCKS,
   isBuiltinEngine,
   isEngineId,
   PAGE_MODES,
@@ -37,6 +38,7 @@ export const configSchema = z
     page: z.looseObject({
       style: z.enum(PAGE_STYLES),
       mode: z.enum(PAGE_MODES),
+      isleDock: z.enum(ISLE_DOCKS),
     }),
     providers: z.looseObject({
       openai: z.looseObject({

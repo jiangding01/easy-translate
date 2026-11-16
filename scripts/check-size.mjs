@@ -39,8 +39,8 @@ const entries = [
   },
   {
     name: 'page-runtime',
-    // Raise explicitly when the island UI lands (M2b PR2).
-    budget: 16 * KB,
+    // Session, scanner, renderer and the page isle (M2b PR2). Raise explicitly, never quietly.
+    budget: 26 * KB,
     files: runtimeFiles,
   },
   {

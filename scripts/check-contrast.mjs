@@ -1,22 +1,28 @@
-// Contrast gate for the color tokens in src/styles/tokens.css (WCAG 2 ratios).
+// Contrast gate for the color tokens in src/styles/tokens.css and tokens-isle.css (WCAG 2 ratios).
 // Text pairs need 4.5:1, controls and focus rings 3:1. Zero dependencies on purpose.
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-const css = await readFile(resolve('src/styles/tokens.css'), 'utf8');
+// The isle material is split into its own file; both files keep the same three blocks.
+const files = ['src/styles/tokens.css', 'src/styles/tokens-isle.css'];
+const sources = await Promise.all(files.map((file) => readFile(resolve(file), 'utf8')));
 
-/** `--et-color-*` declarations of the first block whose selector line matches. */
+/** `--et-color-*` declarations of the first matching block, merged across both files. */
 function block(selectorPattern) {
-  const start = css.search(selectorPattern);
-  if (start < 0) throw new Error(`Block not found: ${selectorPattern}`);
-  const open = css.indexOf('{', start);
-  const close = css.indexOf('}', open);
   const tokens = new Map();
-  for (const [, name, value] of css
-    .slice(open + 1, close)
-    .matchAll(/--et-color-([\w-]+):\s*([^;]+);/g)) {
-    tokens.set(name, value.trim());
-  }
+  sources.forEach((css, index) => {
+    const start = css.search(selectorPattern);
+    if (start < 0) throw new Error(`Block not found in ${files[index]}: ${selectorPattern}`);
+    const open = css.indexOf('{', start);
+    const close = css.indexOf('}', open);
+    for (const [, name, value] of css
+      .slice(open + 1, close)
+      .matchAll(/--et-color-([\w-]+):\s*([^;]+);/g)) {
+      // A token must be defined in exactly one file (the split moves, it does not copy).
+      if (tokens.has(name)) throw new Error(`--et-color-${name} is defined in both token files`);
+      tokens.set(name, value.trim());
+    }
+  });
   return tokens;
 }
 

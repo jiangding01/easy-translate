@@ -1,3 +1,5 @@
+@import "./tokens-isle.css";
+
 /*
  * Design tokens: the single source. Colors follow docs/plans/ui-isle-direction.md
  * section 6 (amber, checked by scripts/check-contrast.mjs); the rest follows the
@@ -7,6 +9,10 @@
  *
  * Theme: `data-et-theme="light" | "dark"` forces a theme; without it the
  * system preference applies.
+ *
+ * The isle material (`--et-color-isle*`, `--et-shadow-isle`) and the colors its status
+ * dot shares with these pages (`--et-color-accent`, `--et-color-warn`) live in tokens-isle.css,
+ * which the page isle imports on its own; every other page gets it through this import.
  */
 
 :root,
@@ -15,7 +21,6 @@
 
   /* 2.1 Color: amber (docs/plans/ui-isle-direction.md section 6). OKLCH, warm neutrals
      (hue 70-80). Checked by scripts/check-contrast.mjs. */
-  --et-color-accent: oklch(0.81 0.15 76);
   --et-color-accent-hover: oklch(0.84 0.15 78);
   --et-color-accent-ink: oklch(0.52 0.12 60);
   --et-color-accent-soft: oklch(0.95 0.045 80);
@@ -31,20 +36,11 @@
   --et-color-text: oklch(0.22 0.012 70);
   --et-color-muted: oklch(0.47 0.012 70);
   --et-color-faint: oklch(0.54 0.01 70);
-  --et-color-warn: oklch(0.55 0.17 30);
   --et-color-warn-soft: oklch(0.96 0.025 30);
   --et-color-on-warn: oklch(0.99 0.003 75);
   --et-color-ok: oklch(0.5 0.11 155);
   --et-color-focus: oklch(0.52 0.12 60);
   --et-color-scrim: oklch(0.25 0.02 70 / 0.28);
-  /* Isle material: the in-page island, palette and the settings test strip. */
-  --et-color-isle: oklch(0.2 0.008 70);
-  --et-color-isle-2: oklch(0.29 0.01 70);
-  --et-color-isle-line: transparent;
-  --et-color-isle-text: oklch(0.97 0.006 75);
-  --et-color-isle-dim: oklch(0.72 0.012 75);
-  --et-color-isle-ok: oklch(0.78 0.12 155);
-  --et-color-isle-warn: oklch(0.74 0.14 32);
   --et-subtitle-bg: rgba(8, 8, 8, 0.72);
 
   /* 2.2 Typography */
@@ -148,7 +144,6 @@
 :host([data-et-theme="dark"]) {
   color-scheme: dark;
 
-  --et-color-accent: oklch(0.82 0.15 78);
   --et-color-accent-hover: oklch(0.86 0.14 80);
   --et-color-accent-ink: oklch(0.84 0.14 78);
   --et-color-accent-soft: oklch(0.29 0.05 72);
@@ -162,19 +157,11 @@
   --et-color-text: oklch(0.94 0.008 80);
   --et-color-muted: oklch(0.72 0.012 75);
   --et-color-faint: oklch(0.64 0.01 75);
-  --et-color-warn: oklch(0.72 0.15 32);
   --et-color-warn-soft: oklch(0.26 0.04 32);
   --et-color-on-warn: oklch(0.16 0.006 70);
   --et-color-ok: oklch(0.74 0.12 155);
   --et-color-focus: oklch(0.84 0.14 78);
   --et-color-scrim: oklch(0.05 0 0 / 0.5);
-  --et-color-isle: oklch(0.25 0.008 70);
-  --et-color-isle-2: oklch(0.33 0.01 70);
-  --et-color-isle-line: oklch(0.4 0.01 70);
-  --et-color-isle-text: oklch(0.96 0.006 75);
-  --et-color-isle-dim: oklch(0.74 0.012 75);
-  --et-color-isle-ok: oklch(0.78 0.12 155);
-  --et-color-isle-warn: oklch(0.76 0.14 32);
 
   --et-shadow-1: 0 0 0 1px oklch(1 0 0 / 0.07);
   --et-shadow-2: 0 4px 12px oklch(0 0 0 / 0.4), 0 0 0 1px oklch(1 0 0 / 0.07);
@@ -186,7 +173,6 @@
   :host(:not([data-et-theme="light"])) {
     color-scheme: dark;
 
-    --et-color-accent: oklch(0.82 0.15 78);
     --et-color-accent-hover: oklch(0.86 0.14 80);
     --et-color-accent-ink: oklch(0.84 0.14 78);
     --et-color-accent-soft: oklch(0.29 0.05 72);
@@ -200,19 +186,11 @@
     --et-color-text: oklch(0.94 0.008 80);
     --et-color-muted: oklch(0.72 0.012 75);
     --et-color-faint: oklch(0.64 0.01 75);
-    --et-color-warn: oklch(0.72 0.15 32);
     --et-color-warn-soft: oklch(0.26 0.04 32);
     --et-color-on-warn: oklch(0.16 0.006 70);
     --et-color-ok: oklch(0.74 0.12 155);
     --et-color-focus: oklch(0.84 0.14 78);
     --et-color-scrim: oklch(0.05 0 0 / 0.5);
-    --et-color-isle: oklch(0.25 0.008 70);
-    --et-color-isle-2: oklch(0.33 0.01 70);
-    --et-color-isle-line: oklch(0.4 0.01 70);
-    --et-color-isle-text: oklch(0.96 0.006 75);
-    --et-color-isle-dim: oklch(0.74 0.012 75);
-    --et-color-isle-ok: oklch(0.78 0.12 155);
-    --et-color-isle-warn: oklch(0.76 0.14 32);
 
     --et-shadow-1: 0 0 0 1px oklch(1 0 0 / 0.07);
     --et-shadow-2: 0 4px 12px oklch(0 0 0 / 0.4), 0 0 0 1px oklch(1 0 0 / 0.07);

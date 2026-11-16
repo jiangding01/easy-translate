@@ -4,6 +4,8 @@ import { injectStyles, removeStyles } from '@/content/styles';
 import {
   type ConfigChange,
   type ConfigV1,
+  ISLE_DOCKS,
+  type IsleDock,
   PAGE_MODES,
   PAGE_STYLES,
   type PageMode,
@@ -36,6 +38,7 @@ const STYLE_LABELS: Record<PageStyle, string> = {
   highlight: '高亮',
 };
 const MODE_LABELS: Record<PageMode, string> = { bilingual: '双语', translation: '仅译文' };
+const DOCK_LABELS: Record<IsleDock, string> = { right: '右侧', left: '左侧', bottom: '底部' };
 const HOSTS = ['light', 'dark'] as const;
 const HOST_LABELS: Record<(typeof HOSTS)[number], string> = { light: '浅色网页', dark: '深色网页' };
 
@@ -163,7 +166,7 @@ function TranslationSection({
 }) {
   const [host, setHost] = useState<(typeof HOSTS)[number]>('light');
   const dark = host === 'dark';
-  const { style, mode } = config.page;
+  const { style, mode, isleDock } = config.page;
 
   useEffect(() => {
     const sheet = injectStyles(document);
@@ -262,6 +265,35 @@ function TranslationSection({
                   onChange={() => void change({ path: 'page.mode', value: item })}
                 />
                 {MODE_LABELS[item]}
+              </label>
+            ))}
+          </fieldset>
+        </div>
+        <div className={styles.settingRow}>
+          <div className={styles.settingText}>
+            <span id="dock-label" className={styles.settingName}>
+              灵岛位置
+            </span>
+            <span className={styles.settingHint}>
+              翻译时贴在网页边缘的控制条，正在翻译的页面立即生效
+            </span>
+          </div>
+          <fieldset
+            aria-labelledby="dock-label"
+            className={styles.segmented}
+            style={{ '--index': ISLE_DOCKS.indexOf(isleDock) } as React.CSSProperties}
+          >
+            <span aria-hidden="true" className={styles.segmentThumb} />
+            {ISLE_DOCKS.map((item) => (
+              <label key={item} className={styles.segment}>
+                <input
+                  type="radio"
+                  name="isle-dock"
+                  className={styles.radioInput}
+                  checked={isleDock === item}
+                  onChange={() => void change({ path: 'page.isleDock', value: item })}
+                />
+                {DOCK_LABELS[item]}
               </label>
             ))}
           </fieldset>

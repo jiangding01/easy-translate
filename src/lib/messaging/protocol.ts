@@ -54,6 +54,25 @@ export interface PageState {
   engineError?: AppError;
   /** One-off engine used by this session instead of the configured one. */
   engine?: Engine;
+  /** Set once the session stopped for good (extension context invalidated); absent otherwise. */
+  halted?: true;
+}
+
+/** One row of the page isle's engine list. A whitelist: no key material, URL or model. */
+export interface EngineOption {
+  id: Engine;
+  name: string;
+  /** Short label for the isle's engine button. */
+  short: string;
+  ready: boolean;
+  /** Why the engine is not ready, in the settings page's wording. */
+  note?: string;
+}
+
+export interface EngineOptions {
+  /** The engine set in the config (the session may use a one-off engine instead). */
+  configured: Engine;
+  options: EngineOption[];
 }
 
 /** Status the content script reports so the toolbar icon can show its dot. */
@@ -92,6 +111,8 @@ export interface ProtocolMap {
   'page.retryFailed'(): Result<PageState>;
   /** background → content: the translate-page shortcut. */
   'page.toggle'(): Result<PageState>;
+  /** content → background: engines the isle can offer; read-only, never carries keys or URLs. */
+  'engine.options'(): Result<EngineOptions>;
   /** content → background: drives the toolbar icon's status dot for the sender tab. */
   'page.status'(status: PageStatus): Result<null>;
   /** extension pages → background: "总是翻译此站". */
