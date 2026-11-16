@@ -65,6 +65,9 @@ assert.doesNotThrow(
   `${runtimeFile} must be a single strict-mode script without static import/export or import.meta`,
 );
 assert.ok(!/\bimport\s*\(/.test(runtimeCode), `${runtimeFile} must not load other modules`);
+// A CSS `url(` in the module could pull a web accessible resource (or a font) by address:
+// styles stay self-contained. Case-sensitive on purpose, so `new URL(` is not caught.
+assert.ok(!runtimeCode.includes('url('), `${runtimeFile} must not contain a CSS url(`);
 // The one allowed read of the extension ID: wxt/browser picking `browser` or `chrome`.
 // If WXT rewrites this shim the check fails loudly; inspect the new form before exempting it.
 const WXT_BROWSER_SHIM = 'globalThis.browser?.runtime?.id?globalThis.browser:globalThis.chrome';

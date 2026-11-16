@@ -1,5 +1,5 @@
 import type { ConfigV1 } from '@/lib/config/types';
-import type { PageState, PageStatus } from '@/lib/messaging/protocol';
+import type { EngineOptions, PageState, PageStatus } from '@/lib/messaging/protocol';
 import type { PageSession } from './session';
 
 // The seam between the always-loaded bootstrap and the on-demand page runtime.
@@ -13,6 +13,8 @@ export interface PageRuntimeDeps {
   getConfig(): Promise<ConfigV1>;
   watchConfig(callback: (config: ConfigV1) => void): () => void;
   reportStatus(status: PageStatus): void;
+  /** Engines the isle can offer; rejects when the background cannot answer. */
+  listEngines(): Promise<EngineOptions>;
 }
 
 export type PageRuntimeFactory = (deps: PageRuntimeDeps) => PageSession;

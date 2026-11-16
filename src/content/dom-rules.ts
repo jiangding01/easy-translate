@@ -18,6 +18,8 @@ export const SKIP_TAGS: ReadonlySet<string> = new Set([
   'SELECT',
   'OPTION',
   'BUTTON',
+  // The page isle's host (M2b): never page content, whatever node it ends up under.
+  'ET-ISLE',
   'PRE',
   'HEAD',
   // Ruby readings (furigana) are pronunciation, not text to translate.
@@ -120,6 +122,7 @@ const SKIP_ROLES = new Set([
 
 /** Our own nodes. */
 export const OWN_TAG = 'ET-TR';
+export const ISLE_TAG = 'ET-ISLE';
 export const OWN_ATTR = 'data-et';
 
 /** Nodes other translators insert. */

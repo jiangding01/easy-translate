@@ -72,7 +72,17 @@ function setup(markup: string, getConfig = async () => createDefaultConfig('zh-C
   const statuses: PageStatus[] = [];
   const observed: Element[] = [];
   const unobserved: Element[] = [];
+  // A manual frame clock: subscribers are pushed only when a test runs the frame.
+  const frames = new Map<number, () => void>();
+  let frameId = 0;
+  const runFrame = () => {
+    const due = [...frames.values()];
+    frames.clear();
+    for (const callback of due) callback();
+  };
   let notify: ((targets: Element[], visible: boolean[]) => void) | undefined;
+  /** Each round of page changes the mutation watcher passed on for rescanning. */
+  const dirtyRounds: Element[][] = [];
   const session = createPageSession({
     win: window,
     port,
@@ -95,7 +105,21 @@ function setup(markup: string, getConfig = async () => createDefaultConfig('zh-C
         },
       };
     },
-    createMutationWatch: (options) => watchMutations({ ...options, debounceMs: 5 }),
+    createMutationWatch: (options) =>
+      watchMutations({
+        ...options,
+        debounceMs: 5,
+        onDirty: (elements) => {
+          dirtyRounds.push(elements);
+          options.onDirty(elements);
+        },
+      }),
+    scheduleFrame: (callback) => {
+      frameId += 1;
+      const id = frameId;
+      frames.set(id, callback);
+      return () => frames.delete(id);
+    },
   });
   /** Reports every observed root (or the given ones) as in range. */
   const show = (targets: Element[] = [...observed]) =>
@@ -114,6 +138,9 @@ function setup(markup: string, getConfig = async () => createDefaultConfig('zh-C
     before,
     sentTexts,
     configListeners,
+    runFrame,
+    queuedFrames: () => frames.size,
+    dirtyRounds,
   };
 }
 
@@ -308,6 +335,70 @@ describe('page session: errors', () => {
     expect(port.calls[1]?.payload.engine).toBe('google');
     expect(port.calls[1]?.payload.items).toHaveLength(2);
     expect(session.state().engineError).toBeUndefined();
+  });
+
+  /** Pauses on an engine error, retries with the same engine, then switches while in flight. */
+  async function switchWhileOldEngineInFlight(markup: string) {
+    const t = setup(markup);
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    t.port.calls[0]?.finish({ status: 'error', error: engineError('provider/unauthorized') });
+    await vi.waitFor(() => expect(t.session.state().engineError).toBeDefined());
+    t.session.retryFailed();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(2));
+    expect(t.port.calls[1]?.payload.engine).toBeUndefined();
+    await t.session.start({ engine: 'google' });
+    await wait();
+    // Every paragraph is still out with the old engine: nothing to send yet.
+    expect(t.port.calls).toHaveLength(2);
+    return { ...t, old: t.port.calls[1] as Call };
+  }
+
+  it("resends with the new engine when the old engine's request fails after a switch", async () => {
+    const { session, port, old } = await switchWhileOldEngineInFlight(
+      '<p>Late failure one.</p><p>Late failure two.</p>',
+    );
+    old.finish({ status: 'error', error: engineError('provider/unauthorized') });
+    await vi.waitFor(() => expect(port.calls).toHaveLength(3));
+    expect(port.calls[2]?.payload.engine).toBe('google');
+    expect(port.calls[2]?.payload.items.map((item) => item.text)).toEqual([
+      'Late failure one.',
+      'Late failure two.',
+    ]);
+    expect(session.state().engineError).toBeUndefined();
+  });
+
+  it("keeps the old engine's translations and resends only its engine-level rejects", async () => {
+    const { session, port, old } = await switchWhileOldEngineInFlight(
+      '<p>Late chunk one.</p><p>Late chunk two.</p>',
+    );
+    const [first, second] = old.payload.items;
+    old.onChunk?.({
+      id: first?.id ?? '',
+      text: '旧引擎译文',
+      disposition: 'translated',
+      cached: false,
+    });
+    old.onChunk?.({ id: second?.id ?? '', error: engineError('provider/quota-exceeded') });
+    old.finish({ status: 'done', data: { total: 2, failed: 1 } });
+    await vi.waitFor(() => expect(port.calls).toHaveLength(3));
+    expect(port.calls[2]?.payload.engine).toBe('google');
+    expect(port.calls[2]?.payload.items.map((item) => item.text)).toEqual(['Late chunk two.']);
+    expect(session.state().engineError).toBeUndefined();
+    await vi.waitFor(() => expect(translations()).toEqual(['旧引擎译文']));
+  });
+
+  it('still pauses on an engine error from the current engine after a switch', async () => {
+    const { session, port, old } = await switchWhileOldEngineInFlight(
+      '<p>Current engine one.</p><p>Current engine two.</p>',
+    );
+    old.finish({ status: 'error', error: engineError('provider/unauthorized') });
+    await vi.waitFor(() => expect(port.calls).toHaveLength(3));
+    port.calls[2]?.finish({ status: 'error', error: engineError('config/missing-key') });
+    await vi.waitFor(() => expect(session.state().engineError?.code).toBe('config/missing-key'));
+    await wait(100);
+    expect(port.calls).toHaveLength(3);
   });
 
   it('marks a single paragraph failed and retries it on request', async () => {
@@ -512,5 +603,169 @@ describe('page session: dynamic content', () => {
     expect(port.calls).toHaveLength(6);
     for (const call of port.calls) call.answer();
     await vi.waitFor(() => expect(sentTexts()).toHaveLength(600), { timeout: 3000 });
+  });
+});
+
+describe('page session: subscribe', () => {
+  it('pushes the current state once per frame and coalesces a burst', async () => {
+    const { session, runFrame, queuedFrames } = setup('<p>Subscribe burst text.</p>');
+    const seen: string[] = [];
+    session.subscribe((state) => seen.push(state.phase));
+    await session.start();
+    expect(queuedFrames()).toBe(1);
+    expect(seen).toEqual([]);
+    runFrame();
+    expect(seen).toEqual(['running']);
+    runFrame();
+    expect(seen).toEqual(['running']);
+  });
+
+  it('pushes the configured mode as soon as the session has it', async () => {
+    const config = createDefaultConfig('zh-CN');
+    config.page.mode = 'translation';
+    const { session, runFrame, queuedFrames } = setup('<p>Mode push text.</p>', async () => config);
+    const seen: string[] = [];
+    session.subscribe((state) => seen.push(state.mode));
+    const started = session.start();
+    runFrame();
+    // Before the config is read the mode can only be the default.
+    expect(seen).toEqual(['bilingual']);
+    await started;
+    // No report has run yet (nothing was shown): this push comes from start itself.
+    expect(queuedFrames()).toBe(1);
+    runFrame();
+    expect(seen).toEqual(['bilingual', 'translation']);
+  });
+
+  it('does not queue a frame without subscribers', async () => {
+    const { session, queuedFrames } = setup('<p>No subscriber text.</p>');
+    await session.start();
+    expect(queuedFrames()).toBe(0);
+  });
+
+  it('pushes after begin, report (translations arriving), setMode, retryFailed and stop', async () => {
+    const { session, port, show, runFrame } = setup('<p>Call site paragraph.</p>');
+    const seen: { phase: string; translated: number; mode: string; failed: number }[] = [];
+    session.subscribe(({ phase, translated, mode, failed }) =>
+      seen.push({ phase, translated, mode, failed }),
+    );
+    await session.start();
+    runFrame();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    port.calls[0]?.answer();
+    await vi.waitFor(() => expect(translations()).toHaveLength(1));
+    await vi.waitFor(() => expect(session.state().phase).toBe('done'));
+    seen.length = 0;
+    runFrame();
+    expect(seen.at(-1)).toMatchObject({ phase: 'done', translated: 1 });
+
+    seen.length = 0;
+    await session.setMode('translation');
+    runFrame();
+    expect(seen).toEqual([{ phase: 'done', translated: 1, mode: 'translation', failed: 0 }]);
+
+    seen.length = 0;
+    session.retryFailed();
+    runFrame();
+    expect(seen).toHaveLength(1);
+
+    seen.length = 0;
+    await session.stop();
+    runFrame();
+    expect(seen.at(-1)).toMatchObject({ phase: 'idle', translated: 0 });
+  });
+
+  it('pushes when failures are recorded and when an engine error pauses the session', async () => {
+    const { session, port, show, runFrame } = setup('<p>Failure push text.</p>');
+    const seen: { failed: number; error: boolean }[] = [];
+    session.subscribe(({ failed, engineError: error }) =>
+      seen.push({ failed, error: error !== undefined }),
+    );
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    const [item] = port.calls[0]?.payload.items ?? [];
+    port.calls[0]?.onChunk?.({ id: item?.id ?? '', error: engineError('config/missing-key') });
+    await vi.waitFor(() => expect(session.state().engineError).toBeDefined());
+    runFrame();
+    expect(seen.at(-1)).toEqual({ failed: 0, error: true });
+    seen.length = 0;
+    session.retryFailed();
+    runFrame();
+    expect(seen.at(-1)).toEqual({ failed: 0, error: false });
+  });
+
+  it('pushes when the engine of a running session is switched', async () => {
+    const { session, runFrame } = setup('<p>Switch engine text.</p>');
+    await session.start();
+    const seen: (string | undefined)[] = [];
+    session.subscribe((state) => seen.push(state.engine));
+    runFrame();
+    await session.start({ engine: 'deepseek' });
+    runFrame();
+    expect(seen).toEqual(['deepseek']);
+  });
+
+  it('stops pushing after unsubscribe and cancels the queued frame', async () => {
+    const { session, runFrame, queuedFrames } = setup('<p>Unsubscribe text.</p>');
+    const listener = vi.fn();
+    const unsubscribe = session.subscribe(listener);
+    await session.start();
+    expect(queuedFrames()).toBe(1);
+    unsubscribe();
+    expect(queuedFrames()).toBe(0);
+    runFrame();
+    expect(listener).not.toHaveBeenCalled();
+    await session.stop();
+    runFrame();
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('pushes on halt with halted set, and not before', async () => {
+    const { session, port, show, runFrame, queuedFrames } = setup('<p>Halt push text.</p>');
+    const seen: (true | undefined)[] = [];
+    session.subscribe((state) => seen.push(state.halted));
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    await wait();
+    runFrame();
+    expect(queuedFrames()).toBe(0);
+    expect(session.state()).not.toHaveProperty('halted');
+    seen.length = 0;
+    port.calls[0]?.finish({
+      status: 'error',
+      error: appError('internal', 'internal/context-invalidated', 'gone'),
+    });
+    await vi.waitFor(() => expect(session.state().halted).toBe(true));
+    await wait();
+    // The halted session reports nothing more: this push is halt's own.
+    runFrame();
+    expect(seen).toEqual([true]);
+  });
+
+  it('keeps an isle host out of translation and of rescans, even when a page moves it into the body', async () => {
+    const { session, show, port, dirtyRounds } = setup('<p>Host skip paragraph.</p>');
+    const before = document.createElement('et-isle');
+    before.textContent = 'Isle light text';
+    document.body.append(before);
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    const sent = port.calls.flatMap((call) => call.payload.items.map((item) => item.text));
+    expect(sent.join(' ')).not.toContain('Isle');
+    await wait(30);
+    dirtyRounds.length = 0;
+    // The isle mounts under <html>; a page that moves it into the watched body, or
+    // touches its light DOM there, must not cost a rescan.
+    const host = document.createElement('et-isle');
+    host.attachShadow({ mode: 'open' }).innerHTML = '<p>Isle inner text</p>';
+    document.body.append(host);
+    await wait(30);
+    host.append(document.createElement('p'));
+    await wait();
+    expect(dirtyRounds).toEqual([]);
+    expect(port.calls).toHaveLength(1);
   });
 });

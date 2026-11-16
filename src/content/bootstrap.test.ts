@@ -30,6 +30,7 @@ function fakeSession() {
     setMode: vi.fn(async (mode) => ({ ...snapshot(), mode })),
     retryFailed: vi.fn(snapshot),
     state: vi.fn(snapshot),
+    subscribe: vi.fn(() => () => {}),
   };
   return { session, events };
 }
@@ -38,6 +39,7 @@ const runtime: PageRuntimeDeps = {
   getConfig: vi.fn(),
   watchConfig: vi.fn(),
   reportStatus: vi.fn(),
+  listEngines: vi.fn(),
 };
 
 function setup(loadFactory?: () => Promise<PageRuntimeFactory>) {
