@@ -1345,7 +1345,11 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
     .finally(() => {
       if (destroyed) return;
       configReady = true;
-      stopWatching = deps.watchConfig(onConfig);
+      try {
+        stopWatching = deps.watchConfig(onConfig);
+      } catch {
+        // The extension was reloaded ("Extension context invalidated"): no live updates.
+      }
       // Prefetched so the first probe already reserves room for the whole list.
       void loadEngines();
       apply(session.state());
