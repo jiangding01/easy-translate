@@ -126,9 +126,17 @@ describe('translation cache', () => {
 
 // ------------------------------------------------------------ hardening
 
-/** Wraps a real connection: counts opens / closes and can fail the next transaction. */
+/**
+ * Wraps a real connection: counts opens / closes, can fail the next transaction
+ * and reports every readwrite transaction it starts (with its `done` promise).
+ */
 function instrumented(name: string) {
-  const state = { opened: 0, closed: 0, failNext: undefined as string | undefined };
+  const state = {
+    opened: 0,
+    closed: 0,
+    failNext: undefined as string | undefined,
+    onReadwrite: undefined as ((done: Promise<void>) => void) | undefined,
+  };
   const open = async () => {
     const db = await openCacheDb(name);
     state.opened += 1;
@@ -147,7 +155,9 @@ function instrumented(name: string) {
               state.failNext = undefined;
               throw new DOMException('injected', failure);
             }
-            return target.transaction(...args);
+            const tx = target.transaction(...args);
+            if (args[1] === 'readwrite') state.onReadwrite?.(tx.done);
+            return tx;
           };
         }
         const value = Reflect.get(target, prop, target);
@@ -168,19 +178,46 @@ describe('translation cache: hardening', () => {
         text: 'x',
       })),
     );
+    const { state, open: openDb } = instrumented(name);
     const cache = createTranslationCache({
-      open: open(name),
+      open: openDb,
       now: () => 2,
       maxBytes: 30_000,
       targetBytes: 600,
-      readTimeoutMs: 100,
+      // What this test checks is transaction order, asserted below. A short
+      // wall-clock timeout made it flaky: one 500-record batch in
+      // fake-indexeddb can take over 100ms when the whole suite runs in parallel.
+      readTimeoutMs: 60_000,
     });
     await cache.getMany(['warm-up']);
-    const evicting = cache.put([{ key: 'fresh', text: 'F' }]);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Readwrite transactions in start order: the put, then one per eviction batch.
+    const writes: { done: boolean }[] = [];
+    let firstBatchStarted: () => void = () => undefined;
+    const evictionStarted = new Promise<void>((resolve) => {
+      firstBatchStarted = resolve;
+    });
+    state.onReadwrite = (done) => {
+      const write = { done: false };
+      writes.push(write);
+      done.then(() => {
+        write.done = true;
+      });
+      if (writes.length === 2) firstBatchStarted();
+    };
+    let putSettled = false;
+    const evicting = cache.put([{ key: 'fresh', text: 'F' }]).finally(() => {
+      putSettled = true;
+    });
+    await evictionStarted;
     const hits = await cache.getMany(['fresh']);
     expect(hits.get('fresh')).toBe('F');
+    // Issued during the first batch, the read waits for that batch only: it is
+    // served before any later batch finishes and while the eviction goes on.
+    expect(writes.filter((write) => write.done)).toHaveLength(2);
+    expect(putSettled).toBe(false);
     await evicting;
+    // 6001 entries of 6 bytes down to 600 bytes, 500 per batch: 12 batches.
+    expect(writes).toHaveLength(13);
     const stats = await cache.stats();
     expect(stats.totalBytes).toBeLessThanOrEqual(600);
     expect(stats.totalBytes).toBe(stats.count * 6); // every entry is 6 bytes
