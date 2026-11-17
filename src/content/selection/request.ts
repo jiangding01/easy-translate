@@ -7,6 +7,7 @@ import type {
   TranslateDone,
   TranslateRequest,
 } from '@/lib/messaging/protocol';
+import { phoneticKey } from '@/lib/phonetic/word';
 
 // The card's requests (plan 1.2 rules 4–7, 4.5 rule 2). One request at a time: a new one
 // cancels the last. Every request gets the next number and remembers its `source`; a
@@ -27,7 +28,9 @@ export type RequestEvent =
   /** The final text, which replaces the increments; `text` is the source unless translated. */
   | { kind: 'done'; text: string; disposition: TranslateDisposition }
   | { kind: 'error'; error: AppError }
-  | { kind: 'too-long' };
+  | { kind: 'too-long' }
+  /** The source word's British / American IPA (no slashes); `lemma`: the headword's readings. */
+  | { kind: 'phonetic'; uk?: string; us?: string; lemma?: string };
 
 export interface TranslateArgs {
   source: string;
@@ -35,6 +38,57 @@ export interface TranslateArgs {
   engine?: Engine;
   /** Menu or shortcut: the user asked, skip the same-language check. */
   force?: boolean;
+  /** Ask for the word's phonetic too (see `wantsPhonetic`). */
+  phonetic?: boolean;
+}
+
+const baseOf = (tag: string | undefined) => tag?.toLowerCase().split(/[-_]/)[0] ?? '';
+
+/**
+ * Pages in another Latin-script language: an unreliably detected word there may well be
+ * theirs (French "chose"), not English. On any other page (Chinese, Japanese, …) a single
+ * Latin word is all but always English.
+ */
+const LATIN_PAGES = new Set([
+  'fr',
+  'de',
+  'es',
+  'it',
+  'pt',
+  'nl',
+  'sv',
+  'da',
+  'no',
+  'nb',
+  'fi',
+  'pl',
+  'cs',
+  'tr',
+  'id',
+  'vi',
+  'ro',
+  'hu',
+]);
+
+/**
+ * Whether the card asks for a phonetic: the source is a single English word (the
+ * background's own rule), the target is not English, and the source may be English:
+ * detected as English, or, when detection is unreliable or missing, not on a page that
+ * declares another Latin-script language. `detected` is the reliable detection's language
+ * tag, if any; `pageLanguage` is `<html lang>`. An unknown target (the menu opened the
+ * card before the config was read) counts as not English. The background answers only
+ * for words in its English tables.
+ */
+export function wantsPhonetic(args: {
+  source: string;
+  target: string | undefined;
+  detected: string | undefined;
+  pageLanguage: string | undefined;
+}): boolean {
+  if (baseOf(args.target) === 'en') return false;
+  if (phoneticKey(args.source) === undefined) return false;
+  if (args.detected !== undefined) return baseOf(args.detected) === 'en';
+  return !LATIN_PAGES.has(baseOf(args.pageLanguage));
 }
 
 export interface CardRequests {
@@ -83,12 +137,20 @@ export function createCardRequests(deps: CardRequestDeps): CardRequests {
       };
       if (args.engine) payload.engine = args.engine;
       if (args.force) payload.force = true;
+      if (args.phonetic) payload.phonetic = true;
       let text = '';
       let finished = false;
       let retried = false;
 
       const onChunk = (chunk: TranslateChunk) => {
-        if (finished || !current()) return;
+        if (!current()) return;
+        if ('phonetic' in chunk) {
+          // Not a result: it may come after the final chunk, until the request ends.
+          const { uk, us } = chunk.phonetic;
+          onEvent({ kind: 'phonetic', uk, us, lemma: chunk.lemma });
+          return;
+        }
+        if (finished) return;
         if ('reset' in chunk) {
           // A new attempt: whatever streamed so far is void (plan 1.2 rule 6).
           text = '';

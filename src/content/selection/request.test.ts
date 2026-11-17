@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { appError } from '@/lib/errors';
 import type { Outcome } from '@/lib/messaging/port';
 import type { TranslateChunk, TranslateDone, TranslateRequest } from '@/lib/messaging/protocol';
-import { type CardPort, createCardRequests, MAX_SOURCE_LENGTH, type RequestEvent } from './request';
+import {
+  type CardPort,
+  createCardRequests,
+  MAX_SOURCE_LENGTH,
+  type RequestEvent,
+  wantsPhonetic,
+} from './request';
 
 /** A port whose requests the test answers by hand. */
 function fakePort() {
@@ -33,7 +39,10 @@ function setup() {
   let source: string | undefined;
   const requests = createCardRequests({ port, currentSource: () => source });
   const events: RequestEvent[] = [];
-  const start = (text: string, extra: { force?: boolean; engine?: 'google' } = {}) => {
+  const start = (
+    text: string,
+    extra: { force?: boolean; engine?: 'google'; phonetic?: boolean } = {},
+  ) => {
     source = text;
     return requests.translate({ source: text, ...extra }, (event) => events.push(event));
   };
@@ -179,5 +188,87 @@ describe('card requests (plan 1.2)', () => {
     expect(t.events).toEqual([]);
     t.requests.dispose();
     expect(t.port.dispose).toHaveBeenCalled();
+  });
+});
+
+describe('phonetic (single English words)', () => {
+  const base = { source: 'map', target: 'zh-CN', detected: 'en', pageLanguage: '' };
+
+  it.each([
+    ['a word detected as English', base, true],
+    ['a word with punctuation, any case', { ...base, source: '“Maps,”' }, true],
+    ['a regional English tag', { ...base, detected: 'en-GB' }, true],
+    ['an unknown target (config not read yet)', { ...base, target: undefined }, true],
+    [
+      'undetected, on a page declaring English',
+      { ...base, detected: undefined, pageLanguage: 'en-US' },
+      true,
+    ],
+    [
+      'undetected, on a page declaring English with _',
+      { ...base, detected: undefined, pageLanguage: 'EN_us' },
+      true,
+    ],
+    ['undetected, on a page declaring nothing', { ...base, detected: undefined }, true],
+    [
+      'undetected, on a Chinese page (Google results in Chinese)',
+      { ...base, detected: undefined, pageLanguage: 'zh-CN' },
+      true,
+    ],
+    ['undetected, on a Japanese page', { ...base, detected: undefined, pageLanguage: 'ja' }, true],
+    [
+      'undetected, on a French page',
+      { ...base, detected: undefined, pageLanguage: 'fr-FR' },
+      false,
+    ],
+    ['undetected, on a German page', { ...base, detected: undefined, pageLanguage: 'de' }, false],
+    [
+      'detected as another language on an English page',
+      { ...base, detected: 'fr', pageLanguage: 'en' },
+      false,
+    ],
+    ['an English target', { ...base, target: 'en' }, false],
+    ['two words', { ...base, source: 'paper map' }, false],
+    ['a hyphenated word', { ...base, source: 'well-known' }, false],
+    ['a non-Latin word', { ...base, source: '地图' }, false],
+  ])('%s → %s', (_name, args, expected) => {
+    expect(wantsPhonetic(args)).toBe(expected);
+  });
+
+  it('asks for it in the payload only when told to', () => {
+    const t = setup();
+    t.start('map');
+    expect(t.sent[0]?.payload.phonetic).toBeUndefined();
+    t.start('map', { phonetic: true });
+    expect(t.sent[1]?.payload).toMatchObject({ phonetic: true, stream: true });
+  });
+
+  it('passes the phonetic on before and after the final chunk, without ending anything', async () => {
+    const t = setup();
+    t.start('absented', { phonetic: true });
+    const request = t.sent[0];
+    request?.chunk({ id: 's', phonetic: { uk: 'ˈæbsənt', us: 'ˈæbsənt' }, lemma: 'absent' });
+    request?.chunk({ id: 's', delta: '缺' });
+    request?.chunk(final('缺席'));
+    request?.chunk({ id: 's', phonetic: { us: 'æbˈsentɪd' } });
+    request?.finish({ status: 'done', data: { total: 1, failed: 0 } });
+    await flush();
+    expect(t.events).toEqual([
+      { kind: 'loading' },
+      { kind: 'phonetic', uk: 'ˈæbsənt', us: 'ˈæbsənt', lemma: 'absent' },
+      { kind: 'partial', text: '缺' },
+      { kind: 'done', text: '缺席', disposition: 'translated' },
+      { kind: 'phonetic', uk: undefined, us: 'æbˈsentɪd', lemma: undefined },
+    ]);
+  });
+
+  it('drops the phonetic of a request the card moved on from', () => {
+    const t = setup();
+    t.start('map', { phonetic: true });
+    const late = t.sent[0];
+    t.start('road', { phonetic: true });
+    t.events.length = 0;
+    late?.chunk({ id: 's', phonetic: { uk: 'mæp' } });
+    expect(t.events).toEqual([]);
   });
 });

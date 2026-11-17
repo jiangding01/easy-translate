@@ -1,5 +1,5 @@
 // Gzip size budget for the production build. Zero dependencies on purpose.
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
@@ -51,8 +51,9 @@ const entries = [
   {
     name: 'selection-runtime',
     // The selection dot and card (M3a). Planned at 16KB; raised to 18KB after the M3a build
-    // measured 16.87KB, with the user's approval. Raise explicitly, never quietly.
-    budget: 18 * KB,
+    // measured 16.87KB, with the user's approval; raised to 19KB (2026-11-17, user approved)
+    // when UK/US phonetics took it to 18.02KB. Raise explicitly, never quietly.
+    budget: 19 * KB,
     files: runtimeFiles('selection-runtime'),
   },
   {
@@ -92,6 +93,45 @@ for (const entry of entries) {
     console.log(
       `  ${entry.name.padEnd(12)} ${(sizes[index] / KB).toFixed(2).padStart(8)} KB  ${file}`,
     );
+  });
+}
+
+// Not JS: the phonetic table shards (scripts/build-phonetics.mjs), fetched by the background
+// one at a time as words need them. Each shard has its own budget, and so does each accent's
+// whole table (v4 measured about 1.39MB British and 0.78MB American).
+const SHARD_BUDGET = 40 * KB;
+const TABLE_BUDGET = 2048 * KB;
+for (const [name, dir] of [
+  ['phonetic-gb', 'dict/gb'],
+  ['phonetic-us', 'dict/us'],
+]) {
+  let shards = [];
+  try {
+    shards = (await readdir(resolve(output, dir))).filter((file) => file.endsWith('.tsv'));
+  } catch {
+    // Reported as missing below.
+  }
+  if (shards.length === 0) {
+    failed = true;
+    rows.push({ entry: name, gzip: '-', budget: TABLE_BUDGET, status: 'MISSING' });
+    continue;
+  }
+  const sizes = await Promise.all(shards.map((file) => gzipSize(`${dir}/${file}`)));
+  const total = sizes.reduce((sum, size) => sum + size, 0);
+  const largest = Math.max(...sizes);
+  const over = shards.filter((_file, index) => (sizes[index] ?? 0) > SHARD_BUDGET);
+  for (const file of over) console.log(`  ${name.padEnd(12)} shard over budget: ${dir}/${file}`);
+  console.log(
+    `  ${name.padEnd(12)} ${shards.length} shards, largest ${(largest / KB).toFixed(2)} KB`,
+  );
+  const ok = total <= TABLE_BUDGET && over.length === 0;
+  if (!ok) failed = true;
+  rows.push({ entry: name, gzip: total, budget: TABLE_BUDGET, status: ok ? 'ok' : 'OVER' });
+  rows.push({
+    entry: `${name} max`,
+    gzip: largest,
+    budget: SHARD_BUDGET,
+    status: over.length === 0 ? 'ok' : 'OVER',
   });
 }
 
