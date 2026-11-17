@@ -202,8 +202,16 @@ export function createRenderer(options: RenderOptions): Renderer {
     return record.unit.kind === 'block' && !record.inline && !record.keepOriginal && !record.failed;
   }
 
-  type OnlyReading = { record: Rendered; fontSize: string; lineHeight: string; box: string[] };
-  const BOX = [
+  type OnlyReading = {
+    record: Rendered;
+    fontSize: string;
+    lineHeight: string;
+    pins: [string, string][];
+  };
+  // font-size:0 also zeroes the root's own em/ch lengths (`max-width: 80ch` would
+  // stack the translation one character per line), so these are pinned in pixels.
+  // getComputedStyle gives computed values here: em/ch resolved, keywords and % kept.
+  const PINNED = [
     'margin-top',
     'margin-right',
     'margin-bottom',
@@ -212,25 +220,33 @@ export function createRenderer(options: RenderOptions): Renderer {
     'padding-right',
     'padding-bottom',
     'padding-left',
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'flex-basis',
+    'text-indent',
   ];
+  // getComputedStyle reports used pixels for these even when they are `auto`;
+  // the Typed OM keeps the keyword, so only a real length gets pinned.
+  const PINNED_TYPED = ['width', 'height'];
+  const KEYWORD = /^[a-z-]+$/;
   function readOnly(record: Rendered): OnlyReading {
-    const style = win.getComputedStyle(record.unit.root);
-    return {
-      record,
-      fontSize: style.fontSize,
-      lineHeight: style.lineHeight,
-      box: BOX.map((name) => style.getPropertyValue(name)),
-    };
+    const root = record.unit.root;
+    const style = win.getComputedStyle(root);
+    const typed = typeof root.computedStyleMap === 'function' ? root.computedStyleMap() : null;
+    const pins: [string, string][] = PINNED.map((name) => [name, style.getPropertyValue(name)]);
+    for (const name of PINNED_TYPED) pins.push([name, String(typed?.get(name) ?? '')]);
+    return { record, fontSize: style.fontSize, lineHeight: style.lineHeight, pins };
   }
-  function applyOnly({ record, fontSize, lineHeight, box }: OnlyReading) {
+  function applyOnly({ record, fontSize, lineHeight, pins }: OnlyReading) {
     if (record.only) return;
     const root = record.unit.root as HTMLElement;
     record.only = { styleAttr: root.getAttribute('style') };
-    // em-based spacing would collapse with font-size:0: pin the computed pixels.
-    BOX.forEach((name, index) => {
-      const value = box[index];
-      if (value) root.style.setProperty(name, value);
-    });
+    // Keywords (auto, none) are left to the host so its own rules keep applying.
+    for (const [name, value] of pins) {
+      if (value && !KEYWORD.test(value)) root.style.setProperty(name, value);
+    }
     root.setAttribute('data-et-only', '');
     record.el.style.setProperty('--et-fs', fontSize);
     record.el.style.setProperty('--et-lh', lineHeight);
