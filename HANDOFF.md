@@ -1,6 +1,6 @@
 # Easy Translate 交接文档（HANDOFF）
 
-> 最后更新：2026-11-17 · 阶段：**路线图前 3 项已完成**（PR-A #17、CI 增强 #18），仓库已开源（#23，MIT）；**i18n 第 1 批基础设施已合并**（#26）；只看译文的两处修复已合并（#27、#28）。插件改名为 **译屿 / Islet Translate**（已定，待实施）。下一步：i18n 第 2 批起与双语 README → 改名 → 冒烟 e2e → 发 v0.2.0 → M3d，详见第 5 节「路线图与发版」
+> 最后更新：2026-11-17 · 阶段：**路线图前 3 项已完成**（PR-A #17、CI 增强 #18），仓库已开源（#23，MIT）；**i18n 第 1 批基础设施已合并**（#26）；只看译文的两处修复已合并（#27、#28），Google 丢标签时改用 HTML 模式重试、保住译文里的链接（#30）。插件改名为 **译屿 / Islet Translate**（已定，待实施）。下一步：i18n 第 2 批起与双语 README → 改名 → 冒烟 e2e → 发 v0.2.0 → M3d，详见第 5 节「路线图与发版」
 > 本文给接手的 Agent 或开发者用，按顺序读完即可直接开工。文中凡与其他文档冲突的地方，以本文和「权威文档」为准。
 
 ## 1. 项目一句话
@@ -43,7 +43,7 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
 
 ## 4. 当前代码状态
 
-- **main**（截至 PR #28）：
+- **main**（截至 PR #30）：
   - **M0 地基**（PR #1）：质量门禁、配置仓库、类型化消息与 Port、设计 token。
   - **M1 翻译核心**（PR #2、#3）：`src/lib/translate/`（provider、调度器、缓存、密钥、权限、翻译服务、Port `et-translate`）；最多 10 个自定义服务；设置页与工具栏面板（「隐中生岛」琥珀主题，`src/styles/tokens.css`，对比度由 `scripts/check-contrast.mjs` 校验）；页面共用 `src/lib/engine-view.ts`、`src/lib/endpoint.ts`、`src/components/Select.tsx`。
   - **M2a 整页翻译**（PR #4、#6）与扩展图标（PR #5）：`src/content/`（扫描分段、视口队列与会话、渲染、动态内容、站点记忆）。
@@ -59,9 +59,10 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
   - **开源准备**（PR #23）：MIT 许可证、THIRD_PARTY_NOTICES、SECURITY.md、仓库元数据。
   - **i18n 第 1 批基础设施**（PR #26）：方案 `docs/plans/i18n.md`；`scripts/check-i18n.mjs` 与 `scripts/i18n-baseline.json` 卡住新增中文字面量。
   - **只看译文修复**：`ch`/`em` 限宽段落不再塌成竖排（PR #27）；链接标记丢失、退回纯文本的段落照常隐藏原文（PR #28，推翻 M2 方案附录 C 第 8 条）。
+  - **Google 标签修复**（PR #30）：纯文本模式丢掉行内标签时，适配器对这些条目用 `format=html` 重试一次（`src/lib/translate/providers/google-html.ts`），保住译文里的链接。
 - **音标（PR #15，已合并）**：UK/US 音标（`src/lib/phonetic/`，数据 `public/dict/gb|us/` 分片，生成脚本 `scripts/build-phonetics.mjs`）、朗读卡死修复（`src/content/selection/speech.ts`）、底部朗读英文默认美音；`docs/reviews/` 收录 Codex 复核清单与核实结论。方案 [`docs/plans/phonetics-en.md`](docs/plans/phonetics-en.md)。
-- **体积（gzip，`npm run check:size`）**：content 6.99/7KB（**几乎没有余量，改引导层前先瘦身或经用户同意调预算**）、page-runtime 22.15/24KB、selection-runtime 18.63/19KB、background 57.12/60KB、popup 84.92/90KB、options 91.42/150KB；音标分片英 1.41MB、美 0.80MB（各 2MB，单片 40KB）。
-- **可用命令**：`npm run dev | build | lint | format | typecheck | test | check | check:contrast | check:size | zip`。`npm run check` 通过（截至 PR #28：72 个测试文件、1421 个用例）。
+- **体积（gzip，`npm run check:size`）**：content 6.99/7KB（**几乎没有余量，改引导层前先瘦身或经用户同意调预算**）、page-runtime 22.15/24KB、selection-runtime 18.63/19KB、background 58.20/60KB、popup 84.92/90KB、options 91.42/150KB；音标分片英 1.41MB、美 0.80MB（各 2MB，单片 40KB）。
+- **可用命令**：`npm run dev | build | lint | format | typecheck | test | check | check:contrast | check:size | zip`。`npm run check` 通过（截至 PR #30：73 个测试文件、1448 个用例）。
 - **还没有**：M3d 动态页与站点规则、M3b 段落级交互、M3c 指令台与灵岛键盘、M3e 本地引擎；i18n 第 2–6 批（文案迁移）与双语 README；改名。
 
 ## 5. 批次状态与下一步
@@ -243,7 +244,7 @@ M1 和 M2（整页翻译）完成后即构成 MVP。
 
 | 日期 | 事项 |
 | --- | --- |
-| 2026-11-17 | **Google 丢标签时用 HTML 模式重试**（分支 `fix/google-html-tag-retry`）。PR #28 合并后用户复验：只看译文已隐藏首段原文，但首段译文没有链接。用户两次 curl 取证：纯文本模式把 `<t0>` 整个丢掉；`format=html` 能把标签放到「由 Claude 编写和审查的」上；`<a>` 套 `<a>` 会被拆平，`<a>` 套 `<b>`、空 `<code>` 都能保留。用户另测 DeepSeek 本来就能保住链接，所以只改 Google 适配器：标签不完好的条目合批用 HTML 模式重试一次（`google-html.ts`），失败或回显时保留第一次的译文。方案经 /think 获批；check 时 Fable 审查发现「HTML 回显原文会覆盖已有译文」与编号按数字比较两处，已修并补测试，1448 个用例。**已缓存的坏译文需清缓存后才会修好**。用户清缓存后真机验证通过：首段译文「由 Claude 编写和审查的」带链接，其他段落链接正常。**流程调整**：Fable 审查改为视情况使用，只用于十分重要且复杂的改动 |
+| 2026-11-17 | **Google 丢标签时用 HTML 模式重试，已合并**（PR #30，`a4f06fa`）。PR #28 合并后用户复验：只看译文已隐藏首段原文，但首段译文没有链接。用户两次 curl 取证：纯文本模式把 `<t0>` 整个丢掉；`format=html` 能把标签放到「由 Claude 编写和审查的」上；`<a>` 套 `<a>` 会被拆平，`<a>` 套 `<b>`、空 `<code>` 都能保留。用户另测 DeepSeek 本来就能保住链接，所以只改 Google 适配器：标签不完好的条目合批用 HTML 模式重试一次（`google-html.ts`），失败或回显时保留第一次的译文。方案经 /think 获批；check 时 Fable 审查发现「HTML 回显原文会覆盖已有译文」与编号按数字比较两处，已修并补测试，1448 个用例。**已缓存的坏译文需清缓存后才会修好**。用户清缓存后真机验证通过：首段译文「由 Claude 编写和审查的」带链接，其他段落链接正常。**流程调整**：Fable 审查改为视情况使用，只用于十分重要且复杂的改动 |
 | 2026-11-17 | **只看译文露出原文的修复已合并**（PR #28，`ad3d8ba`；同日 PR #27 修了 `ch`/`em` 限宽段落塌成竖排）。用户在 claude.dev 博客 verification 一文发现，切到只看译文后第一段英文没有隐藏。根因：首段含链接，Google 返回时把 `<t0>…</t0>` 整个丢掉（用户用 curl 取证），段落退回纯文本；按 M2 方案附录 C 第 8 条，这类段落在只看译文下保留双语。**用户决定推翻该条**：照常隐藏原文，链接切回双语可用。删掉失效的 `keepOriginal`、`hasLink`；放宽标签识别（对此情况无效）和 `format=html` 重试都不做，后者仍按风险 1 的 10% 阈值评估 |
 | 2026-11-17 | **音标已合并**（PR #15）。**原型**更新到第 36 版：4 个画板对齐当前实现，没有实际渲染检查，请用户打开确认。**命名**：候选有译屿、屿光、渡、隐屿等，查重后定为「译屿 / Islet Translate」；Isleglow 已被占用，放弃。**路线图**：PR-A → CI 增强（产物上传、依赖审查、CodeQL）→ i18n 与双语 README → 改名 → 冒烟 e2e → 发 v0.2.0（只发 GitHub Release，暂不上架）→ M3d |
 | 2026-11-17 | **供应商图标已合并**（PR #14）。**英文单词音标**：ECDICT 调研 → 方案复查（修了音标分片被当成最终译文、晚到被丢等 3 处设计错误）→ 英音 3 万词 → 用户要求英美双音标（美音 ipa-dict en_US）→ 真机发现中文页面不显示（语言判断过严）和长尾词缺失 → 改全量分片 → 补美式拼写互查、UK/US 标签 → 真机发现朗读卡死，子代理在真实 Chrome 复现出 Google 在线声音「cancel 后立即 speak」的浏览器级 bug 并修复 → 底部朗读英文默认美音。用户验收通过。**Codex 复核清单**由 Opus 子代理逐条核实（第 1–4 条属实，定级下调），排进 PR-A 和 M3d。<br>**下一步**：音标 PR → 原型 → PR-A |
