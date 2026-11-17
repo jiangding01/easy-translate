@@ -2,6 +2,7 @@ import { type AppError, isAppError } from '@/lib/errors';
 import { isEchoedTranslation } from '../echo';
 import type { ProviderAdapter, ProviderContext, ProviderEvent } from '../types';
 import { badResponseError, errorFromResponse, safeFetch } from './errors';
+import { fromHtml, hasTags, tagsIntact, toHtml } from './google-html';
 
 const BASE = 'https://translate.googleapis.com/translate_a';
 const LIMITS = { maxItems: 50, maxChars: 5000 };
@@ -31,12 +32,12 @@ function readRows(json: unknown, count: number): string[] | undefined {
   return rows;
 }
 
-async function primary(batch: string[], ctx: ProviderContext): Promise<Attempt> {
+async function primary(batch: string[], ctx: ProviderContext, html = false): Promise<Attempt> {
   const body = new URLSearchParams();
   for (const text of batch) body.append('q', text);
   let response: Response;
   try {
-    response = await safeFetch(ctx, `${BASE}/t?${query(ctx)}`, {
+    response = await safeFetch(ctx, `${BASE}/t?${query(ctx)}${html ? '&format=html' : ''}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
       body,
@@ -114,10 +115,53 @@ async function retryEchoed(batch: string[], texts: string[], ctx: ProviderContex
   return result;
 }
 
+/**
+ * translate_a/t in plain mode sometimes drops a segment's inline tags when the
+ * sentence is reordered, and the page then loses the links. Items whose tags did
+ * not come back intact are sent once more, together, in HTML mode (see google-html).
+ * A restored answer replaces the first one; a failed retry keeps the first answers;
+ * only an abort fails the request.
+ */
+async function repairTags(batch: string[], texts: string[], ctx: ProviderContext) {
+  const result = [...texts];
+  const picks: { index: number; html: string }[] = [];
+  let chars = 0;
+  for (const [index, source] of batch.entries()) {
+    const text = result[index];
+    if (text === undefined || !hasTags(source) || tagsIntact(source, text)) continue;
+    const html = toHtml(source);
+    // One request only: items beyond the size limit keep their first answer.
+    if (!html || chars + html.length > LIMITS.maxChars) continue;
+    chars += html.length;
+    picks.push({ index, html });
+  }
+  if (picks.length === 0) return result;
+  const attempt = await primary(
+    picks.map((pick) => pick.html),
+    ctx,
+    true,
+  );
+  if (!attempt.ok) {
+    if (ctx.signal.aborted) throw attempt.error;
+    return result;
+  }
+  for (const [position, { index }] of picks.entries()) {
+    const source = batch[index];
+    const reply = attempt.texts[position];
+    if (source === undefined || reply === undefined) continue;
+    const restored = fromHtml(reply, source);
+    // An echo of the source would replace a translation that only lost its links.
+    if (restored !== undefined && !isEchoedTranslation(source, restored, ctx)) {
+      result[index] = restored;
+    }
+  }
+  return result;
+}
+
 async function* translate(batch: string[], ctx: ProviderContext): AsyncGenerator<ProviderEvent> {
   const attempt = await primary(batch, ctx);
   if (attempt.ok) {
-    const texts = await retryEchoed(batch, attempt.texts, ctx);
+    const texts = await repairTags(batch, await retryEchoed(batch, attempt.texts, ctx), ctx);
     for (const [index, text] of texts.entries()) yield { type: 'item', index, text };
     return;
   }
