@@ -129,14 +129,14 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
       - **引擎供应商图标**（2026-11-17 用户确认效果图和方案）：已实现，见 `docs/plans/provider-icons.md`。设置页「添加服务」对话框里的预设单选项还没有图标，需要时再补。
       - **路线图与发版（2026-11-17 用户确认）**：
         1. 更新高保真原型：**已完成**（原型第 36 版，补了供应商图标、UK/US 音标、齿轮设置入口、卡片优先向右展开等）。
-        2. **PR-A** `fix/session-retry-and-start-race`：修复 Codex 清单第 1、2、4 条（见下）。
+        2. **PR-A** `fix/session-retry-and-start-race`：修复 Codex 清单第 1、2、4 条（见下）。**已实现**：先红后绿，新增 11 个回归用例，69 个测试文件 / 1361 个用例全部通过；content 只增加 1 B。
         3. **CI 增强小 PR**：PR 的构建产物（zip）作为 artifact 上传，方便用户直接下载验收，避免本地 `.output` 被改写；`actions/dependency-review-action`；CodeQL（JS/TS）。
         4. **i18n 基础设施**：用 `@wxt-dev/i18n` / `chrome.i18n`，文案放到 `_locales`（zh-CN、en）；读屏的 aria-label 也一起改。开工前请用户拍板：界面语言跟随浏览器，还是在扩展内单独切换。**同批完成中英双语 README**：`README.md` 改成英文（默认显示），新增 `README.zh-CN.md`，两份文件顶部互加 `English | 简体中文` 链接；术语和 i18n 的英文文案统一。
         5. **改名**（用户已定）：中文名 **译屿**，英文名 **Islet Translate**，`short_name` 用「Islet」/「译屿」。查重记录：「译屿」没有发现重名；「Islet Translate」也没有，但 Chrome 商店里有两个只叫「Islet」的扩展（一个日记、一个下载提示），都不是翻译类；Isleglow 已被 Cay Skin 的 Isle Glow 等占用，放弃。需要改的地方：manifest 的 `name`/`short_name`、面板和设置页标题、README、包名（另议）。图标沿用「暗岛微光」，微调成小岛的意象，**先在原型里新建画板出 2–3 个方案给用户挑**。放在发 v0.2.0 之前，和双语 README 一起做。
         6. **冒烟 e2e**（i18n 之后）：用 Playwright 加载构建产物，在本地测试页上验证三条主流程：整页翻译出译文、划词出现小点和卡片、面板能打开。翻译请求用 mock。
         7. 稳定性检查之后**发 v0.2.0**：**先不上架应用商店**，只发 GitHub Release。同时加发版工作流：推送 `v*` 标签时，校验标签与 `package.json`、CHANGELOG 的版本一致，跑完整检查后执行 `npm run zip`，创建 Release 并附上 zip，说明取自 CHANGELOG 中对应的一段。`package.json` 版本号和 CHANGELOG 的「未发布」同步改成 0.2.0。上架商店需要的材料（128px 图标、隐私政策、商店介绍和截图）等用户决定上架时再准备。
         8. 然后做 M3d（含 PR-B）。版本号保持 0.x，功能和接口稳定后再出 1.0。每完成一批，Agent 要主动评估离发版还差什么，接近时提醒用户。
-      - **Codex 复核清单（已核实，待修）**：用户请 Codex 审查核心实现，清单见 [`docs/reviews/2026-11-17-core-implementation-findings.md`](docs/reviews/2026-11-17-core-implementation-findings.md)。Opus 子代理在 `dd5d58b` 的隔离副本里逐条写了先红的复现测试，核实结论见 [`docs/reviews/2026-11-17-core-findings-verification.md`](docs/reviews/2026-11-17-core-findings-verification.md)：
+      - **Codex 复核清单（已核实；第 1、2、4 条已由 PR-A 修复，第 3 条和第 6 条随 M3d 处理）**：用户请 Codex 审查核心实现，清单见 [`docs/reviews/2026-11-17-core-implementation-findings.md`](docs/reviews/2026-11-17-core-implementation-findings.md)。Opus 子代理在 `dd5d58b` 的隔离副本里逐条写了先红的复现测试，核实结论见 [`docs/reviews/2026-11-17-core-findings-verification.md`](docs/reviews/2026-11-17-core-findings-verification.md)：
         1. 延时重试期间会话暂停，那批段落永久漏译：属实，**P2**（Codex 定 P1）。只有 Service Worker 重启等基础设施错误才会进入请求级重试，并且要和引擎错误先后撞上才会触发；一旦触发，会悄无声息地丢掉视口内的译文。同源的两个疑点：已 `forget` 的段落被复活、同一批被重复请求。
         2. 旧启动流程失败会停掉新会话：逻辑属实，**P3**，几乎无法触发。
         3. 初次扫描期间新增的动态内容漏译：属实，**P2**。另外发现：新内容追加到还没扫描完的容器里时，会和容器的文字合并成一个行内 run，导致排版错乱。
