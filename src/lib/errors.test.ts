@@ -41,3 +41,22 @@ describe('toAppError', () => {
     expect(appError('internal', 'internal/x', 'x')).not.toHaveProperty('retryAfterMs');
   });
 });
+
+describe('userMessage', () => {
+  const base = { kind: 'provider', code: 'provider/unauthorized', message: 'x', retryable: false };
+
+  it('accepts an AppError with a string userMessage', () => {
+    expect(isAppError({ ...base, userMessage: '密钥无效。' })).toBe(true);
+  });
+
+  it('rejects a non-string userMessage', () => {
+    expect(isAppError({ ...base, userMessage: 42 })).toBe(false);
+    expect(isAppError({ ...base, userMessage: null })).toBe(false);
+    expect(isAppError({ ...base, userMessage: { text: 'x' } })).toBe(false);
+  });
+
+  it('keeps userMessage when normalizing an AppError', () => {
+    const error = { ...base, userMessage: '密钥无效。' };
+    expect(toAppError(error)).toBe(error);
+  });
+});

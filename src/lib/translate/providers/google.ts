@@ -1,4 +1,5 @@
 import { type AppError, isAppError } from '@/lib/errors';
+import { isEchoedTranslation } from '../echo';
 import type { ProviderAdapter, ProviderContext, ProviderEvent } from '../types';
 import { badResponseError, errorFromResponse, safeFetch } from './errors';
 
@@ -83,17 +84,46 @@ async function single(text: string, ctx: ProviderContext): Promise<string> {
   return result;
 }
 
+function fitsSingle(text: string): boolean {
+  return encodeURIComponent(text).length <= SINGLE_MAX_ENCODED_BYTES;
+}
+
+/**
+ * translate_a/t sometimes answers 200 with sentences left in the source language.
+ * Each such item gets one more try on translate_a/single: its answer replaces the
+ * first one only when it no longer echoes. A failed retry (429, block page…) keeps
+ * the first answers and stops further retries; only an abort fails the request.
+ */
+async function retryEchoed(batch: string[], texts: string[], ctx: ProviderContext) {
+  const result = [...texts];
+  for (const [index, source] of batch.entries()) {
+    const text = result[index];
+    if (text === undefined || !fitsSingle(source)) continue;
+    if (!isEchoedTranslation(source, text, ctx)) continue;
+    let retried: string;
+    try {
+      retried = await single(source, ctx);
+    } catch (error) {
+      if (ctx.signal.aborted) throw error;
+      break;
+    }
+    if (retried.trim() !== '' && !isEchoedTranslation(source, retried, ctx)) {
+      result[index] = retried;
+    }
+  }
+  return result;
+}
+
 async function* translate(batch: string[], ctx: ProviderContext): AsyncGenerator<ProviderEvent> {
   const attempt = await primary(batch, ctx);
   if (attempt.ok) {
-    for (const [index, text] of attempt.texts.entries()) yield { type: 'item', index, text };
+    const texts = await retryEchoed(batch, attempt.texts, ctx);
+    for (const [index, text] of texts.entries()) yield { type: 'item', index, text };
     return;
   }
   if (!attempt.fallback) throw attempt.error;
   // An oversized GET would be answered with 429, so those items fail as-is.
-  if (batch.some((text) => encodeURIComponent(text).length > SINGLE_MAX_ENCODED_BYTES)) {
-    throw attempt.error;
-  }
+  if (!batch.every(fitsSingle)) throw attempt.error;
   const texts: string[] = [];
   for (const text of batch) texts.push(await single(text, ctx));
   for (const [index, text] of texts.entries()) yield { type: 'item', index, text };

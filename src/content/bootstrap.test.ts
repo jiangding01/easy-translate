@@ -2,7 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Result } from '@/lib/errors';
 import type { onMessage, PageState } from '@/lib/messaging/protocol';
 import { createBootstrap } from './bootstrap';
-import { IDLE_PAGE_STATE, type PageRuntimeDeps, type PageRuntimeFactory } from './runtime-contract';
+import {
+  IDLE_PAGE_STATE,
+  type PageRuntimeDeps,
+  type PageRuntimeFactory,
+  type SelectionRuntime,
+  type SelectionRuntimeDeps,
+  type SelectionRuntimeFactory,
+  type SelectionSnapshot,
+} from './runtime-contract';
 import type { PageSession } from './session';
 
 type Handler = (message: { data?: unknown }) => Promise<Result<unknown>>;
@@ -42,11 +50,39 @@ const runtime: PageRuntimeDeps = {
   listEngines: vi.fn(),
 };
 
-function setup(loadFactory?: () => Promise<PageRuntimeFactory>) {
+const selectionDeps: SelectionRuntimeDeps = {
+  getConfig: vi.fn(),
+  watchConfig: vi.fn(),
+  listEngines: vi.fn(),
+  detectLanguage: vi.fn(),
+};
+
+const snapshot: SelectionSnapshot = {
+  source: 'Hello world',
+  rect: { left: 0, top: 0, right: 10, bottom: 10 },
+  anchor: { x: 10, y: 0 },
+};
+
+function fakeSelectionRuntime(): SelectionRuntime {
+  return { showDot: vi.fn(), hideDot: vi.fn(), open: vi.fn(), close: vi.fn(), dispose: vi.fn() };
+}
+
+interface SetupOptions {
+  top?: SelectionSnapshot;
+  hasFocus?: boolean;
+  loadSelection?: () => Promise<SelectionRuntimeFactory>;
+  alive?: () => boolean;
+  onContextLost?: () => void;
+}
+
+function setup(loadFactory?: () => Promise<PageRuntimeFactory>, options: SetupOptions = {}) {
   const handlers = new Map<string, Handler>();
   const fake = fakeSession();
   const create = vi.fn<PageRuntimeFactory>(() => fake.session);
   const load = vi.fn(loadFactory ?? (async () => create));
+  const selectionRuntime = fakeSelectionRuntime();
+  const createSelection = vi.fn<SelectionRuntimeFactory>(() => selectionRuntime);
+  const loadSelection = vi.fn(options.loadSelection ?? (async () => createSelection));
   const bootstrap = createBootstrap({
     onMessage: ((type: string, handler: Handler) => {
       handlers.set(type, handler);
@@ -54,13 +90,30 @@ function setup(loadFactory?: () => Promise<PageRuntimeFactory>) {
     pageInfo: () => ({ title: 'T', language: 'en' }),
     loadFactory: load,
     runtime,
+    selection: {
+      loadFactory: loadSelection,
+      runtime: selectionDeps,
+      read: () => options.top,
+      hasFocus: () => options.hasFocus ?? true,
+      alive: options.alive,
+      onContextLost: options.onContextLost,
+    },
   });
   const send = (type: string, data?: unknown) => {
     const handler = handlers.get(type);
     if (!handler) throw new Error(`no handler for ${type}`);
     return handler({ data });
   };
-  return { ...fake, bootstrap, create, load, send };
+  return {
+    ...fake,
+    bootstrap,
+    create,
+    load,
+    send,
+    selectionRuntime,
+    createSelection,
+    loadSelection,
+  };
 }
 
 beforeEach(() => {
@@ -267,6 +320,160 @@ describe('bootstrap when loading fails', () => {
     });
     await expect(t.bootstrap.startIfIdle()).rejects.toMatchObject({
       code: 'network/page-unreachable',
+    });
+  });
+});
+
+describe('selection runtime', () => {
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('is not loaded by the page messages or at creation', async () => {
+    const t = setup();
+    await t.send('page.getInfo');
+    await t.send('page.start');
+    expect(t.loadSelection).not.toHaveBeenCalled();
+  });
+
+  it('showDot loads it once, hands over the deps and the snapshot', async () => {
+    const t = setup();
+    t.bootstrap.showDot(snapshot);
+    t.bootstrap.showDot(snapshot);
+    await flush();
+    expect(t.loadSelection).toHaveBeenCalledOnce();
+    expect(t.createSelection).toHaveBeenCalledWith(selectionDeps);
+    expect(t.selectionRuntime.showDot).toHaveBeenCalledTimes(2);
+    expect(t.selectionRuntime.showDot).toHaveBeenCalledWith(snapshot);
+  });
+
+  it('showDot never throws when the load fails, and the next call tries again', async () => {
+    let attempt = 0;
+    const t = setup(undefined, {
+      loadSelection: async () => {
+        attempt += 1;
+        if (attempt === 1) throw new Error('Failed to fetch');
+        return () => fakeSelectionRuntime();
+      },
+    });
+    t.bootstrap.showDot(snapshot);
+    await flush();
+    t.bootstrap.showDot(snapshot);
+    await flush();
+    expect(t.loadSelection).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops the watch once the extension context is gone, without loading or warning', async () => {
+    vi.mocked(console.warn).mockClear();
+    const onContextLost = vi.fn();
+    const t = setup(undefined, { alive: () => false, onContextLost });
+    t.bootstrap.showDot(snapshot);
+    t.bootstrap.showDot(snapshot);
+    await flush();
+    expect(t.loadSelection).not.toHaveBeenCalled();
+    expect(onContextLost).toHaveBeenCalledOnce();
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it('a load failing on an invalidated context stops the watch and is never retried', async () => {
+    vi.mocked(console.warn).mockClear();
+    let alive = true;
+    const onContextLost = vi.fn();
+    const t = setup(undefined, {
+      alive: () => alive,
+      onContextLost,
+      loadSelection: async () => {
+        alive = false;
+        throw new Error('Extension context invalidated.');
+      },
+    });
+    t.bootstrap.showDot(snapshot);
+    await flush();
+    t.bootstrap.showDot(snapshot);
+    await flush();
+    expect(t.loadSelection).toHaveBeenCalledOnce();
+    expect(onContextLost).toHaveBeenCalledOnce();
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it('context lost after the runtime loaded: the runtime hides its dot and ends parking', async () => {
+    let alive = true;
+    const onContextLost = vi.fn();
+    const t = setup(undefined, { alive: () => alive, onContextLost });
+    t.bootstrap.showDot(snapshot);
+    await flush();
+    expect(t.selectionRuntime.showDot).toHaveBeenCalledOnce();
+    alive = false;
+    t.bootstrap.showDot(snapshot);
+    await flush();
+    expect(onContextLost).toHaveBeenCalledOnce();
+    expect(t.selectionRuntime.showDot).toHaveBeenCalledOnce();
+    // The watch is stopped, so no later hideDot would ever reach a parked dot.
+    expect(t.selectionRuntime.hideDot).toHaveBeenCalledOnce();
+  });
+
+  it('hideDot does nothing until the runtime was loaded, then forwards', async () => {
+    const t = setup();
+    t.bootstrap.hideDot();
+    await flush();
+    expect(t.loadSelection).not.toHaveBeenCalled();
+    t.bootstrap.showDot(snapshot);
+    await flush();
+    t.bootstrap.hideDot();
+    await flush();
+    expect(t.selectionRuntime.hideDot).toHaveBeenCalledOnce();
+  });
+
+  it('selection.open with the top selection opens the card on it', async () => {
+    const t = setup(undefined, { top: snapshot });
+    expect(await t.send('selection.open', { selectionText: 'Hello world', frameId: 0 })).toEqual({
+      ok: true,
+      data: null,
+    });
+    expect(t.selectionRuntime.open).toHaveBeenCalledWith({
+      source: 'Hello world',
+      selection: snapshot,
+    });
+  });
+
+  it('selection.open from an iframe passes only the text', async () => {
+    const t = setup(undefined, { top: snapshot });
+    await t.send('selection.open', { selectionText: ' Other  text ', frameId: 3 });
+    expect(t.selectionRuntime.open).toHaveBeenCalledWith({ source: 'Other text' });
+  });
+
+  it('the shortcut without focus does nothing and does not load', async () => {
+    const t = setup(undefined, { top: snapshot, hasFocus: false });
+    expect(await t.send('selection.open', {})).toEqual({ ok: true, data: null });
+    expect(t.loadSelection).not.toHaveBeenCalled();
+  });
+
+  it('the shortcut with a selection opens it; with none it closes only a loaded runtime', async () => {
+    const withSelection = setup(undefined, { top: snapshot });
+    await withSelection.send('selection.open', {});
+    expect(withSelection.selectionRuntime.open).toHaveBeenCalledWith({
+      source: 'Hello world',
+      selection: snapshot,
+    });
+
+    const none = setup();
+    await none.send('selection.open', {});
+    expect(none.loadSelection).not.toHaveBeenCalled();
+    none.bootstrap.showDot(snapshot);
+    await flush();
+    await none.send('selection.open', {});
+    expect(none.selectionRuntime.close).toHaveBeenCalledOnce();
+    expect(none.selectionRuntime.open).not.toHaveBeenCalled();
+  });
+
+  it('selection.open reports page-unreachable when the runtime cannot load', async () => {
+    const t = setup(undefined, {
+      top: snapshot,
+      loadSelection: async () => {
+        throw new Error('Failed to fetch');
+      },
+    });
+    expect(await t.send('selection.open', { selectionText: 'Hello world' })).toMatchObject({
+      ok: false,
+      error: { code: 'network/page-unreachable' },
     });
   });
 });

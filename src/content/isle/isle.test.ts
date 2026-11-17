@@ -483,6 +483,23 @@ describe('dot and toolbar state', () => {
     expect(t.root().hasAttribute('data-fail')).toBe(false);
   });
 
+  it("names the engine error with the background's userMessage, else the generic text", async () => {
+    const t = await setup();
+    await t.start();
+    const error = {
+      kind: 'provider',
+      code: 'provider/unauthorized',
+      message: '',
+      retryable: false,
+    } as const;
+    t.emit({ engineError: { ...error, userMessage: '密钥无效（后台）' } });
+    expect(t.$('.eg').getAttribute('aria-label')).toBe('本页引擎：Google 翻译（密钥无效（后台））');
+    t.emit({ engineError: { ...error } });
+    expect(t.$('.eg').getAttribute('aria-label')).toBe(
+      '本页引擎：Google 翻译（操作失败，请重试。）',
+    );
+  });
+
   it('marks translating with the spinning arc and shows the current engine', async () => {
     const t = await setup();
     await t.start();
@@ -587,6 +604,46 @@ describe('hover intent', () => {
     await t.hoverDot();
     t.pointer('pointerdown', 10, 10, 1, document.body);
     expect(t.root().getAttribute('data-view')).toBe('dot');
+  });
+});
+
+describe('selection card layering', () => {
+  it('leaves Escape to an open selection card and closes once the card is gone', async () => {
+    const t = await setup();
+    await t.start();
+    await t.hoverDot();
+    const card = document.createElement('et-selection');
+    card.setAttribute('data-open', '');
+    document.documentElement.append(card);
+    try {
+      window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(t.root().getAttribute('data-view')).toBe('isle');
+      // A host that is not open (no data-open) does not hold Escape back.
+      card.removeAttribute('data-open');
+      window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(t.root().getAttribute('data-view')).toBe('dot');
+    } finally {
+      card.remove();
+    }
+  });
+  it('publishes the toolbar’s rectangle on the host once still, for the card to keep clear of', async () => {
+    const rectAttr = (t: Awaited<ReturnType<typeof setup>>) =>
+      t.host()?.getAttribute('data-et-rect')?.split(',').map(Number);
+    for (const dock of ['right', 'left', 'bottom'] as const) {
+      const t = await setup({ dock });
+      t.emit({ phase: 'running' });
+      t.frame();
+      // Mid-animation: nothing written yet.
+      expect(t.host()?.hasAttribute('data-et-rect')).toBe(false);
+      await t.settle();
+      // At rest as a dot it already reserves the toolbar it grows into.
+      const atRest = rectAttr(t);
+      await t.hoverDot();
+      const { x, y, w, h } = t.clipRect();
+      expect(atRest).toEqual([x, y, w, h].map(Math.round));
+      expect(rectAttr(t)).toEqual(atRest);
+      t.isle.destroy();
+    }
   });
 });
 

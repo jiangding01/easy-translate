@@ -1,6 +1,9 @@
 import type { AppError } from '@/lib/errors';
 
 // Stable error codes → user-facing copy. The future i18n layer replaces this table.
+// Extension pages (settings, popup) and the background import it; content scripts must
+// not (scripts/check-build.mjs): they show the `userMessage` the background attaches
+// (src/content/error-text.ts).
 const MESSAGES: Record<string, string> = {
   'config/newer-version': '设置由更新版本的扩展写入，当前版本无法修改。请更新扩展。',
   'config/write-failed': '保存失败，请重试。',
@@ -40,4 +43,13 @@ const MESSAGES: Record<string, string> = {
 
 export function describeError(error: AppError, fallback = '操作失败，请重试。'): string {
   return MESSAGES[error.code] ?? fallback;
+}
+
+/**
+ * Attaches this table's copy as `userMessage` when the code is in it; unknown codes are
+ * returned untouched (the content side picks its own fallback). Background only.
+ */
+export function withUserMessage(error: AppError): AppError {
+  const userMessage = MESSAGES[error.code];
+  return userMessage === undefined ? error : { ...error, userMessage };
 }

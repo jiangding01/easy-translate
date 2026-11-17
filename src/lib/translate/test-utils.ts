@@ -1,7 +1,20 @@
 import { vi } from 'vitest';
-import type { ProviderContext, ProviderEvent } from './types';
+import type { BuiltPrompt, ProviderContext, ProviderEvent } from './types';
 
-export const PROMPT = { system: 'SYS', user: 'USER <<INPUT>>', version: 1 };
+export const PROMPT: BuiltPrompt = {
+  format: 'batch',
+  system: 'SYS',
+  user: 'USER <<INPUT>>',
+  version: 1,
+};
+
+/** A `text` prompt with visible nonce markers: `[nonce]` … `[/nonce]`. */
+export const TEXT_PROMPT: BuiltPrompt = {
+  format: 'text',
+  system: 'SYS <<NONCE>>',
+  user: '[<<NONCE>>]\n<<INPUT>>\n[/<<NONCE>>]',
+  version: 1,
+};
 
 export function makeCtx(overrides: Partial<ProviderContext> = {}): ProviderContext {
   return {

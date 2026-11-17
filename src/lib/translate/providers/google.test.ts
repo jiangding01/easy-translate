@@ -121,4 +121,76 @@ describe('google adapter', () => {
     expect(events).toEqual([{ type: 'item', index: 0, text: 'ok' }]);
     expect(fn).toHaveBeenCalledTimes(2);
   });
+
+  describe('items that echo source sentences', () => {
+    const SOURCE =
+      'How is this different from Dify, n8n or Flowise? Those are general-purpose AI and automation workflow builders.';
+    const ECHOED =
+      'How is this different from Dify, n8n or Flowise? 这些是通用的 AI 和自动化工作流构建器。';
+    const GOOD = ['这与 Dify、n8n 或 Flowise 有何不同？', '这些是通用的 AI 和自动化工作流构建器。'];
+    const runZh = (batch: string[], fetchImpl: ReturnType<typeof mockFetch>) =>
+      collect(
+        adapter.translate(batch, makeCtx({ fetch: fetchImpl, source: 'auto', target: 'zh-CN' })),
+      );
+    const texts = (events: Awaited<ReturnType<typeof runZh>>) =>
+      events.map((e) => (e.type === 'item' ? e.text : ''));
+
+    it('retries only the echoed item on the single endpoint and takes the better answer', async () => {
+      const fn = mockFetch(
+        jsonResponse([
+          [ECHOED, 'en'],
+          ['你好', 'en'],
+        ]),
+        jsonResponse([GOOD.map((text) => [text, 'x']), null, 'en']),
+      );
+      const events = await runZh([SOURCE, 'Hello'], fn);
+      expect(texts(events)).toEqual([GOOD.join(''), '你好']);
+      expect(fn).toHaveBeenCalledTimes(2);
+      const second = call(fn, 1);
+      expect(second.init.method).toBe('GET');
+      expect(second.url).toContain(
+        `/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${encodeURIComponent(SOURCE)}`,
+      );
+    });
+
+    it('keeps the first answer when the retry fails or still echoes', async () => {
+      const failed = mockFetch(
+        jsonResponse([[ECHOED, 'en']]),
+        new Response('', { status: 429, headers: { 'retry-after': '3' } }),
+      );
+      expect(texts(await runZh([SOURCE], failed))).toEqual([ECHOED]);
+      expect(failed).toHaveBeenCalledTimes(2);
+
+      const blocked = mockFetch(
+        jsonResponse([[ECHOED, 'en']]),
+        new Response('<html>', { status: 200 }),
+      );
+      expect(texts(await runZh([SOURCE], blocked))).toEqual([ECHOED]);
+
+      const still = mockFetch(jsonResponse([[ECHOED, 'en']]), jsonResponse([[[ECHOED, 'x']]]));
+      expect(texts(await runZh([SOURCE], still))).toEqual([ECHOED]);
+    });
+
+    it('stops retrying after a failed retry', async () => {
+      const fn = mockFetch(
+        jsonResponse([
+          [ECHOED, 'en'],
+          [ECHOED, 'en'],
+        ]),
+        new Response('', { status: 429 }),
+      );
+      const events = await runZh([SOURCE, `${SOURCE} `], fn);
+      expect(texts(events)).toEqual([ECHOED, ECHOED]);
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
+
+    it('sends no retry for complete translations or an English target', async () => {
+      const fn = mockFetch(jsonResponse([[GOOD.join(''), 'en']]));
+      expect(texts(await runZh([SOURCE], fn))).toEqual([GOOD.join('')]);
+      expect(fn).toHaveBeenCalledTimes(1);
+      const en = mockFetch(jsonResponse([[SOURCE, 'en']]));
+      expect(texts(await run([SOURCE], en))).toEqual([SOURCE]);
+      expect(en).toHaveBeenCalledTimes(1);
+    });
+  });
 });

@@ -5,10 +5,10 @@ import {
   type IsleDock,
   type PageMode,
 } from '@/lib/config/types';
-import { describeError } from '@/lib/error-messages';
 import type { EngineOptions, PageState } from '@/lib/messaging/protocol';
 import isleTokens from '@/styles/tokens-isle.css?inline';
-import { ISLE_TAG } from '../dom-rules';
+import { ISLE_TAG, SELECTION_TAG } from '../dom-rules';
+import { errorText } from '../error-text';
 import type { PageRuntimeDeps } from '../runtime-contract';
 import type { PageSession } from '../session';
 import {
@@ -739,6 +739,7 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
       }
       return;
     }
+    publishRect();
     if (view === 'isle' || view === 'list') {
       const target = shapes[view];
       const base = liftOf(springs.B.t, springs.C.t, target.D / 2);
@@ -757,6 +758,19 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
       if (tipSpots?.key !== spotsKey()) measureSpots();
       if (tipButton) placeTip();
     }
+  }
+
+  /**
+   * `data-et-rect="x,y,w,h"` on the host: what the selection card keeps clear of (it
+   * cannot see inside the closed shadow). The toolbar even while a dot, since that is
+   * what the dot grows into; the list while open. Written only at rest.
+   */
+  function publishRect() {
+    if (!host) return;
+    const target = shapes[view === 'list' ? 'list' : 'isle'];
+    const base = isVertical(dock) ? MARGIN : liftOf(springs.B.t, springs.C.t, target.D / 2);
+    const rect = rectOf(dock, viewport, target.L, target.D, springs.O.t, base);
+    setAttr(host, 'data-et-rect', [rect.x, rect.y, rect.w, rect.h].map(Math.round).join(','));
   }
 
   // ---- Mount state machine -------------------------------------------------------
@@ -905,7 +919,7 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
     setText(engine, option?.short ?? '…');
     const name = option?.name ?? '';
     const engineLabel = last.engineError
-      ? `本页引擎：${name}（${describeError(last.engineError)}）`
+      ? `本页引擎：${name}（${errorText(last.engineError)}）`
       : `本页引擎：${name}（点击切换）`;
     setAttr(engine, 'aria-label', engineLabel);
     engine.toggleAttribute('data-err', !!last.engineError);
@@ -1225,6 +1239,10 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
   const onKeyDown = (event: KeyboardEvent) => {
     // Only closes; the page still sees the key (no preventDefault).
     if (event.key !== 'Escape' || !isOpen() || !trusted(event)) return;
+    // The selection card above closes first: one Escape closes only the top layer.
+    for (const child of doc.documentElement.children) {
+      if (child.nodeName === SELECTION_TAG && child.hasAttribute('data-open')) return;
+    }
     if (view === 'list') setView('isle');
     else close();
   };

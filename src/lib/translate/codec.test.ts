@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { appError } from '@/lib/errors';
 import {
   chunkByLimits,
+  cleanTextOutput,
+  createThinkFilter,
   decodeLlmOutput,
   encodeBatch,
   renderUserMessage,
@@ -148,4 +150,67 @@ describe('settleWithSplit: truncated and blocked batches', () => {
       expect(calls).toEqual([[1, 2, 3, 4], [1, 2], [3, 4], [3], [4]]);
     },
   );
+});
+
+describe('createThinkFilter', () => {
+  const run = (chunks: string[]) => {
+    const filter = createThinkFilter();
+    return chunks.map(filter);
+  };
+
+  it('passes plain text through, including a leading "<" that is not a think tag', () => {
+    expect(run(['你', '好'])).toEqual(['你', '好']);
+    expect(run(['<', 'b>粗体'])).toEqual(['', '<b>粗体']);
+  });
+
+  it('holds back a leading think block split across chunks', () => {
+    expect(run(['  <thi', 'nk>let me', ' think</th', 'ink>\n\n', '你好', '，世界'])).toEqual([
+      '',
+      '',
+      '',
+      '',
+      '你好',
+      '，世界',
+    ]);
+  });
+
+  it('keeps a think tag that appears after the translation started', () => {
+    expect(run(['A ', '<think>x</think>'])).toEqual(['A ', '<think>x</think>']);
+  });
+});
+
+describe('cleanTextOutput: labels and quotes the source already has', () => {
+  it('strips a stray label or quotes the model added', () => {
+    expect(cleanTextOutput('Translation: Hallo', 'Hello')).toBe('Hallo');
+    expect(cleanTextOutput('"Hallo"', 'Hello')).toBe('Hallo');
+  });
+
+  it.each([
+    ['Translation: Haus', 'Übersetzung: House', 'Translation: Haus'],
+    ['译文：房子', 'Traduction : maison', '译文：房子'],
+    ['Translation: 房子', 'Название: дом', 'Translation: 房子'],
+    ['翻译：你好', 'Translation: hello', '翻译：你好'],
+    ['Translation: 你好', 'Translation: hello', 'Translation: 你好'],
+  ])('keeps the label when the source starts with one (%s)', (output, source, expected) => {
+    expect(cleanTextOutput(output, source)).toBe(expected);
+  });
+
+  it.each([
+    ['《你好》', '《Hello》'],
+    ['「你好」', '「Hello」'],
+    ['『你好』', '『Hello』'],
+    ['“你好”', '“Hello”'],
+    ['‘你好’', '‘Hello’'],
+    ['"你好"', '"Hello"'],
+    ["'你好'", "'Hello'"],
+    ['(你好)', '(Hello)'],
+    ['"你好"', '《Hello》'],
+    ['“你好”', '（Hello）'],
+    ['「你好」', '【Hello】'],
+    ['"你好"', '(Hello)'],
+    ['（你好）', '（Hello）'],
+    ['【你好】', '【Hello】'],
+  ])('keeps the quotes when the source is wrapped too (%s)', (output, source) => {
+    expect(cleanTextOutput(output, source)).toBe(output);
+  });
 });

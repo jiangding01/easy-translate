@@ -1,9 +1,12 @@
-import { type AppError, appError, type Result, toAppError } from '@/lib/errors';
+import { type AppError, type Result, toAppError } from '@/lib/errors';
 import { chunkByLimits, type ItemOutcome, isSplittableError, splitInHalf } from './codec';
+import { isEchoedTranslation } from './echo';
 import {
   abortedError,
   badResponseError,
+  emptyTranslationError,
   MAX_RETRY_AFTER_MS,
+  outputTruncatedError,
   timeoutError,
 } from './providers/errors';
 import type { ProviderAdapter, ProviderContext, ProviderEvent } from './types';
@@ -43,6 +46,21 @@ export const SCHEDULER_LIMITS: Readonly<Record<Kind, KindLimits>> = {
   },
 };
 
+/**
+ * Stream (interactive) submissions:
+ * - `flushMs`: increments are forwarded at most this often;
+ * - output beyond max(`minOutput`, source length × `outputFactor`) ends the
+ *   attempt with `provider/output-truncated`;
+ * - `reserve`: LLM slots on top of the shared limit that only streams may take,
+ *   so a running page translation never delays a selection card.
+ */
+export const SCHEDULER_STREAM = {
+  flushMs: 50,
+  minOutput: 2000,
+  outputFactor: 8,
+  reserve: { mt: 0, llm: 1 },
+} as const;
+
 export const MAX_RETRIES = 1;
 export const RETRY_BASE_MS = 1000;
 export const RETRY_JITTER = 0.1;
@@ -76,11 +94,21 @@ export interface ScheduleRequest {
   segments: readonly { key: string; text: string }[];
   /**
    * Called with every non-empty translation of a finished batch, including
-   * segments nobody waits for anymore. Omit to skip caching.
+   * segments nobody waits for anymore, except those that echo source sentences
+   * (see isEchoedTranslation). Omit to skip caching.
    */
   persist?: (entries: CacheEntry[]) => unknown;
   /** Shorter segment deadline than the adapter kind's default (connection tests). */
   deadlineMs?: number;
+  /**
+   * Increments of a segment this submission started, coalesced (SCHEDULER_STREAM).
+   * With `onReset`, makes the submission interactive: every segment runs alone,
+   * jumps the queue and may use the reserved LLM slot. A caller that joins a
+   * segment already in flight gets neither callback, only the outcome.
+   */
+  onDelta?: (key: string, delta: string) => void;
+  /** Called before every attempt (retries included) of a segment this submission started. */
+  onReset?: (key: string) => void;
 }
 
 export interface SchedulerSnapshot {
@@ -128,6 +156,15 @@ interface Task {
   context: TaskContext;
   persist: ScheduleRequest['persist'];
   deadline: number;
+  /** Set for interactive (stream) submissions. */
+  stream: StreamSink | undefined;
+}
+
+interface StreamSink {
+  /** The submitter's signal: once aborted, nothing more is forwarded. */
+  signal: AbortSignal;
+  onDelta: ScheduleRequest['onDelta'];
+  onReset: ScheduleRequest['onReset'];
 }
 
 interface Job {
@@ -151,10 +188,6 @@ interface CooldownState {
   epoch: number;
 }
 
-export function emptyTranslationError(): AppError {
-  return appError('validation', 'validation/empty-translation', 'Translation is empty');
-}
-
 const ZERO_WIDTH = /[​-‍﻿]/g;
 
 function isBlank(text: string): boolean {
@@ -165,10 +198,26 @@ function failure(error: AppError): ItemOutcome {
   return { ok: false, error };
 }
 
-async function collectItems(events: AsyncIterable<ProviderEvent>, count: number) {
+/** Listener errors never reach the attempt. */
+function safely(callback: () => void) {
+  try {
+    callback();
+  } catch {
+    // The caller's problem, not the provider's.
+  }
+}
+
+async function collectItems(
+  events: AsyncIterable<ProviderEvent>,
+  count: number,
+  onDelta?: (delta: string) => void,
+) {
   const texts: (string | undefined)[] = new Array(count).fill(undefined);
   for await (const event of events) {
-    if (event.type !== 'item') continue;
+    if (event.type === 'delta') {
+      onDelta?.(event.delta);
+      continue;
+    }
     if (event.index < 0 || event.index >= count || texts[event.index] !== undefined) {
       throw badResponseError('Unexpected item index');
     }
@@ -229,8 +278,10 @@ function createAttemptFetch(
  * - at most one retry of retryable errors (1s × 2^n + 0–10% jitter, or retryAfterMs);
  * - per-cooldown-key pause after a 429 (at most 60s), then one probe at a time
  *   until a probe succeeds;
- * - round-robin across callers;
- * - segment-level dedupe by cache key, subscriptions counted per segment.
+ * - round-robin across callers; interactive (stream) jobs go first, alone, skip the
+ *   start interval (without moving it for page jobs) and may use the reserved LLM slot;
+ * - segment-level dedupe by cache key, subscriptions counted per segment;
+ * - streams: reset before every attempt, increments coalesced, output capped.
  */
 export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
   const baseFetch: typeof fetch = deps.fetch ?? ((input, init) => globalThis.fetch(input, init));
@@ -296,15 +347,29 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
     const cooldown = cooldownState(job.task.cooldownKey);
     if (cooldown.cooldownUntil > time) return cooldown.cooldownUntil;
     if (cooldown.recovering && cooldown.probeInFlight) return Number.POSITIVE_INFINITY;
-    if (active[kind] >= SCHEDULER_LIMITS[kind].concurrency) return Number.POSITIVE_INFINITY;
-    if (nextStartAt[kind] > time) return nextStartAt[kind];
+    const limit =
+      SCHEDULER_LIMITS[kind].concurrency + (job.task.stream ? SCHEDULER_STREAM.reserve[kind] : 0);
+    if (active[kind] >= limit) return Number.POSITIVE_INFINITY;
+    // Interactive jobs skip the start interval: it paces page work, not a waiting reader.
+    if (!job.task.stream && nextStartAt[kind] > time) return nextStartAt[kind];
     return true;
   }
 
-  /** Next startable job, serving callers in turn starting at `cursor`. */
+  /** Next startable job: interactive ones first, then callers in turn starting at `cursor`. */
   function pick(): { job?: Job; wakeAt: number } {
     const time = now();
     let wakeAt = Number.POSITIVE_INFINITY;
+    for (const caller of order) {
+      for (const job of queues.get(caller) ?? []) {
+        if (!job.task.stream) continue;
+        const result = gate(job, time);
+        if (result === true) {
+          dequeue(job);
+          return { job, wakeAt };
+        }
+        wakeAt = Math.min(wakeAt, result);
+      }
+    }
     const count = order.length;
     for (let step = 0; step < count; step += 1) {
       const position = (cursor + step) % count;
@@ -434,7 +499,8 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
   function start(job: Job) {
     const kind = job.task.adapter.kind;
     active[kind] += 1;
-    nextStartAt[kind] = now() + SCHEDULER_LIMITS[kind].intervalMs;
+    // Only page jobs set the pace, so an interactive start never delays the next page one.
+    if (!job.task.stream) nextStartAt[kind] = now() + SCHEDULER_LIMITS[kind].intervalMs;
     const cooldown = cooldownState(job.task.cooldownKey);
     job.probe = cooldown.recovering;
     if (job.probe) cooldown.probeInFlight = true;
@@ -443,8 +509,59 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
     void execute(job);
   }
 
+  /**
+   * Per-attempt stream state: resets the caller, coalesces increments and caps the
+   * output. Nothing is forwarded once the submitter left or the job is no longer running.
+   */
+  function openStream(job: Job, sink: StreamSink) {
+    const segment = job.segments[0];
+    const live = () => !sink.signal.aborted && job.state === 'running';
+    const key = segment?.key ?? '';
+    const cap = Math.max(
+      SCHEDULER_STREAM.minOutput,
+      (segment?.text.length ?? 0) * SCHEDULER_STREAM.outputFactor,
+    );
+    let total = 0;
+    let pending = '';
+    let lastFlush = Number.NEGATIVE_INFINITY;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const flush = () => {
+      clearTimeout(timer);
+      timer = undefined;
+      if (pending === '') return;
+      const delta = pending;
+      pending = '';
+      lastFlush = now();
+      if (live()) safely(() => sink.onDelta?.(key, delta));
+    };
+
+    if (live()) safely(() => sink.onReset?.(key));
+    return {
+      push(delta: string) {
+        total += delta.length;
+        if (total > cap) throw outputTruncatedError();
+        pending += delta;
+        const wait = lastFlush + SCHEDULER_STREAM.flushMs - now();
+        if (wait <= 0) flush();
+        else if (timer === undefined) timer = setTimeout(flush, wait);
+      },
+      /** Delivers what is pending after a success; drops it otherwise (a reset or an error follows). */
+      close(succeeded: boolean) {
+        if (succeeded) {
+          flush();
+          return;
+        }
+        clearTimeout(timer);
+        timer = undefined;
+        pending = '';
+      },
+    };
+  }
+
   async function execute(job: Job): Promise<void> {
     const { adapter, context } = job.task;
+    const stream = job.task.stream ? openStream(job, job.task.stream) : undefined;
     const limits = SCHEDULER_LIMITS[adapter.kind];
     const controller = new AbortController();
     job.controller = controller;
@@ -462,10 +579,11 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
         fetch: attemptFetch,
         idleTimeoutMs: limits.idleTimeoutMs,
       });
-      result = { ok: true, data: await collectItems(events, texts.length) };
+      result = { ok: true, data: await collectItems(events, texts.length, stream?.push) };
     } catch (error) {
       result = { ok: false, error: toAppError(error) };
     }
+    stream?.close(result.ok);
 
     observeCooldown(job, result);
     if (job.state === 'running') handleResult(job, result);
@@ -529,7 +647,10 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
     const outcomes = texts.map((text, index): ItemOutcome => {
       if (isBlank(text)) return failure(emptyTranslationError());
       const segment = job.segments[index];
-      if (segment) entries.push({ key: segment.key, text });
+      // An echoed source sentence is shown but not cached, so the next request tries again.
+      if (segment && !isEchoedTranslation(segment.text, text, job.task.context)) {
+        entries.push({ key: segment.key, text });
+      }
       return { ok: true, text };
     });
     // Cached even for segments whose subscribers have all left: the cost is already paid.
@@ -555,10 +676,26 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
     }
   }
 
+  /**
+   * A stream joining a page job that is still queued makes it interactive: front of
+   * its queue and eligible for the reserved slot. The joiner gets no increments (the
+   * job's sink has no callbacks). A job that already started is left alone.
+   */
+  function promote(job: Job | undefined, signal: AbortSignal) {
+    if (job?.state !== 'queued' || job.task.stream) return;
+    job.task = {
+      ...job.task,
+      stream: { signal, onDelta: undefined, onReset: undefined },
+    };
+    dequeue(job);
+    enqueue(job, true);
+  }
+
   // ------------------------------------------------------------ public
 
   function submit(request: ScheduleRequest): Promise<ItemOutcome>[] {
     const { signal, adapter } = request;
+    const interactive = request.onDelta !== undefined || request.onReset !== undefined;
     if (signal.aborted) {
       return request.segments.map(() => Promise.resolve(failure(abortedError())));
     }
@@ -574,6 +711,9 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
           request.deadlineMs ?? Number.POSITIVE_INFINITY,
           SCHEDULER_LIMITS[adapter.kind].deadlineMs,
         ),
+      stream: interactive
+        ? { signal, onDelta: request.onDelta, onReset: request.onReset }
+        : undefined,
     };
 
     const fresh: Segment[] = [];
@@ -595,19 +735,23 @@ export function createScheduler(deps: SchedulerDeps = {}): Scheduler {
       });
       const subscriber: Subscriber = { done: false, resolve };
       segment.subscribers.add(subscriber);
+      if (interactive) promote(segment.job, signal);
       subscriptions.push({ segment, subscriber, outcome });
     }
 
-    const groups = chunkByLimits(
-      fresh.map((segment) => segment.text),
-      adapter.limits,
-    );
+    // Interactive segments run alone and go to the front, keeping their order.
+    const groups = interactive
+      ? fresh.map((_, index) => [index]).reverse()
+      : chunkByLimits(
+          fresh.map((segment) => segment.text),
+          adapter.limits,
+        );
     for (const group of groups) {
       const members = group.flatMap((index) => {
         const segment = fresh[index];
         return segment ? [segment] : [];
       });
-      enqueue(createJob(task, members), false);
+      enqueue(createJob(task, members), interactive);
     }
 
     const onAbort = () => {
