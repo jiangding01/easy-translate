@@ -9,6 +9,7 @@ import type {
 } from '@/lib/config/types';
 import type { AppError, Result } from '@/lib/errors';
 import type { LanguageCode } from '@/lib/languages';
+import type { ProviderIcon } from '@/lib/provider-icons';
 import type { SiteMemory } from '@/lib/site-memory';
 
 export interface PageInfo {
@@ -62,8 +63,10 @@ export interface PageState {
 export interface EngineOption {
   id: Engine;
   name: string;
-  /** Short label for the isle's engine button. */
+  /** Short label shown in a small square where the engine has no vendor icon. */
   short: string;
+  /** Vendor icon (path data, never markup); absent for unrecognized custom providers. */
+  icon?: ProviderIcon;
   ready: boolean;
   /** Why the engine is not ready, in the settings page's wording. */
   note?: string;

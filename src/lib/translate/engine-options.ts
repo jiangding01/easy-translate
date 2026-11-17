@@ -2,6 +2,7 @@ import { engineFields, hasEditableBaseURL } from '@/lib/config/engine-fields';
 import type { BuiltinEngine, ConfigV1 } from '@/lib/config/types';
 import {
   BUILTIN_NAMES,
+  customShort,
   engineEntries,
   engineReadiness,
   NOT_READY_TEXT,
@@ -13,13 +14,13 @@ import type {
   SecretProviderId,
   SecretStatusInfo,
 } from '@/lib/messaging/protocol';
+import { providerIconFor } from '@/lib/provider-icons';
 
 // What the page isle may know about engines: a read-only whitelist computed in the
 // background (a content script can neither query host permissions nor read key status).
 
 /** Shown for a custom provider without a name; never falls back to its host. */
 export const UNNAMED_CUSTOM_NAME = '自定义服务';
-const UNNAMED_CUSTOM_SHORT = '自';
 
 const BUILTIN_SHORT: Record<BuiltinEngine, string> = {
   google: 'G',
@@ -33,15 +34,6 @@ export interface EngineOptionsInput {
   secrets: Partial<Record<SecretProviderId, SecretStatusInfo>>;
   /** Whether an optional host permission pattern is granted. */
   hasPermission(pattern: string): Promise<boolean>;
-}
-
-/** First two characters of a name, by grapheme, so an emoji or accent is never cut in half. */
-function shortOf(name: string): string {
-  const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-  return [...segmenter.segment(name)]
-    .slice(0, 2)
-    .map((part) => part.segment)
-    .join('');
 }
 
 export async function buildEngineOptions(input: EngineOptionsInput): Promise<EngineOptions> {
@@ -62,11 +54,8 @@ export async function buildEngineOptions(input: EngineOptionsInput): Promise<Eng
       const name = custom
         ? customName || UNNAMED_CUSTOM_NAME
         : BUILTIN_NAMES[entry.id as BuiltinEngine];
-      const short = custom
-        ? customName
-          ? shortOf(customName)
-          : UNNAMED_CUSTOM_SHORT
-        : BUILTIN_SHORT[entry.id as BuiltinEngine];
+      const short = custom ? customShort(custom.name) : BUILTIN_SHORT[entry.id as BuiltinEngine];
+      const icon = providerIconFor(entry.id, fields.baseURL);
       // A transient (still unknown) grant never reaches here: the query above is a boolean.
       const note = readiness.reason
         ? NOT_READY_TEXT[readiness.reason as keyof typeof NOT_READY_TEXT]
@@ -77,6 +66,7 @@ export async function buildEngineOptions(input: EngineOptionsInput): Promise<Eng
         short,
         ready: readiness.reason === undefined,
         ...(note ? { note } : {}),
+        ...(icon ? { icon } : {}),
       };
     }),
   );

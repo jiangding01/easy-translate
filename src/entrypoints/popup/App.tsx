@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
+import { ProviderIcon } from '@/components/ProviderIcon';
 import { Select, type SelectOption } from '@/components/Select';
 import { engineFields, hasEditableBaseURL } from '@/lib/config/engine-fields';
 import type { ConfigV1, Engine, PageMode } from '@/lib/config/types';
 import { useConfig } from '@/lib/config/use-config';
 import {
+  customShort,
   type EngineReadiness,
   engineEntries,
   engineReadiness,
@@ -21,6 +23,7 @@ import {
   type SecretStatusInfo,
   sendMessage,
 } from '@/lib/messaging/protocol';
+import { providerIconFor } from '@/lib/provider-icons';
 import { useTheme } from '@/styles/theme';
 import { type ActivePage, inspectActivePage } from './inspect-page';
 import { pausedReason, usePageSession, useShortcut, useSiteAlways } from './page-session';
@@ -457,7 +460,18 @@ function EngineSelect({
       secret: entry.id === 'google' ? undefined : statuses?.[entry.id],
       granted: pattern ? grants?.[pattern] : undefined,
     });
-    return { value: entry.id, label: entry.name, sub: state.status, dot: dotFor(state, statuses) };
+    return {
+      value: entry.id,
+      label: entry.name,
+      sub: state.status,
+      dot: dotFor(state, statuses),
+      icon: (
+        <ProviderIcon
+          icon={providerIconFor(entry.id, fields.baseURL)}
+          fallback={customShort(entry.custom?.name ?? '')}
+        />
+      ),
+    };
   });
   const selected = options.find((option) => option.value === current);
   return (

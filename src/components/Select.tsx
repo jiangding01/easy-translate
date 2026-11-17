@@ -9,6 +9,8 @@ export interface SelectOption<T extends string> {
   sub?: string;
   dot?: 'ok' | 'warn' | 'idle';
   lang?: string;
+  /** Decorative mark before the label, in the trigger too (an engine's vendor icon). */
+  icon?: ReactNode;
 }
 
 interface Props<T extends string> {
@@ -201,6 +203,7 @@ export function Select<T extends string>(props: Props<T>) {
             {props.label}
           </span>
         )}
+        {selected?.icon}
         <span
           id={valueId}
           className={styles.value}
@@ -248,6 +251,7 @@ export function Select<T extends string>(props: Props<T>) {
             onPointerMove={() => index !== active && setActive(index)}
             onClick={() => choose(index)}
           >
+            {option.icon}
             {option.dot && (
               <span aria-hidden="true" className={`${styles.dot} ${styles[option.dot]}`} />
             )}
