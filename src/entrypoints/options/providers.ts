@@ -34,12 +34,20 @@ const ID_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 /** `custom-` + 8 random lowercase letters or digits, unique among `existing`. */
 export function newCustomId(
   existing: Iterable<string>,
-  random: (bytes: Uint8Array) => Uint8Array = (bytes) => crypto.getRandomValues(bytes),
+  random: (bytes: Uint8Array<ArrayBuffer>) => Uint8Array<ArrayBuffer> = (bytes) =>
+    crypto.getRandomValues(bytes),
 ): CustomProviderId {
   const taken = new Set(existing);
+  // Bytes from `limit` up would wrap onto the first letters: skip them, so every
+  // character is equally likely.
+  const limit = 256 - (256 % ID_ALPHABET.length);
   for (;;) {
-    const bytes = random(new Uint8Array(8));
-    const suffix = [...bytes].map((byte) => ID_ALPHABET[byte % ID_ALPHABET.length]).join('');
+    let suffix = '';
+    while (suffix.length < 8) {
+      for (const byte of random(new Uint8Array(8))) {
+        if (byte < limit && suffix.length < 8) suffix += ID_ALPHABET[byte % ID_ALPHABET.length];
+      }
+    }
     const id: CustomProviderId = `custom-${suffix}`;
     if (!taken.has(id)) return id;
   }
