@@ -103,6 +103,24 @@ describe('findObstacles', () => {
     expect(found).toEqual([{ lo: 440, hi: 500, center: 50, depth: 60 }]);
   });
 
+  it('looks through the selection card host as it does through its own', () => {
+    const bubble = document.createElement('div');
+    const icon = document.createElement('span');
+    bubble.append(icon);
+    document.body.append(bubble);
+    const card = document.createElement('et-selection');
+    document.documentElement.append(card);
+    try {
+      const { env, fake } = setup((_x, y) => (y >= 440 && y <= 500 ? [card, icon] : [card]));
+      fake(bubble, { position: 'fixed', rect: { top: 440, bottom: 500, left: 920, right: 980 } });
+      expect(
+        findObstacles(env, 'right', VP, { depths: [21, 36], offset: 480, length: 200 }),
+      ).toEqual([{ lo: 440, hi: 500, center: 50, depth: 60 }]);
+    } finally {
+      card.remove();
+    }
+  });
+
   it('samples leftward of the right end for the bottom dock', () => {
     const chat = document.createElement('div');
     document.body.append(chat);

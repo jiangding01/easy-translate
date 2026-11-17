@@ -40,6 +40,9 @@ export const configSchema = z
       mode: z.enum(PAGE_MODES),
       isleDock: z.enum(ISLE_DOCKS),
     }),
+    selection: z.looseObject({
+      showDot: z.boolean(),
+    }),
     providers: z.looseObject({
       openai: z.looseObject({
         baseURL: z.string().max(LIMITS.baseURL),

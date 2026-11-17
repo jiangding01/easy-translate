@@ -27,21 +27,33 @@ async function pageScripts(htmlFile) {
   return [...files];
 }
 
-// Files listed as web accessible resources: the on-demand modules (page runtime).
-const runtimeFiles = (manifest.web_accessible_resources ?? []).flatMap((entry) => entry.resources);
+// The on-demand modules are the manifest's web accessible resources, each with its own budget.
+const resourceFiles = (manifest.web_accessible_resources ?? []).flatMap((entry) => entry.resources);
+const runtimeFiles = (name) => resourceFiles.filter((file) => file === `${name}.js`);
 
 const entries = [
   {
     name: 'content',
-    // First-screen bootstrap only; the session lives in the on-demand module below.
-    budget: 6 * KB,
+    // First-screen bootstrap and selection watcher; the session and the card live in the
+    // on-demand modules below. Raised from 6KB in M3a (selection watch, approved).
+    budget: 7 * KB,
     files: manifest.content_scripts?.flatMap((script) => script.js ?? []) ?? [],
   },
   {
     name: 'page-runtime',
-    // Session, scanner, renderer and the page isle (M2b PR2). Raise explicitly, never quietly.
-    budget: 26 * KB,
-    files: runtimeFiles,
+    // Session, scanner, renderer and the page isle (M2b PR2). Tightened from 26KB in M3a:
+    // the full error copy table left the content bundles (the background now attaches
+    // `userMessage`), so the old headroom would hide it creeping back. Raise explicitly,
+    // never quietly.
+    budget: 24 * KB,
+    files: runtimeFiles('page-runtime'),
+  },
+  {
+    name: 'selection-runtime',
+    // The selection dot and card (M3a). Planned at 16KB; raised to 18KB after the M3a build
+    // measured 16.87KB, with the user's approval. Raise explicitly, never quietly.
+    budget: 18 * KB,
+    files: runtimeFiles('selection-runtime'),
   },
   {
     name: 'background',

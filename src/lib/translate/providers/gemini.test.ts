@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { collect, jsonResponse, makeCtx, mockFetch, sseResponse } from '../test-utils';
+import { collect, jsonResponse, makeCtx, mockFetch, sseResponse, TEXT_PROMPT } from '../test-utils';
 import { createGeminiAdapter } from './gemini';
 
 const adapter = createGeminiAdapter();
 const part = (text: string, extra = {}) =>
   `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text, ...extra }] } }] })}\n\n`;
+const chunk = (body: unknown) => `data: ${JSON.stringify(body)}\n\n`;
 const OUTPUT = '[{"i":0,"t":"你好"}]';
 const run = (fn: ReturnType<typeof mockFetch>, overrides = {}) =>
   collect(adapter.translate(['hello'], makeCtx({ fetch: fn, ...overrides })));
@@ -61,8 +62,6 @@ describe('gemini adapter', () => {
     });
     expect(fn).not.toHaveBeenCalled();
   });
-
-  const chunk = (body: unknown) => `data: ${JSON.stringify(body)}\n\n`;
 
   it('maps promptFeedback.blockReason to content-blocked', async () => {
     const fn = mockFetch(sseResponse([chunk({ promptFeedback: { blockReason: 'SAFETY' } })]));
@@ -123,5 +122,64 @@ describe('gemini adapter', () => {
   it('maps an error object in the stream to server-error', async () => {
     const fn = mockFetch(sseResponse([part('[{"i":0'), chunk({ error: { code: 500 } })]));
     await expect(run(fn)).rejects.toMatchObject({ code: 'provider/server-error' });
+  });
+});
+
+describe('gemini adapter: text format', () => {
+  const runText = (fn: ReturnType<typeof mockFetch>, source = 'Hello') =>
+    collect(adapter.translate([source], makeCtx({ fetch: fn, prompt: TEXT_PROMPT })));
+
+  it('sends the text between nonce markers in systemInstruction and contents', async () => {
+    const fn = mockFetch(sseResponse([part('你好')]), sseResponse([part('你好')]));
+    await runText(fn);
+    await runText(fn);
+    const nonces = fn.mock.calls.map((call) => {
+      const body = JSON.parse((call as unknown as [string, RequestInit])[1].body as string);
+      const nonce = /^SYS ([0-9a-f]{16})$/.exec(body.systemInstruction.parts[0].text)?.[1];
+      expect(body.contents[0].parts[0].text).toBe(`[${nonce}]\nHello\n[/${nonce}]`);
+      return nonce;
+    });
+    expect(nonces[0]).toBeDefined();
+    expect(nonces[0]).not.toBe(nonces[1]);
+  });
+
+  it('yields deltas without thought parts, then the cleaned text', async () => {
+    const fn = mockFetch(
+      sseResponse([
+        part('the user wants…', { thought: true }),
+        part('"你'),
+        chunk({
+          candidates: [
+            { content: { parts: [{ text: 'more thought', thought: true }, { text: '好"' }] } },
+          ],
+        }),
+      ]),
+    );
+    expect(await runText(fn)).toEqual([
+      { type: 'delta', index: 0, delta: '"你' },
+      { type: 'delta', index: 0, delta: '好"' },
+      { type: 'item', index: 0, text: '你好' },
+    ]);
+  });
+
+  it('removes a label prefix', async () => {
+    const events = await runText(mockFetch(sseResponse([part('Translation: '), part('Hallo')])));
+    expect(events.at(-1)).toEqual({ type: 'item', index: 0, text: 'Hallo' });
+  });
+
+  it('fails with empty-translation when only thoughts arrive', async () => {
+    const fn = mockFetch(sseResponse([part('thinking', { thought: true })]));
+    await expect(runText(fn)).rejects.toMatchObject({ code: 'validation/empty-translation' });
+  });
+
+  it('keeps MAX_TOKENS as output-truncated', async () => {
+    const fn = mockFetch(
+      sseResponse([
+        chunk({
+          candidates: [{ content: { parts: [{ text: '你' }] }, finishReason: 'MAX_TOKENS' }],
+        }),
+      ]),
+    );
+    await expect(runText(fn)).rejects.toMatchObject({ code: 'provider/output-truncated' });
   });
 });

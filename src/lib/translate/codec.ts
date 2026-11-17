@@ -1,5 +1,6 @@
-import { type AppError, isAppError } from '@/lib/errors';
-import { badResponseError } from './providers/errors';
+import { type AppError, appError, isAppError } from '@/lib/errors';
+import { badResponseError, emptyTranslationError } from './providers/errors';
+import type { BuiltPrompt } from './types';
 
 // LLM batch protocol: input and output are JSON arrays of { i, t }, matched by `i`.
 
@@ -13,6 +14,173 @@ export function encodeBatch(texts: readonly string[]): string {
 export function renderUserMessage(template: string, texts: readonly string[]): string {
   return template.split(USER_INPUT_TOKEN).join(encodeBatch(texts));
 }
+
+// ------------------------------------------------------------ text format
+
+/** Placeholder in a `text` prompt's system and user templates, replaced by a fresh nonce. */
+export const NONCE_TOKEN = '<<NONCE>>';
+
+/** 16 hex characters from the platform CSPRNG. */
+export function createNonce(): string {
+  return [...crypto.getRandomValues(new Uint8Array(8))]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Renders a `text` prompt for one request. The nonce is drawn per call, so the
+ * source cannot forge the closing marker; it is redrawn in the (astronomically
+ * unlikely) case that the source contains it. The text is inserted last and
+ * never substituted into.
+ */
+export function renderTextPrompt(
+  prompt: BuiltPrompt,
+  text: string,
+  nonce: () => string = createNonce,
+): { system: string; user: string } {
+  let value = nonce();
+  while (text.includes(value)) value = nonce();
+  const fill = (template: string) => template.split(NONCE_TOKEN).join(value);
+  return {
+    system: fill(prompt.system),
+    user: fill(prompt.user).split(USER_INPUT_TOKEN).join(text),
+  };
+}
+
+/**
+ * System and user messages for one provider request. `text` prompts take exactly
+ * one item (`internal/text-batch` otherwise) and get a fresh nonce on every call.
+ */
+export function renderMessages(
+  prompt: BuiltPrompt,
+  texts: readonly string[],
+): { system: string; user: string } {
+  if (prompt.format === 'batch') {
+    return { system: prompt.system, user: renderUserMessage(prompt.user, texts) };
+  }
+  const [text] = texts;
+  if (text === undefined || texts.length !== 1) {
+    throw appError('internal', 'internal/text-batch', 'A text prompt takes exactly one item');
+  }
+  return renderTextPrompt(prompt, text);
+}
+
+const THINK_OPEN = '<think>';
+const THINK_CLOSE = '</think>';
+
+/**
+ * Stream filter that holds back a leading `<think>…</think>` block (reasoning
+ * models served through OpenAI-compatible APIs), so it is neither shown as a
+ * translation increment nor counted against the stream output cap. Text after
+ * the block, or text that does not start with one, passes through unchanged.
+ */
+export function createThinkFilter(): (chunk: string) => string {
+  let state: 'start' | 'thinking' | 'after' | 'text' = 'start';
+  let held = '';
+  return (chunk) => {
+    if (state === 'text') return chunk;
+    held += chunk;
+    if (state === 'start') {
+      const head = held.trimStart().toLowerCase();
+      if (head.length < THINK_OPEN.length && THINK_OPEN.startsWith(head)) return '';
+      if (!head.startsWith(THINK_OPEN)) {
+        state = 'text';
+        const out = held;
+        held = '';
+        return out;
+      }
+      state = 'thinking';
+    }
+    if (state === 'thinking') {
+      const end = held.toLowerCase().indexOf(THINK_CLOSE);
+      if (end === -1) {
+        // Keep just enough to find a closing tag split across chunks.
+        held = held.slice(-(THINK_CLOSE.length - 1));
+        return '';
+      }
+      held = held.slice(end + THINK_CLOSE.length);
+      state = 'after';
+    }
+    // Whitespace between the block and the translation is not part of it.
+    const out = held.trimStart();
+    held = '';
+    if (out !== '') state = 'text';
+    return out;
+  };
+}
+
+/** Wrapping quote pairs a model adds around a whole reply. */
+const QUOTE_PAIRS: readonly (readonly [string, string])[] = [
+  ['"', '"'],
+  ["'", "'"],
+  ['“', '”'],
+  ['‘', '’'],
+  ['「', '」'],
+  ['『', '』'],
+  ['«', '»'],
+  ['„', '“'],
+];
+
+/** The pair wrapping all of `text`, when its inside contains neither quote character. */
+function wrappingPair(text: string): readonly [string, string] | undefined {
+  return QUOTE_PAIRS.find(([open, close]) => {
+    if (text.length < open.length + close.length + 1) return false;
+    if (!text.startsWith(open) || !text.endsWith(close)) return false;
+    const inner = text.slice(open.length, text.length - close.length);
+    return !inner.includes(open) && !inner.includes(close);
+  });
+}
+
+const LABEL = /^(?:译文|譯文|翻译|翻譯|翻訳|訳文|번역|translation|translated text)\s*[:：]\s*/i;
+
+/** A short "word or phrase + colon" lead-in, in any language ("Übersetzung: Haus"). */
+const SOURCE_LABEL = /^[\p{L}\p{N}][^\n:：]{0,39}[:：]/u;
+
+/** Punctuation pairs that may wrap a whole source text, on top of the quote pairs. */
+const BRACKET_PAIRS: readonly (readonly [string, string])[] = [
+  ['《', '》'],
+  ['〈', '〉'],
+  ['(', ')'],
+  ['（', '）'],
+  ['【', '】'],
+  ['[', ']'],
+  ['〔', '〕'],
+  ['｢', '｣'],
+];
+
+/** `true` when `text` starts and ends with the two halves of one pair. */
+function isWrapped(text: string): boolean {
+  return [...QUOTE_PAIRS, ...BRACKET_PAIRS].some(
+    ([open, close]) =>
+      text.length >= open.length + close.length && text.startsWith(open) && text.endsWith(close),
+  );
+}
+
+/**
+ * Cleans a `text` reply before it is used or cached:
+ * - drops `<think>…</think>` blocks (an unclosed one runs to the end);
+ * - drops a leading label such as "译文：" or "Translation:";
+ * - drops one pair of quotes around the whole reply.
+ * Each rule is skipped when the source itself has that feature (it is then part
+ * of the translation). Throws `validation/empty-translation` when nothing is left.
+ */
+export function cleanTextOutput(output: string, source: string): string {
+  const original = source.trim();
+  let text = output;
+  if (!original.toLowerCase().includes(THINK_OPEN)) {
+    text = text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '');
+  }
+  text = text.trim();
+  if (!SOURCE_LABEL.test(original)) text = text.replace(LABEL, '').trim();
+  const pair = wrappingPair(text);
+  if (pair && !isWrapped(original)) {
+    text = text.slice(pair[0].length, text.length - pair[1].length).trim();
+  }
+  if (text === '') throw emptyTranslationError();
+  return text;
+}
+
+// ------------------------------------------------------------ batch format
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

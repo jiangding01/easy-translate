@@ -1,17 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appError } from '@/lib/errors';
 import type { ItemOutcome } from './codec';
-import { badResponseError, safeFetch } from './providers/errors';
+import { abortedError, badResponseError, safeFetch } from './providers/errors';
 import { createOpenAICompatAdapter } from './providers/openai-compat';
 import {
   type CacheEntry,
   createScheduler,
   SCHEDULER_LIMITS,
+  SCHEDULER_STREAM,
   type Scheduler,
   type TaskContext,
 } from './scheduler';
 import { PROMPT } from './test-utils';
-import type { ProviderAdapter } from './types';
+import type { ProviderAdapter, ProviderEvent } from './types';
 
 // ------------------------------------------------------------ fake network
 
@@ -781,6 +782,20 @@ describe('scheduler: dedupe and subscriptions', () => {
     expect(results).toEqual([ok('T:a'), err('validation/empty-translation')]);
     expect(persisted).toEqual([{ key: 'k:a', text: 'T:a' }]);
   });
+
+  it('returns a translation that echoes source sentences but does not cache it', async () => {
+    const { net, persisted, submit } = setup();
+    const source =
+      'Use chat to explore and iterate. Once you find a way of working you want, put it in an SOP.';
+    const echoed =
+      '使用聊天来探索和迭代。 Once you find a way of working you want, put it in an SOP.';
+    const { results } = submit([source, 'b'], { adapter: MT4 });
+    await at(0);
+    net.calls[0]?.reply({ status: 200, texts: [echoed, 'T:b'] });
+    await at(1);
+    expect(results).toEqual([ok(echoed), ok('T:b')]);
+    expect(persisted).toEqual([{ key: 'k:b', text: 'T:b' }]);
+  });
 });
 
 describe('scheduler: lifecycle', () => {
@@ -821,5 +836,379 @@ describe('scheduler: lifecycle', () => {
       idleTimeoutMs: 60_000,
       deadlineMs: 180_000,
     });
+  });
+});
+
+// ------------------------------------------------------------ streaming
+
+interface StreamCall {
+  texts: string[];
+  signal: AbortSignal;
+  push(delta: string): void;
+  end(text?: string): void;
+  fail(error: ReturnType<typeof appError>): void;
+}
+
+/** LLM adapter whose increments the test pushes by hand; it never fetches. */
+function streamingAdapter(kind: 'mt' | 'llm' = 'llm') {
+  const streams: StreamCall[] = [];
+  const adapter: ProviderAdapter = {
+    kind,
+    limits: { maxItems: 20, maxChars: 100_000 },
+    async *translate(batch, ctx) {
+      const queue: (ProviderEvent | ReturnType<typeof appError>)[] = [];
+      let wake: () => void = () => undefined;
+      const notify = () => wake();
+      ctx.signal.addEventListener('abort', notify, { once: true });
+      streams.push({
+        texts: batch,
+        signal: ctx.signal,
+        push: (delta) => {
+          queue.push({ type: 'delta', index: 0, delta });
+          notify();
+        },
+        end: (text = `T:${batch[0]}`) => {
+          batch.forEach((_, index) => {
+            queue.push({ type: 'item', index, text: index === 0 ? text : `T:${batch[index]}` });
+          });
+          notify();
+        },
+        fail: (error) => {
+          queue.push(error);
+          notify();
+        },
+      });
+      let items = 0;
+      while (items < batch.length) {
+        if (ctx.signal.aborted) throw abortedError();
+        const next = queue.shift();
+        if (next === undefined) {
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+          });
+          continue;
+        }
+        if (!('type' in next)) throw next;
+        if (next.type === 'item') items += 1;
+        yield next;
+      }
+    },
+  };
+  return { adapter, streams };
+}
+
+const serverError = () =>
+  appError('provider', 'provider/server-error', 'HTTP 500', { retryable: true });
+
+function submitStream(
+  scheduler: Scheduler,
+  texts: string[],
+  options: { caller?: string; adapter: ProviderAdapter; listen?: boolean },
+) {
+  const controller = new AbortController();
+  const events: string[] = [];
+  const results: (ItemOutcome | undefined)[] = texts.map(() => undefined);
+  const listen = options.listen ?? true;
+  const outcomes = scheduler.submit({
+    caller: options.caller ?? 'S',
+    signal: controller.signal,
+    engine: 'openai',
+    adapter: options.adapter,
+    context: CONTEXT,
+    segments: texts.map((text) => ({ key: `k:${text}`, text })),
+    onDelta: listen ? (key, delta) => events.push(`${key} +${delta}`) : undefined,
+    onReset: listen ? (key) => events.push(`${key} reset`) : undefined,
+  });
+  outcomes.forEach((outcome, index) => {
+    void outcome.then((result) => {
+      results[index] = result;
+      events.push(`${texts[index]} final`);
+    });
+  });
+  return { events, results, cancel: () => controller.abort() };
+}
+
+describe('scheduler: streaming', () => {
+  it('resets, then forwards increments at most every 50ms, flushing before the result', async () => {
+    const { scheduler } = setup();
+    const { adapter, streams } = streamingAdapter();
+    const s = submitStream(scheduler, ['x'], { adapter });
+    await at(0);
+    const stream = streams[0] as StreamCall;
+    stream.push('a');
+    await at(0);
+    expect(s.events).toEqual(['k:x reset', 'k:x +a']);
+    await at(10);
+    stream.push('b');
+    await at(20);
+    stream.push('c');
+    await at(49);
+    expect(s.events).toEqual(['k:x reset', 'k:x +a']);
+    await at(50);
+    expect(s.events).toEqual(['k:x reset', 'k:x +a', 'k:x +bc']);
+    await at(120);
+    stream.push('d');
+    await at(120);
+    expect(s.events.at(-1)).toBe('k:x +d');
+    stream.push('e');
+    stream.end('abcde');
+    await at(130);
+    expect(s.events.slice(-2)).toEqual(['k:x +e', 'x final']);
+    expect(s.results).toEqual([ok('abcde')]);
+    expect(SCHEDULER_STREAM.flushMs).toBe(50);
+  });
+
+  it('resets before every attempt and never replays the failed attempt', async () => {
+    const { scheduler } = setup();
+    const { adapter, streams } = streamingAdapter();
+    const s = submitStream(scheduler, ['x'], { adapter });
+    await at(0);
+    streams[0]?.push('半');
+    await at(10);
+    streams[0]?.push('截');
+    streams[0]?.fail(serverError());
+    await at(100);
+    expect(s.events).toEqual(['k:x reset', 'k:x +半']);
+    // Failed at 10ms; the retry waits 1s (no jitter in these tests).
+    await at(1009);
+    expect(streams).toHaveLength(1);
+    await at(1010);
+    expect(streams).toHaveLength(2);
+    expect(s.events).toEqual(['k:x reset', 'k:x +半', 'k:x reset']);
+    streams[1]?.push('全文');
+    streams[1]?.end('全文');
+    await at(1100);
+    expect(s.events).toEqual(['k:x reset', 'k:x +半', 'k:x reset', 'k:x +全文', 'x final']);
+    expect(s.results).toEqual([ok('全文')]);
+  });
+
+  it('ends a runaway stream with output-truncated past max(2000, 8 x source)', async () => {
+    const { scheduler } = setup();
+    const { adapter, streams } = streamingAdapter();
+    const s = submitStream(scheduler, ['hi'], { adapter });
+    await at(0);
+    streams[0]?.push('x'.repeat(1500));
+    streams[0]?.push('x'.repeat(501));
+    await at(10);
+    expect(s.results).toEqual([err('provider/output-truncated')]);
+    await at(5000);
+    expect(streams).toHaveLength(1);
+
+    // Exactly at the cap passes: 2000 chars for a short source.
+    const exact = submitStream(scheduler, ['hi2'], { adapter });
+    await at(5000);
+    streams[1]?.push('x'.repeat(2000));
+    streams[1]?.end('done');
+    await at(5100);
+    expect(exact.results).toEqual([ok('done')]);
+
+    const long = 'y'.repeat(500);
+    const t = submitStream(scheduler, [long], { adapter });
+    await at(5300);
+    streams[2]?.push('z'.repeat(4000));
+    streams[2]?.end('done');
+    await at(5400);
+    expect(t.results).toEqual([ok('done')]);
+  });
+
+  it('an interactive job waits out a cooldown too (it skips only the start interval)', async () => {
+    const { scheduler } = setup();
+    const { adapter, streams } = streamingAdapter();
+    submitStream(scheduler, ['x'], { adapter });
+    await at(0);
+    streams[0]?.fail(
+      appError('rate-limit', 'rate-limit/too-many-requests', 'HTTP 429', {
+        retryable: true,
+        retryAfterMs: 3000,
+      }),
+    );
+    await at(100);
+    // A new card's request on the same engine, mid-cooldown.
+    const late = submitStream(scheduler, ['y'], { caller: 'T', adapter });
+    await at(2999);
+    expect(streams).toHaveLength(1);
+    expect(late.events).toEqual([]);
+    await at(3001);
+    // Cooldown over: one probe at a time.
+    expect(streams).toHaveLength(2);
+  });
+
+  it('runs every stream segment as a batch of its own', async () => {
+    const { scheduler } = setup();
+    const { adapter, streams } = streamingAdapter();
+    submitStream(scheduler, ['a', 'b'], { adapter, caller: 'P', listen: false });
+    submitStream(scheduler, ['c', 'd'], { adapter });
+    await at(1000);
+    expect(streams.map((stream) => stream.texts)).toEqual([['a', 'b'], ['c'], ['d']]);
+  });
+
+  it('starts a stream before queued jobs of every caller', async () => {
+    const { net, scheduler, submit } = setup();
+    submit(Array.from({ length: 8 }, (_, i) => `a${i}`));
+    await at(1000);
+    expect(net.calls).toHaveLength(6);
+    // B is next in the round-robin turn when the slot frees up.
+    submit(['b0'], { caller: 'B' });
+    const { adapter, streams } = streamingAdapter('mt');
+    submitStream(scheduler, ['s'], { adapter });
+    await at(1100);
+    expect(streams).toHaveLength(0);
+    net.calls[0]?.echo();
+    await at(1200);
+    expect(streams.map((stream) => stream.texts)).toEqual([['s']]);
+    expect(net.calls).toHaveLength(6);
+  });
+
+  it('starts a stream right after a page request starts, without the LLM start interval', async () => {
+    const { net, scheduler, submit } = setup();
+    submit(['a', 'b', 'c'], { adapter: LLM, engine: 'openai' });
+    await at(10);
+    expect(net.calls.map((call) => call.at)).toEqual([0]);
+    const { adapter, streams } = streamingAdapter();
+    submitStream(scheduler, ['s'], { adapter });
+    await at(10);
+    // Not held until 200ms: the card's first token does not wait for the page's pacing.
+    expect(streams).toHaveLength(1);
+    streams[0]?.end();
+    // The page requests keep their own pace, untouched by the stream's start.
+    await at(1000);
+    expect(net.calls.map((call) => call.at)).toEqual([0, 200, 400]);
+  });
+
+  it('starts a stream at once on the reserved LLM slot while 3 page requests run', async () => {
+    const { net, scheduler, submit } = setup();
+    submit(['a', 'b', 'c', 'd'], { adapter: LLM, engine: 'openai' });
+    await at(1000);
+    expect(net.calls).toHaveLength(3);
+    const { adapter, streams } = streamingAdapter();
+    const first = submitStream(scheduler, ['s1'], { adapter });
+    await at(1000);
+    expect(streams).toHaveLength(1);
+    expect(scheduler.inspect().active.llm).toBe(4);
+    // Only one reserved slot, and page requests never take it.
+    submitStream(scheduler, ['s2'], { adapter, caller: 'S2' });
+    await at(2000);
+    expect(streams).toHaveLength(1);
+    streams[0]?.end();
+    await at(2100);
+    expect(first.results).toEqual([ok('T:s1')]);
+    expect(streams).toHaveLength(2);
+    streams[1]?.end();
+    await at(2200);
+    expect(net.calls).toHaveLength(3);
+    expect(scheduler.inspect()).toMatchObject({ queued: 1, active: { llm: 3 } });
+  });
+
+  it('gives a caller that joins an in-flight segment only the final result', async () => {
+    const { scheduler } = setup();
+    const { adapter, streams } = streamingAdapter();
+    const first = submitStream(scheduler, ['x'], { adapter });
+    await at(0);
+    streams[0]?.push('a');
+    await at(10);
+    const joined = submitStream(scheduler, ['x'], { adapter, caller: 'S2' });
+    streams[0]?.push('b');
+    streams[0]?.end('ab');
+    await at(100);
+    expect(streams).toHaveLength(1);
+    expect(first.events).toEqual(['k:x reset', 'k:x +a', 'k:x +b', 'x final']);
+    expect(joined.events).toEqual(['x final']);
+    expect(joined.results).toEqual([ok('ab')]);
+  });
+
+  it('promotes a queued page job to the front and the reserved slot when a stream joins it', async () => {
+    const { scheduler } = setup();
+    const { adapter, streams } = streamingAdapter();
+    for (const text of ['a', 'b', 'c', 'e', 'd']) {
+      submitStream(scheduler, [text], { adapter, caller: 'P', listen: false });
+    }
+    await at(1000);
+    expect(streams.map((stream) => stream.texts)).toEqual([['a'], ['b'], ['c']]);
+    expect(scheduler.inspect()).toMatchObject({ queued: 2, active: { llm: 3 } });
+
+    const joined = submitStream(scheduler, ['d'], { adapter, caller: 'S' });
+    await at(1100);
+    // d starts at once on the reserved slot, ahead of e; it is not stuck behind the page queue.
+    expect(streams.map((stream) => stream.texts)).toEqual([['a'], ['b'], ['c'], ['d']]);
+    expect(scheduler.inspect()).toMatchObject({ queued: 1, active: { llm: 4 } });
+    streams[3]?.end('D');
+    await at(1200);
+    expect(joined.results).toEqual([ok('D')]);
+    // The joiner never started the segment, so it gets only the final result.
+    expect(joined.events).toEqual(['d final']);
+  });
+
+  it('keeps waiting when a stream joins a page job that already started', async () => {
+    const { scheduler } = setup();
+    const { adapter, streams } = streamingAdapter();
+    for (const text of ['a', 'b', 'c', 'd']) {
+      submitStream(scheduler, [text], { adapter, caller: 'P', listen: false });
+    }
+    await at(1000);
+    const joined = submitStream(scheduler, ['a'], { adapter, caller: 'S' });
+    await at(1100);
+    expect(streams).toHaveLength(3);
+    streams[0]?.end('A');
+    await at(1200);
+    expect(joined.results).toEqual([ok('A')]);
+  });
+
+  it('cleans up a retry wait cancelled mid-stream: no timer, no reset, no delta', async () => {
+    const { scheduler } = setup();
+    const { adapter, streams } = streamingAdapter();
+    const s = submitStream(scheduler, ['x'], { adapter });
+    await at(0);
+    streams[0]?.push('半');
+    await at(10);
+    streams[0]?.fail(serverError());
+    await at(100);
+    expect(scheduler.inspect()).toMatchObject({ waiting: 1 });
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    s.cancel();
+    await at(200);
+    expect(s.results).toEqual([err('network/aborted')]);
+    expect(scheduler.inspect()).toMatchObject({ waiting: 0, queued: 0, segments: 0 });
+    expect(vi.getTimerCount()).toBe(0);
+    await at(5000);
+    expect(streams).toHaveLength(1);
+    expect(s.events).toEqual(['k:x reset', 'k:x +半', 'x final']);
+  });
+
+  it('sends a reset but no delta for an adapter that does not stream (Google)', async () => {
+    const { net, scheduler } = setup();
+    const events: string[] = [];
+    const controller = new AbortController();
+    const [outcome] = scheduler.submit({
+      caller: 'S',
+      signal: controller.signal,
+      engine: 'google',
+      adapter: MT,
+      context: CONTEXT,
+      segments: [{ key: 'k:x', text: 'x' }],
+      onDelta: (key, delta) => events.push(`${key} +${delta}`),
+      onReset: (key) => events.push(`${key} reset`),
+    });
+    await at(0);
+    expect(events).toEqual(['k:x reset']);
+    net.calls[0]?.echo();
+    await at(100);
+    expect(await outcome).toEqual(ok('T:x'));
+    expect(events).toEqual(['k:x reset']);
+  });
+
+  it('stops forwarding and aborts the provider on cancel', async () => {
+    const { scheduler } = setup();
+    const { adapter, streams } = streamingAdapter();
+    const s = submitStream(scheduler, ['x'], { adapter });
+    await at(0);
+    streams[0]?.push('a');
+    await at(10);
+    streams[0]?.push('b');
+    s.cancel();
+    await at(200);
+    expect(streams[0]?.signal.aborted).toBe(true);
+    expect(s.results).toEqual([err('network/aborted')]);
+    expect(s.events).toEqual(['k:x reset', 'k:x +a', 'x final']);
+    expect(scheduler.inspect()).toMatchObject({ active: { llm: 0 }, segments: 0 });
   });
 });

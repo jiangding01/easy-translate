@@ -142,7 +142,18 @@ export function parseTranslateRequest(payload: unknown): TranslateRequest {
   if (target !== undefined && !isLanguageCode(target)) throw invalidPayloadError();
   const { engine } = payload;
   if (engine !== undefined && !isEngineId(engine)) throw invalidPayloadError();
-  return { items, source, target, engine };
+  const request: TranslateRequest = { items, source, target, engine };
+  const { stream, force } = payload;
+  if (stream !== undefined) {
+    // Stream chunks carry no batch semantics: one item per request.
+    if (stream !== true || items.length !== 1) throw invalidPayloadError();
+    request.stream = true;
+  }
+  if (force !== undefined) {
+    if (force !== true) throw invalidPayloadError();
+    request.force = true;
+  }
+  return request;
 }
 
 function throwIfAborted(signal: AbortSignal) {
@@ -156,9 +167,10 @@ interface Pending {
 }
 
 /**
- * Port `et-translate` handler logic: preprocess, same-language skip, cache
- * lookup, then one scheduler submission; emits one chunk per item and resolves
- * with `{ total, failed }`. Results reach the cache through the scheduler, so
+ * Port `et-translate` handler logic: preprocess, same-language skip (unless
+ * `force`), cache lookup, then one scheduler submission; emits one final chunk
+ * per item (preceded by reset / delta chunks for a `stream` request that reaches
+ * the provider) and resolves with `{ total, failed }`. Results reach the cache through the scheduler, so
  * they are stored even when this caller has gone away.
  */
 export function createTranslateService(deps: TranslateServiceDeps): TranslateService {
@@ -222,9 +234,9 @@ export function createTranslateService(deps: TranslateServiceDeps): TranslateSer
     const adapter = getAdapter(engine);
     const settings = resolveProviderSettings(engine, config);
 
-    // 2. Same-language skip (only when the source is detected).
+    // 2. Same-language skip (only when the source is detected, and not when forced).
     let candidates = pending;
-    if (source === 'auto') {
+    if (source === 'auto' && !request.force) {
       const same = await Promise.all(pending.map((item) => isSameLanguage(item.text, target)));
       throwIfAborted(signal);
       candidates = [];
@@ -239,7 +251,11 @@ export function createTranslateService(deps: TranslateServiceDeps): TranslateSer
     }
 
     // 3. Cache lookup.
-    const prompt = adapter.kind === 'llm' ? buildPrompt({ source, target }) : undefined;
+    // Stream requests use the plain-text prompt; its digest keeps their cache apart.
+    const prompt =
+      adapter.kind === 'llm'
+        ? buildPrompt({ source, target, format: request.stream ? 'text' : 'batch' })
+        : undefined;
     const digest = prompt ? await promptDigest(prompt) : '';
     const keyed = await Promise.all(
       candidates.map(async (item) => ({
@@ -286,7 +302,21 @@ export function createTranslateService(deps: TranslateServiceDeps): TranslateSer
       const apiKey = engine === 'google' ? undefined : await deps.secrets.get(engine);
       throwIfAborted(signal);
 
-      // 5. Schedule; chunks are emitted as segments finish.
+      // 5. Schedule; chunks are emitted as segments finish. Stream requests also get
+      // reset / delta chunks (Google never produces deltas).
+      const idOf = new Map(misses.map((item) => [item.key, item.id]));
+      const streamCallbacks = request.stream
+        ? {
+            onReset: (key: string) => {
+              const id = idOf.get(key);
+              if (id !== undefined) emit({ id, reset: true });
+            },
+            onDelta: (key: string, delta: string) => {
+              const id = idOf.get(key);
+              if (id !== undefined) emit({ id, delta });
+            },
+          }
+        : {};
       const outcomes = scheduler.submit({
         caller,
         signal,
@@ -296,6 +326,7 @@ export function createTranslateService(deps: TranslateServiceDeps): TranslateSer
         context: { source, target, settings, apiKey, prompt },
         segments: misses.map((item) => ({ key: item.key, text: item.text })),
         persist: (entries) => cache.put(entries),
+        ...streamCallbacks,
       });
       await Promise.all(
         outcomes.map(async (pendingOutcome, index) => {

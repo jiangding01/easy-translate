@@ -27,6 +27,7 @@ describe('parseStoredConfig', () => {
       language: { target: 'ko', source: 'ja' },
       translation: { engine: 'openai' },
       page: { style: 'highlight', mode: 'translation', isleDock: 'left' },
+      selection: { showDot: false },
       providers: { ...EXTRA_DEFAULTS.providers, gemini: { model: 'm' } },
       customProviders: {},
     };
@@ -106,6 +107,15 @@ describe('parseStoredConfig', () => {
     const { isleDock: _omitted, ...rest } = defaults.page;
     const missing = parse(stored({ ...defaults, page: rest }));
     expect(missing.snapshot.data.page.isleDock).toBe('right');
+  });
+
+  it('repairs a non-boolean selection dot flag and fills it when missing', () => {
+    const broken = parse(stored({ ...defaults, selection: { showDot: 'yes' } }));
+    expect(broken.resetPaths).toContain('selection.showDot');
+    expect(broken.snapshot.data.selection.showDot).toBe(true);
+    const { selection: _omitted, ...rest } = defaults;
+    const missing = parse(stored(rest));
+    expect(missing.snapshot.data.selection.showDot).toBe(true);
   });
 
   it('resets a default engine that points at a missing custom provider to Google', () => {

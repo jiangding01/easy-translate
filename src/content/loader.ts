@@ -1,21 +1,30 @@
 import { appError } from '@/lib/errors';
-import { PAGE_RUNTIME_KEY, type PageRuntimeFactory } from './runtime-contract';
 
-export interface LoaderDeps {
+export interface LoadRuntimeOptions {
+  /** Path of the on-demand module in the extension root, e.g. `/page-runtime.js`. */
+  path: string;
+  /** The module registers its factory under `Symbol.for(key)`. */
+  key: string;
   /** `browser.runtime.getURL`; throws once the extension context is invalidated. */
   getURL(path: string): string;
   importModule(url: string): Promise<unknown>;
 }
 
 /**
- * Imports the on-demand page runtime and returns its factory. The address is
+ * Imports an on-demand module and returns the factory it registered. The address is
  * resolved on every call: it is never cached, and the module must not know it.
  */
-export async function loadPageRuntime(deps: LoaderDeps): Promise<PageRuntimeFactory> {
-  await deps.importModule(deps.getURL('/page-runtime.js'));
-  const factory = (globalThis as Record<symbol, unknown>)[Symbol.for(PAGE_RUNTIME_KEY)];
+export async function loadRuntime<T extends (...args: never[]) => unknown>(
+  options: LoadRuntimeOptions,
+): Promise<T> {
+  await options.importModule(options.getURL(options.path));
+  const factory = (globalThis as Record<symbol, unknown>)[Symbol.for(options.key)];
   if (typeof factory !== 'function') {
-    throw appError('internal', 'internal/runtime-missing', 'Page runtime did not register');
+    throw appError(
+      'internal',
+      'internal/runtime-missing',
+      `Runtime ${options.path} did not register`,
+    );
   }
-  return factory as PageRuntimeFactory;
+  return factory as T;
 }

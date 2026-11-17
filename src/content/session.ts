@@ -1,5 +1,4 @@
 import type { ConfigV1, Engine, PageMode } from '@/lib/config/types';
-import { describeError } from '@/lib/error-messages';
 import type { AppError } from '@/lib/errors';
 import type { PortClient, PortRequest } from '@/lib/messaging/port';
 import type {
@@ -10,7 +9,8 @@ import type {
   TranslateRequest,
 } from '@/lib/messaging/protocol';
 import { createPacer, discoverUnits, type Unit } from './discover';
-import { ISLE_TAG, isInlineElement, OWN_TAG, type StyleReader } from './dom-rules';
+import { ISLE_TAG, isInlineElement, OWN_TAG, SELECTION_TAG, type StyleReader } from './dom-rules';
+import { errorText } from './error-text';
 import { watchMutations } from './mutations';
 import { createRenderer, type Renderer } from './render';
 import { injectStyles, removeStyles } from './styles';
@@ -369,6 +369,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
       },
       (chunk) => {
         if (current !== epoch) return;
+        // Stream increments belong to selection cards; page requests never ask for them.
+        if ('delta' in chunk || 'reset' in chunk) return;
         const unit = byId.get(chunk.id);
         if (!unit) return;
         sent.delete(unit);
@@ -437,7 +439,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
 
   function markFailed(unit: Unit, error: AppError) {
     failed.add(unit);
-    void renderer?.fail(unit, () => retry([unit]), describeError(error));
+    void renderer?.fail(unit, () => retry([unit]), errorText(error));
     report();
   }
 
@@ -553,7 +555,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
   const isOwn = (node: Node): boolean => {
     let current: Node | null = node;
     while (current) {
-      if (current.nodeName === OWN_TAG || current.nodeName === ISLE_TAG) return true;
+      const name = current.nodeName;
+      if (name === OWN_TAG || name === ISLE_TAG || name === SELECTION_TAG) return true;
       if (current === sheet) return true;
       current = current.parentNode;
     }

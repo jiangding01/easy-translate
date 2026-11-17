@@ -6,12 +6,18 @@ import type { LanguageCode } from '@/lib/languages';
 export type ProviderEvent =
   /** Complete translation of one item. */
   | { type: 'item'; index: number; text: string }
-  /** Streaming increment of one item: not produced in M1 (used by M3 selection cards). */
+  /** Streaming increment of one item: only `text` prompts produce it (selection cards). */
   | { type: 'delta'; index: number; delta: string };
 
 export interface BuiltPrompt {
+  /**
+   * - `batch`: JSON array of `{ i, t }` in and out (page translation).
+   * - `text`: one item as plain text between per-request nonce markers; the reply is
+   *   the translation itself (stream requests). `system` and `user` contain NONCE_TOKEN.
+   */
+  format: 'batch' | 'text';
   system: string;
-  /** User message template; contains USER_INPUT_TOKEN, replaced by the encoded batch. */
+  /** User message template; contains USER_INPUT_TOKEN, replaced by the encoded batch or the text. */
   user: string;
   version: number;
 }
