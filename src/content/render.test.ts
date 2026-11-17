@@ -111,6 +111,54 @@ describe('renderer: translation only', () => {
     expect(document.body.innerHTML).toBe(before);
   });
 
+  it('pins font-relative sizes so a ch/em measure survives font-size:0', async () => {
+    // claude.com: `.text-rich-text p { max-width: 80ch }` collapsed to 0 and the
+    // translation stacked one character per line.
+    const { units, renderer } = await setup('<p>Always-on agents run indefinitely.</p>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    const root = unit.root as HTMLElement;
+    await renderer.insert([{ unit, translation: '永远在线的代理无限期地运行。' }]);
+    // happy-dom resolves neither ch/em nor the Typed OM: give the root a browser's answers.
+    const computed: Record<string, string> = {
+      'max-width': '1095px',
+      'min-height': '60px',
+      'text-indent': '40px',
+      'flex-basis': 'auto',
+      'min-width': 'auto',
+      'max-height': 'none',
+    };
+    const real = window.getComputedStyle.bind(window);
+    const spy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) =>
+      el === root
+        ? ({
+            fontSize: '22px',
+            lineHeight: '33px',
+            getPropertyValue: (name: string) => computed[name] ?? '0px',
+          } as unknown as CSSStyleDeclaration)
+        : real(el, pseudo),
+    );
+    Object.defineProperty(root, 'computedStyleMap', {
+      configurable: true,
+      value: () => ({ get: (name: string) => (name === 'width' ? '400px' : 'auto') }),
+    });
+    try {
+      await renderer.setMode('translation');
+      expect(root.style.getPropertyValue('max-width')).toBe('1095px');
+      expect(root.style.getPropertyValue('min-height')).toBe('60px');
+      expect(root.style.getPropertyValue('text-indent')).toBe('40px');
+      expect(root.style.getPropertyValue('width')).toBe('400px');
+      // Keywords stay with the host; `height: auto` must not freeze to used pixels.
+      for (const name of ['height', 'flex-basis', 'min-width', 'max-height']) {
+        expect(root.style.getPropertyValue(name)).toBe('');
+      }
+      await renderer.setMode('bilingual');
+      expect(root.hasAttribute('style')).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('keeps the original for runs and for link paragraphs that fell back to plain text', async () => {
     const { units, renderer } = await setup(
       '<p>See <a href="/x">this</a> now.</p><div>Run text here<p>Block text here.</p></div>',
