@@ -159,20 +159,28 @@ describe('renderer: translation only', () => {
     }
   });
 
-  it('keeps the original for runs and for link paragraphs that fell back to plain text', async () => {
-    const { units, renderer } = await setup(
-      '<p>See <a href="/x">this</a> now.</p><div>Run text here<p>Block text here.</p></div>',
+  it('hides the original of a link paragraph whose tags were dropped, but keeps runs bilingual', async () => {
+    // claude.dev: Google returned the sentence with `<t0>…</t0>` gone, the paragraph
+    // fell back to plain text and its English stayed visible in translation-only.
+    const { units, renderer, before } = await setup(
+      '<p>Written and <a href="/x">reviewed by Claude</a>.</p><div>Run text here<p>Block text here.</p></div>',
     );
-    const link = units.find((unit) => unit.seg.hasLink);
+    const link = units.find((unit) => unit.seg.marks.length > 0);
     const run = units.find((unit) => unit.kind === 'run');
     if (!link || !run) throw new Error('missing units');
     await renderer.insert([
-      { unit: link, translation: '现在看这个。' },
+      { unit: link, translation: '由 Claude 编写和审查。' },
       { unit: run, translation: '运行' },
     ]);
+    expect(link.root.querySelector('et-tr a')).toBeNull();
     await renderer.setMode('translation');
-    expect(link.root.hasAttribute('data-et-only')).toBe(false);
+    expect(link.root.hasAttribute('data-et-only')).toBe(true);
     expect(run.root.hasAttribute('data-et-only')).toBe(false);
+    await renderer.setMode('bilingual');
+    expect(link.root.hasAttribute('data-et-only')).toBe(false);
+    expect(link.root.querySelector(':scope > a')?.getAttribute('href')).toBe('/x');
+    await renderer.restoreAll();
+    expect(document.body.innerHTML).toBe(before);
   });
 
   it('applies translation-only to units inserted while the mode is on', async () => {

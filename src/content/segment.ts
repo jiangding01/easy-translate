@@ -20,8 +20,6 @@ export interface Segment {
   /** Plain source text (tags removed), for digests and fallbacks. */
   plain: string;
   digest: string;
-  /** Whether a link sits inside the unit (decides translation-only behaviour on fallback). */
-  hasLink: boolean;
   /** The single inline element wrapping all of the unit's text, if any (e.g. a title link). */
   soleWrapper?: Element;
 }
@@ -35,7 +33,6 @@ export function segment(nodes: readonly Node[]): Segment {
   const rawText = nodes.map((node) => node.textContent ?? '').join('');
   const prefix = PREFIXES.find((candidate) => !sourceHasPrefix(rawText, candidate));
   const marks: Marked[] = [];
-  let hasLink = false;
   const out: string[] = [];
   const plainOut: string[] = [];
 
@@ -59,7 +56,6 @@ export function segment(nodes: readonly Node[]): Segment {
       plainOut.push(el.tagName === 'BR' ? ' ' : (el.textContent ?? ''));
       return;
     }
-    if (el.tagName === 'A' && el.hasAttribute('href')) hasLink = true;
     if (!tagged || !(el.textContent ?? '').trim()) {
       for (const child of el.childNodes) visit(child, tagged);
       return;
@@ -83,7 +79,6 @@ export function segment(nodes: readonly Node[]): Segment {
     marks: marks.length > 0 ? marks : [],
     plain,
     digest: digest(text),
-    hasLink,
     soleWrapper: findSoleWrapper(nodes),
   };
 }
