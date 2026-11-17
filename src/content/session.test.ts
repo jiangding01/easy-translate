@@ -127,6 +127,12 @@ function setup(markup: string, getConfig = async () => createDefaultConfig('zh-C
       targets,
       targets.map(() => true),
     );
+  /** Reports the given roots as out of range. */
+  const hide = (targets: Element[]) =>
+    notify?.(
+      targets,
+      targets.map(() => false),
+    );
   const sentTexts = () => port.calls.flatMap((call) => call.payload.items.map((item) => item.text));
   return {
     session,
@@ -135,6 +141,7 @@ function setup(markup: string, getConfig = async () => createDefaultConfig('zh-C
     observed,
     unobserved,
     show,
+    hide,
     before,
     sentTexts,
     configListeners,
@@ -303,6 +310,28 @@ describe('page session: lifecycle', () => {
     expect(statuses.at(-1)).toBe('idle');
     expect(document.body.innerHTML).toBe(before);
     expect(document.querySelector('style[data-et]')).toBeNull();
+  });
+
+  it('a stale start that fails late leaves the newer session running', async () => {
+    let failFirst!: (error: Error) => void;
+    let reads = 0;
+    const { session, statuses } = setup('<p>Stale start text.</p>', () => {
+      reads += 1;
+      if (reads > 1) return Promise.resolve(createDefaultConfig('zh-CN'));
+      return new Promise((_resolve, reject) => {
+        failFirst = reject;
+      });
+    });
+    const first = session.start();
+    await vi.waitFor(() => expect(reads).toBe(1));
+    await session.stop();
+    expect((await session.start()).phase).toBe('running');
+    failFirst(new Error('storage gone'));
+    await expect(first).rejects.toThrow('storage gone');
+    await wait();
+    expect(session.state().phase).not.toBe('idle');
+    expect(statuses.at(-1)).not.toBe('idle');
+    expect(document.querySelector('style[data-et]')).not.toBeNull();
   });
 });
 
@@ -522,6 +551,176 @@ describe('page session: errors', () => {
     expect(isEngineLevel(engineError('provider/local-origin-rejected'))).toBe(true);
     expect(isEngineLevel(engineError('provider/rate-limited'))).toBe(false);
     expect(isEngineLevel(appError('network', 'network/timeout', 't'))).toBe(false);
+  });
+});
+
+describe('page session: paragraphs waiting to retry', () => {
+  const texts = Array.from({ length: 51 }, (_, i) => `Waiting paragraph ${i} text.`);
+  const many = texts.map((text) => `<p>${text}</p>`).join('');
+  const disconnected = () =>
+    appError('network', 'network/port-disconnected', 'gone', { retryable: true });
+  const textsOf = (calls: Call[]) => calls.flatMap((call) => call.payload.items.map((i) => i.text));
+
+  /** 51 paragraphs make two requests: A (50) drops its connection and waits to retry. */
+  async function twoBatches() {
+    const t = setup(many);
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(2));
+    const [a, b] = t.port.calls as [Call, Call];
+    expect(a.payload.items).toHaveLength(50);
+    a.finish({ status: 'error', error: disconnected() });
+    await wait(10);
+    return { ...t, a, b };
+  }
+
+  /** B answers each paragraph with an engine-level error: the session pauses. */
+  function pauseByChunk(b: Call) {
+    for (const item of b.payload.items) {
+      b.onChunk?.({ id: item.id, error: engineError('provider/unauthorized') });
+    }
+    b.finish({ status: 'done', data: { total: b.payload.items.length, failed: 1 } });
+  }
+
+  /** B fails as a whole request with an engine-level error: the session pauses. */
+  function pauseByRequest(b: Call) {
+    b.finish({ status: 'error', error: engineError('provider/unauthorized') });
+  }
+
+  /** Pauses the session, then lets A's retry timer (500ms) fire while paused. */
+  async function pauseThroughTimer(
+    t: Awaited<ReturnType<typeof twoBatches>>,
+    pause: typeof pauseByChunk,
+  ) {
+    pause(t.b);
+    await vi.waitFor(() => expect(t.session.state().engineError).toBeDefined());
+    await wait(600);
+    expect(t.port.calls).toHaveLength(2);
+  }
+
+  it('resends the waiting paragraphs after a one-off engine switch (per-paragraph engine error)', async () => {
+    const t = await twoBatches();
+    await pauseThroughTimer(t, pauseByChunk);
+    await t.session.start({ engine: 'google' });
+    await vi.waitFor(() => expect(textsOf(t.port.calls.slice(2))).toHaveLength(51));
+    expect([...textsOf(t.port.calls.slice(2))].sort()).toEqual([...texts].sort());
+    expect(t.port.calls.slice(2).every((call) => call.payload.engine === 'google')).toBe(true);
+  });
+
+  it('resends the waiting paragraphs after a one-off engine switch (request-level engine error)', async () => {
+    const t = await twoBatches();
+    await pauseThroughTimer(t, pauseByRequest);
+    await t.session.start({ engine: 'google' });
+    await vi.waitFor(() => expect(textsOf(t.port.calls.slice(2))).toHaveLength(51));
+    expect([...textsOf(t.port.calls.slice(2))].sort()).toEqual([...texts].sort());
+  });
+
+  it('resends the waiting paragraphs on retryFailed', async () => {
+    const t = await twoBatches();
+    await pauseThroughTimer(t, pauseByChunk);
+    t.session.retryFailed();
+    await vi.waitFor(() => expect(textsOf(t.port.calls.slice(2))).toHaveLength(51));
+    expect([...textsOf(t.port.calls.slice(2))].sort()).toEqual([...texts].sort());
+    expect(t.session.state().engineError).toBeUndefined();
+  });
+
+  it('puts back only the waiting paragraphs still in range; the rest queue when seen again', async () => {
+    const t = await twoBatches();
+    // The first ten of A's paragraphs leave the 1000px range while they wait.
+    const away = t.observed.slice(0, 10);
+    const awayTexts = texts.slice(0, 10);
+    t.hide(away);
+    await pauseThroughTimer(t, pauseByChunk);
+    await t.session.start({ engine: 'google' });
+    await vi.waitFor(() => expect(textsOf(t.port.calls.slice(2))).toHaveLength(41));
+    await wait(100);
+    const resent = textsOf(t.port.calls.slice(2));
+    expect(resent).toHaveLength(41);
+    expect(resent.filter((text) => awayTexts.includes(text))).toEqual([]);
+    const before = t.port.calls.length;
+    t.show(away);
+    await vi.waitFor(() =>
+      expect([...textsOf(t.port.calls.slice(before))].sort()).toEqual([...awayTexts].sort()),
+    );
+  });
+
+  it('starts the backoff over for paragraphs put back after a pause', async () => {
+    const t = await twoBatches();
+    await pauseThroughTimer(t, pauseByChunk);
+    await t.session.start({ engine: 'google' });
+    await vi.waitFor(() => expect(textsOf(t.port.calls.slice(2))).toHaveLength(51));
+    const resent = t.port.calls.slice(2);
+    // Attempt 0 again: the same paragraphs wait 500ms (not 1s) and are not marked failed.
+    for (const call of resent) call.finish({ status: 'error', error: disconnected() });
+    await wait(100);
+    expect(t.port.calls).toHaveLength(2 + resent.length);
+    await vi.waitFor(
+      () => expect(textsOf(t.port.calls.slice(2 + resent.length))).toHaveLength(51),
+      {
+        timeout: 750,
+      },
+    );
+    expect(t.session.state().failed).toBe(0);
+  });
+
+  it('never resends a paragraph forgotten while it waited, nor gives it a new id', async () => {
+    const { session, port, show, unobserved } = setup(
+      '<div><p>Kept waiting text.</p><p id="gone">Removed waiting text.</p></div>',
+    );
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    const original = port.calls[0] as Call;
+    original.finish({ status: 'error', error: disconnected() });
+    const gone = document.getElementById('gone') as HTMLElement;
+    gone.remove();
+    await vi.waitFor(() => expect(unobserved).toContain(gone));
+    await vi.waitFor(() => expect(port.calls).toHaveLength(2), { timeout: 1500 });
+    await wait(100);
+    expect(port.calls).toHaveLength(2);
+    const kept = original.payload.items.find((item) => item.text === 'Kept waiting text.');
+    expect(port.calls[1]?.payload.items).toEqual([kept]);
+  });
+
+  it('does not send a waiting paragraph twice when the viewport reports it again', async () => {
+    const { session, port, show, sentTexts } = setup('<p>Seen twice waiting text.</p>');
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    port.calls[0]?.finish({ status: 'error', error: disconnected() });
+    await wait(10);
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(2), { timeout: 1500 });
+    // Past the 500ms retry timer: one resend in all, whichever path sent it.
+    await wait(600);
+    expect(sentTexts()).toEqual(['Seen twice waiting text.', 'Seen twice waiting text.']);
+  });
+
+  it('sends nothing after stop when the retry timer fires', async () => {
+    const { session, port, show } = setup('<p>Stopped waiting text.</p>');
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    port.calls[0]?.finish({ status: 'error', error: disconnected() });
+    await wait(10);
+    await session.stop();
+    await wait(600);
+    expect(port.calls).toHaveLength(1);
+  });
+
+  it('reports running, not done, while paragraphs wait to retry', async () => {
+    const { session, port, show, statuses } = setup('<p>Still running waiting text.</p>');
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    port.calls[0]?.finish({ status: 'error', error: disconnected() });
+    await wait(10);
+    expect(session.state().phase).toBe('running');
+    expect(statuses.at(-1)).toBe('running');
+    await vi.waitFor(() => expect(port.calls).toHaveLength(2), { timeout: 1500 });
+    port.calls[1]?.answer();
+    await vi.waitFor(() => expect(session.state().phase).toBe('done'));
+    expect(statuses.at(-1)).toBe('done');
   });
 });
 

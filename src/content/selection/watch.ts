@@ -208,12 +208,16 @@ export function createSelectionWatch(deps: SelectionWatchDeps): SelectionWatch {
         if (!next.selection.showDot) clearNow();
       });
       try {
-        config ??= await deps.getConfig();
+        const read = await deps.getConfig();
+        // A setting pushed while the read was out is newer than the read.
+        config ??= read;
         return config;
       } catch {
+        // Unsubscribed: what was pushed may go stale, so the next check reads again.
         unwatchConfig?.();
         unwatchConfig = undefined;
         configRead = undefined;
+        config = undefined;
         return undefined;
       }
     })();
