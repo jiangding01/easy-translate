@@ -33,7 +33,6 @@ describe('segment', () => {
     expect(seg.text).toBe('Read <t0>the <t1>full</t1> guide</t0>, then run <t2/>.');
     expect(seg.plain).toBe('Read the full guide, then run npm i.');
     expect(seg.marks.map((mark) => mark.kind)).toEqual(['pair', 'pair', 'void']);
-    expect(seg.hasLink).toBe(true);
   });
 
   it('switches prefix when the source already contains the tag syntax, deterministically', () => {

@@ -21,8 +21,6 @@ interface Rendered {
   unit: Unit;
   el: HTMLElement;
   inline: boolean;
-  /** Plain-text fallback used for a unit that had links: keep the original visible. */
-  keepOriginal: boolean;
   failed: boolean;
   /** Translation-only patch: the root's original style attribute. */
   only?: { styleAttr: string | null };
@@ -198,8 +196,10 @@ export function createRenderer(options: RenderOptions): Renderer {
     unit.root.append(el);
   }
 
+  // A paragraph whose link tags did not survive is hidden too: in translation-only
+  // its links are unreachable until the reader switches back to bilingual.
   function canBeOnly(record: Rendered): boolean {
-    return record.unit.kind === 'block' && !record.inline && !record.keepOriginal && !record.failed;
+    return record.unit.kind === 'block' && !record.inline && !record.failed;
   }
 
   type OnlyReading = {
@@ -336,7 +336,6 @@ export function createRenderer(options: RenderOptions): Renderer {
           unit,
           el: makeElement(dark, inline),
           inline,
-          keepOriginal: !rebuilt && unit.seg.hasLink && !unit.seg.soleWrapper,
           failed: false,
         };
         record.el.append(content);
@@ -373,7 +372,6 @@ export function createRenderer(options: RenderOptions): Renderer {
         unit,
         el: makeElement(dark, inline),
         inline,
-        keepOriginal: true,
         failed: true,
       };
       record.el.setAttribute('data-et-state', 'error');
