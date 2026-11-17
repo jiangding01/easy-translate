@@ -178,3 +178,18 @@ wxt.config.ts           # WXT 与 Manifest V3 配置
 ## 开发约定
 
 配置密钥通过对应服务的设置流程管理，避免写入源码、静态资源、日志和版本库。新增功能按方案划分责任，并同时覆盖失败、取消和资源清理路径。
+
+## 安全
+
+发现安全问题时，请不要公开提 issue，在仓库 Security 页点「Report a vulnerability」私下报告，详见 [SECURITY.md](SECURITY.md)。
+
+## 许可证与第三方资源
+
+本项目以 [MIT 许可证](LICENSE) 开源。
+
+扩展中包含以下第三方资源，各自沿用原许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)（扩展包里另有一份 `THIRD_PARTY_NOTICES.txt`）：
+
+- 供应商图标：[lobe-icons](https://github.com/lobehub/lobe-icons)（MIT）
+- 面板设置齿轮：[Tabler Icons](https://github.com/tabler/tabler-icons)（MIT）
+- 英音音标：[ECDICT](https://github.com/skywind3000/ECDICT)（MIT）
+- 美音音标：[ipa-dict](https://github.com/open-dict-data/ipa-dict)（MIT），基于 [cmudict-ipa](https://github.com/lingz/cmudict-ipa)（MIT）和 [CMU Pronouncing Dictionary](https://github.com/cmusphinx/cmudict)（BSD 类许可）

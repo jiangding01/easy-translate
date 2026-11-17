@@ -144,6 +144,15 @@ assert.ok(
   'No phonetic table may be a web accessible resource',
 );
 
+// Third-party notices ship with the extension (icon path data from lobe-icons and Tabler
+// Icons is in the bundles) and stay identical to the repository's copy.
+const shippedNotices = await readFile(resolve(output, 'THIRD_PARTY_NOTICES.txt'), 'utf8');
+assert.equal(
+  shippedNotices,
+  await readFile(resolve('THIRD_PARTY_NOTICES.md'), 'utf8'),
+  'public/THIRD_PARTY_NOTICES.txt must be a copy of THIRD_PARTY_NOTICES.md',
+);
+
 const files = [
   ...PHONETIC_FILES,
   ...runtimeFiles,

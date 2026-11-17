@@ -2,6 +2,15 @@
   "name": "easy-translate",
   "description": "网页翻译 Chrome 扩展",
   "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jiangding01/easy-translate.git"
+  },
+  "homepage": "https://github.com/jiangding01/easy-translate#readme",
+  "bugs": {
+    "url": "https://github.com/jiangding01/easy-translate/issues"
+  },
   "private": true,
   "type": "module",
   "engines": {
