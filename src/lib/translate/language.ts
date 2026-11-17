@@ -1,19 +1,19 @@
 import { browser } from 'wxt/browser';
-import { type LanguageCode, normalizeLanguage } from '@/lib/languages';
+import {
+  DETECT_MIN_LENGTH,
+  DETECT_MIN_PERCENTAGE,
+  type DetectedLanguages,
+  isTargetLanguage,
+  type LanguageCode,
+} from '@/lib/languages';
 
-export interface DetectedLanguages {
-  isReliable: boolean;
-  languages: readonly { language: string; percentage: number }[];
-}
+export type { DetectedLanguages };
+export { DETECT_MIN_LENGTH, DETECT_MIN_PERCENTAGE };
 
 export type DetectLanguage = (text: string) => Promise<DetectedLanguages>;
 
 /** Detection is an optimization: when it is slow, translate instead of waiting. */
 export const DETECT_TIMEOUT_MS = 200;
-/** Shorter texts are too ambiguous to skip on. */
-export const DETECT_MIN_LENGTH = 10;
-/** The top language must cover at least this share of the text to skip it. */
-export const DETECT_MIN_PERCENTAGE = 80;
 
 /**
  * `chrome.i18n.detectLanguage`, looked up at call time. Whether it exists in a
@@ -56,16 +56,7 @@ export function createSameLanguageCheck(
     });
     try {
       const result = await Promise.race([Promise.resolve().then(() => detect(plain)), timeout]);
-      if (!result?.isReliable) return false;
-      let top: { language: string; percentage: number } | undefined;
-      for (const candidate of result.languages ?? []) {
-        if (!top || candidate.percentage > top.percentage) top = candidate;
-      }
-      return (
-        top !== undefined &&
-        top.percentage >= DETECT_MIN_PERCENTAGE &&
-        normalizeLanguage(top.language) === target
-      );
+      return isTargetLanguage(plain, result, target);
     } catch {
       return false;
     } finally {

@@ -74,8 +74,22 @@ function consumeLastError(): void {
 
 // ---------------------------------------------------------------- server
 
+export interface ServePortOptions {
+  /**
+   * Applied to every error frame on its way out (handler errors and the server's own).
+   * The background uses it to attach user-facing copy; this module stays copy-free
+   * because content scripts bundle it too.
+   */
+  decorateError?: (error: AppError) => AppError;
+}
+
 /** Serves one port: one AbortController per request; disconnect aborts them all. */
-export function servePort<P, C, D>(port: PortLike, handler: PortHandler<P, C, D>): void {
+export function servePort<P, C, D>(
+  port: PortLike,
+  handler: PortHandler<P, C, D>,
+  options: ServePortOptions = {},
+): void {
+  const { decorateError } = options;
   const inflight = new Map<string, AbortController>();
   let connected = true;
 
@@ -107,8 +121,12 @@ export function servePort<P, C, D>(port: PortLike, handler: PortHandler<P, C, D>
       });
       return;
     }
+    const out =
+      frame.t === 'error' && decorateError
+        ? { ...frame, error: decorateError(frame.error) }
+        : frame;
     try {
-      port.postMessage(frame);
+      port.postMessage(out);
     } catch {
       // The port is unusable: really disconnect so the client sees onDisconnect.
       try {

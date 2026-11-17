@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { appError } from '@/lib/errors';
+import { type AppError, appError } from '@/lib/errors';
 import {
   createPortClient,
   type Outcome,
@@ -324,6 +324,62 @@ describe('port transport', () => {
         retryable: false,
       }),
     });
+  });
+
+  it('server passes every error frame through decorateError, which reaches the client', async () => {
+    const decorateError = vi.fn((error: AppError) =>
+      error.code === 'provider/quota' ? { ...error, userMessage: '额度已用完。' } : error,
+    );
+    const connect = () => {
+      const pair = createPortPair();
+      servePort<string, string, string>(
+        pair.server,
+        async () => {
+          throw appError('provider', 'provider/quota', 'quota');
+        },
+        { decorateError },
+      );
+      return pair.client;
+    };
+    const client = createPortClient<string, string, string>(connect);
+    expect(await client.request('x').outcome).toEqual({
+      status: 'error',
+      error: {
+        kind: 'provider',
+        code: 'provider/quota',
+        message: 'quota',
+        retryable: false,
+        userMessage: '额度已用完。',
+      },
+    });
+    expect(decorateError).toHaveBeenCalledTimes(1);
+  });
+
+  it('server decorates its own unserializable-response error too', async () => {
+    const pair = createPortPair();
+    servePort<string, string, unknown>(
+      pair.server,
+      async () => {
+        const loop: Record<string, unknown> = {};
+        loop.self = loop;
+        return loop;
+      },
+      { decorateError: (error) => ({ ...error, userMessage: `copy:${error.code}` }) },
+    );
+    const frames: Record<string, unknown>[] = [];
+    pair.client.onMessage.addListener((frame) => frames.push(frame as Record<string, unknown>));
+    pair.client.postMessage({ t: 'req', id: 'bad', payload: 'cycle' });
+    await flush();
+    expect(frames).toEqual([
+      {
+        t: 'error',
+        id: 'bad',
+        error: expect.objectContaining({
+          code: 'internal/unserializable-response',
+          userMessage: 'copy:internal/unserializable-response',
+        }),
+      },
+    ]);
   });
 
   it('server disconnects the port when postMessage throws, so clients do not hang', async () => {

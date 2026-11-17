@@ -63,6 +63,7 @@ describe('whitelist', () => {
       'page.style',
       'page.mode',
       'page.isleDock',
+      'selection.showDot',
       'providers.openai.baseURL',
       'providers.openai.model',
       'providers.deepseek.model',

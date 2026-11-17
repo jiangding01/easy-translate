@@ -2,14 +2,24 @@ import { browser } from 'wxt/browser';
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import { sampleText, startIfRemembered } from '@/content/auto-start';
 import { createBootstrap } from '@/content/bootstrap';
-import { loadPageRuntime } from '@/content/loader';
+import { loadRuntime } from '@/content/loader';
+import {
+  PAGE_RUNTIME_KEY,
+  type PageRuntimeFactory,
+  SELECTION_RUNTIME_KEY,
+  type SelectionRuntimeFactory,
+} from '@/content/runtime-contract';
+import { createSelectionWatch, readSelection } from '@/content/selection/watch';
 import { readConfig, watchConfig } from '@/lib/config/client';
+import type { ConfigV1 } from '@/lib/config/types';
 import { onMessage, sendMessage } from '@/lib/messaging/protocol';
 import { SITE_MEMORY_KEY } from '@/lib/site-memory';
 
-// Runs on every page but leaves no trace until invoked: no Port, no observers,
-// no DOM writes. The page runtime (session, scanner, renderer) is a separate
-// file imported on first use; this entry only routes messages (content/bootstrap).
+// Runs on every page. The resident part is only the selection watcher (a few listeners
+// and cheap checks, content/selection/watch): until a dot or card is wanted it builds no
+// Port and writes no DOM. The page runtime (session, scanner, renderer) and the selection
+// runtime (dot, card) are separate files imported on first use; this entry only routes
+// messages (content/bootstrap).
 
 export default defineContentScript({
   matches: ['http://*/*', 'https://*/*'],
@@ -20,6 +30,13 @@ export default defineContentScript({
   noScriptStartedPostMessage: true,
   main() {
     const getConfig = async () => (await readConfig()).data;
+    const watchData = (callback: (config: ConfigV1) => void) =>
+      watchConfig((snapshot) => callback(snapshot.data));
+    const listEngines = async () => {
+      const result = await sendMessage('engine.options');
+      if (!result.ok) throw result.error;
+      return result.data;
+    };
     const bootstrap = createBootstrap({
       onMessage,
       pageInfo: () => ({
@@ -27,25 +44,52 @@ export default defineContentScript({
         language: document.documentElement.lang,
       }),
       loadFactory: () =>
-        loadPageRuntime({
+        loadRuntime<PageRuntimeFactory>({
+          path: '/page-runtime.js',
+          key: PAGE_RUNTIME_KEY,
           getURL: (path) => browser.runtime.getURL(path as '/page-runtime.js'),
           importModule: (url) => import(/* @vite-ignore */ url),
         }),
       runtime: {
         getConfig,
-        watchConfig: (callback) => watchConfig((snapshot) => callback(snapshot.data)),
-        listEngines: async () => {
-          const result = await sendMessage('engine.options');
-          if (!result.ok) throw result.error;
-          return result.data;
-        },
+        watchConfig: watchData,
+        listEngines,
         reportStatus: (status) => {
           sendMessage('page.status', status).catch(() => {
             // Background unreachable or extension reloaded: the dot is cosmetic.
           });
         },
       },
+      selection: {
+        loadFactory: () =>
+          loadRuntime<SelectionRuntimeFactory>({
+            path: '/selection-runtime.js',
+            key: SELECTION_RUNTIME_KEY,
+            getURL: (path) => browser.runtime.getURL(path as '/selection-runtime.js'),
+            importModule: (url) => import(/* @vite-ignore */ url),
+          }),
+        runtime: {
+          getConfig,
+          watchConfig: watchData,
+          listEngines,
+          detectLanguage: (text) => browser.i18n.detectLanguage(text),
+        },
+        read: () => readSelection(document),
+        hasFocus: () => document.hasFocus(),
+        // `runtime.id` is unset once the extension is updated or reloaded.
+        alive: () => browser.runtime?.id !== undefined,
+        onContextLost: () => selectionWatch.stop(),
+      },
     });
+
+    const selectionWatch = createSelectionWatch({
+      doc: document,
+      getConfig,
+      watchConfig: watchData,
+      onCandidate: (selection) => bootstrap.showDot(selection),
+      onClear: () => bootstrap.hideDot(),
+    });
+    selectionWatch.start();
 
     startIfRemembered({
       origin: location.origin,

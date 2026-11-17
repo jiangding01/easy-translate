@@ -117,6 +117,11 @@ export interface ProtocolMap {
   'page.status'(status: PageStatus): Result<null>;
   /** extension pages → background: "总是翻译此站". */
   'site.setAlways'(args: { origin: string; always: boolean }): Result<SiteMemory>;
+  /**
+   * background → content (frameId 0): open the selection card. From the context menu
+   * `selectionText` and the menu's `frameId` are set; from the shortcut both are absent.
+   */
+  'selection.open'(args: { selectionText?: string; frameId?: number }): Result<null>;
 }
 
 export const { sendMessage, onMessage } = defineExtensionMessaging<ProtocolMap>();
@@ -140,6 +145,13 @@ export interface TranslateRequest {
   target?: LanguageCode;
   /** One-off engine for this request ("这次先用 Google"); never written to the config. */
   engine?: Engine;
+  /**
+   * Stream the translation as `delta` / `reset` chunks before the final chunk.
+   * Single item only (`validation/invalid-payload` otherwise).
+   */
+  stream?: true;
+  /** Skip the same-language check: the user explicitly asked (menu, shortcut). */
+  force?: true;
 }
 
 /**
@@ -149,10 +161,16 @@ export interface TranslateRequest {
  */
 export type TranslateDisposition = 'translated' | 'unchanged' | 'same-language';
 
-/** One per item, in completion order. */
+/**
+ * One final chunk per item, in completion order. Stream requests may send `reset`
+ * (drop the increments received so far: a new attempt starts) and `delta`
+ * (append) chunks before it; the final chunk replaces whatever was accumulated.
+ */
 export type TranslateChunk =
   | { id: string; text: string; disposition: TranslateDisposition; cached: boolean }
-  | { id: string; error: AppError };
+  | { id: string; error: AppError }
+  | { id: string; delta: string }
+  | { id: string; reset: true };
 
 export interface TranslateDone {
   total: number;

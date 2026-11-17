@@ -1,6 +1,6 @@
 # Easy Translate 交接文档（HANDOFF）
 
-> 最后更新：2026-11-16 · 阶段：**M2b PR2 灵岛已开 PR**（分支 `feat/m2b-isle`；PR1 按需加载已合并为 PR #8）。下一步：PR2 合并 → M3 划词翻译
+> 最后更新：2026-11-17 · 阶段：**M3a 划词翻译已实现并通过 check Deep 审查**（分支 `feat/m3a-selection`，未提交）。真机反馈修复已验收通过。下一步：提交并开 PR，合入 main（含 PR #10、#11）
 > 本文给接手的 Agent 或开发者用，按顺序读完即可直接开工。文中凡与其他文档冲突的地方，以本文和「权威文档」为准。
 
 ## 1. 项目一句话
@@ -55,7 +55,16 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
   - 后台：快捷键 `translate-page`、图标状态点（`src/lib/action-icon.ts`）、`site.setAlways`（只接受扩展页面）。
   - 界面：工具栏面板接通整页翻译；设置页「通用 · 译文」。
 - **分支 `feat/m2b-lazy-runtime`（M2b PR1，未提交）**：内容脚本拆成首屏引导 `src/entrypoints/content.ts` 加 `src/content/bootstrap.ts`（4.88KB），以及按需模块 `src/entrypoints/page-runtime.ts`（12.29KB，WXT unlisted script，动态 URL 的 WAR）。由 `src/content/loader.ts` 在第一次唤起时 `import()`。最低 Chrome 130；配置读取改用原生 storage。依据 [`docs/plans/m2b-lazy-runtime-and-isle.md`](docs/plans/m2b-lazy-runtime-and-isle.md)。
-- **还没有**：灵岛（M2b PR2）、划词翻译（M3）。
+- **main**：M2b 已合并：PR #8 按需加载（首屏 4.96KB），PR #9 灵岛（`src/content/isle/`，配置 `page.isleDock`，后台 `engine.options`）。
+- **分支 `feat/m3a-selection`（M3a，未提交）**：
+  - 后台流式：`stream`/`force`、delta/reset 帧、`text` 格式提示词与清洗、调度器的插队与交互预留名额；
+  - 第二个按需模块 `selection-runtime.js`（16.84KB / 18KB）；
+  - 引导层的选区观察（`src/content/selection/watch.ts`，首屏 6.81KB / 7KB）；
+  - 卡片（`src/content/selection/{extract,place,card,request,speech,styles}.ts`）；
+  - 右键菜单（`contextMenus` 权限）与快捷键 `translate-selection`（Alt+Shift+S / ⌃⇧S）；
+  - 配置 `selection.showDot`。
+  - 依据 [`docs/plans/m3a-selection.md`](docs/plans/m3a-selection.md)。
+- **还没有**：M3d 动态页与站点规则、M3b 段落级交互、M3c 指令台与灵岛键盘、M3e 本地引擎。
 
 ## 5. 批次状态与下一步
 
@@ -91,6 +100,49 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
     - **另开事项**：`src/lib/translate/cache.test.ts` 的「keeps serving reads while a large eviction runs in batches」是时序敏感用例，全量跑时偶发失败。
   - **审查留下的结构建议（不阻塞）**：内容脚本的装配可抽成 `src/content/runtime.ts`，供 M3 划词共用 Port 与配置；`PageState` 与 `PageStatus` 可合并成一份；设置页预览引用了 `src/content/styles.ts`，样式常量可移到 `src/lib`；`site-memory.ts` 可拆读写两侧，给内容脚本减重。
   - **图标**：已完成「暗岛微光」（PR #5）：暖黑超椭圆底板，一条暖白长线（原文）加一条琥珀短药丸（译文），右下角给状态点留位置；16/32/48 各自按像素网格绘制，128 四周留 16px。PNG 与 `docs/assets/icon/` 的 SVG 都由 `scripts/build-icons.mjs` 生成（`npm run build:icons`）；状态点的底图读 `icon/16.png` 和 `icon/32.png`。
+- **M3**（2026-11-16 用户拍板）：拆成 M3a 划词 → M3d 动态页与站点规则 → M3b 段落级交互 → M3c 指令台与灵岛键盘 → M3e Chrome 内置本地引擎。词典态推迟到 M5，与生词本一起做；朗读用 `speechSynthesis`。竞品机制参考 [`docs/reviews/2026-11-16-fluentread-m3-research.md`](docs/reviews/2026-11-16-fluentread-m3-research.md)（本地 FluentRead 调研，只借鉴思路）。
+  - **M3a 划词**：原型是 Design artifact「M3 划词翻译」页的 `SelectionM3a`（已确认）；方案经 Opus 对抗式审查修订后获批；分三段实现（A 后台流式、B 接线与配置、C 卡片），`npm run check` 全绿（887 个测试）。
+    - Chrome for Testing 自查 8 项通过：用真实 Google 引擎实测，单词、半句、整句三种选区的原文行和译文都一一对应；自查中修了「小点自己展开」的 bug。
+    - 用户已同意：方案 1.4 节的全部文案；首屏预算 7KB；`selection-runtime` 预算 18KB；卡片语言名与面板统一（English → 简体中文）。
+    - **2026-11-17 已完成 check Deep 审查**：两位 Opus 审查者按领域分工，发现中等问题 4 项、低等若干项，全部修复并补了回归测试，共 924 个测试（方案附录 B）。首屏体积 6.96KB / 7KB，余量很小，以后往引导层加东西前要先评估。
+    - **2026-11-17 真机反馈调整与增量审查已完成**（方案附录 D、E）：卡片以小点为锚、滚出视口后停放、避开灵岛、朗读选声、小点避开指针；体积方案选择错误文案改由后台提供（Fable 裁决），共 993 个测试。**首屏 content 只剩约 10 字节余量，下次改引导层前要先处理**（瘦身，或经用户同意调预算）。
+    - **原暂停点（已推进到用户复验）**：
+      1. 用 check skill 对 M3a 做 Deep 审查（安全与架构、对抗式），修复，必要时做增量审查；
+      2. 在 Chrome for Testing 上跑方案 6.2 节的自动验收（产物复制到临时目录，不碰 `.output`）；
+      3. 用户真机验收，包括快捷键冲突核对：GitHub、Google Docs、Notion、Outlook、维基百科；
+      4. 同步 CHANGELOG、README，以及方案的状态和审查附录；
+      5. 提交并开 PR。
+    - **M3a 之后的小 PR：英语单词音标**（2026-11-17 用户拍板）：
+      - 显示规则：只在选中单个英文单词时显示（允许连字符、撇号），在原文行单词后面显示 `/IPA/`；查不到就不显示。
+      - 数据源：ECDICT（MIT 许可，与 M5 词典共用同一份数据）按词频取约 3 万个常用词，只取音标字段，随扩展打包，由后台按需读取；离线、不新增权限。音标偏英式，每个词只有一种读音。
+      - 流程：M3a 合并后另开分支，先出方案。
+    - **整页翻译待处理（2026-11-17 用户真机发现，留到 M3d 专门处理）**：
+      - **现象**：claude.dev 博客 `spending-your-effort` 页「Lightly specified design task」小节的示意图（`figure.efx-fig` 里用 DOM 画的终端设置界面：等宽字体、flex 行、短标签，并且由 `efx-slot` 懒加载）被翻译后排版拥挤。标题变成「Settings设置」；标签页一行在原有标签后面追加了「常规 显示 输…」，挤出容器被裁掉；每行在标签后面追加译文，比如「Model› 模型」「Default (recommended)默认（推荐）」。
+      - **DOM 已确认**（用户在 DevTools 里截图）：`figure.art-fig.viz.efx-fig[aria-label="The Claude Code /config redesign at each effort level"] > .efx-view > .efx-rail > .efx-slot[role=group][aria-label="Low effort config screen"] > .efc-low > .stage(grid) > .term[tabindex=0][aria-label="Interactive config mock"](可滚动)`。标签页那一行是 `div.efc-low-row.tabs`，里面是一串行内 `span`，整行被当成一个单元，`<et-tr>` 以行内方式追加在这一行的末尾，被挤出容器后裁掉。
+      - **顺带发现两处**：
+        1. 产品名被直译：「Sonnet」被译成「十四行诗」。这属于专有名词保护，留给 M4 术语库；
+        2. 行首的装饰符号「•›」被带进了译文，变成「Model •› 模型 •」。
+      - **初步判断**：
+        1. 页面特殊：这是用 HTML 画的「界面截图」，读者通常不需要翻译里面的界面文字；
+        2. 我们的算法也有不足：flex 行里的短标签各自成为一个单元，译文以行内方式追加在原文后面。遇到定宽、`overflow:hidden`、不换行的容器，就会挤乱或被裁掉。
+      - **候选改法**（待 M3d 出方案时定）：
+        1. 识别「界面示意」区域：以等宽字体为主、由大量短文本组成的容器，或 `role=img`、`aria-hidden` 的 figure，默认不翻译。也可以考虑：在 `<figure>` 内部只翻译 `figcaption` 和普通段落；
+        1b. 单元里的装饰符号（•、›、▸ 等）不要进入要翻译的文本；
+        2. 版面安全：单元所在的容器定宽、隐藏溢出或不换行时，不做行内追加，改为放到下方，或者跳过；
+        3. 站点规则（M3d 本来就要做）：允许按站点排除选择器，例如 `.efx-fig`；
+        4. 以后可以加「不翻译此区域」的手动入口。
+      - **另一项 M3 后的改进**：AI 引擎的整页翻译改为逐段出现。模型还在生成一批时，后台边收边解析，某一段完整了就立即渲染；首屏第一批切小。用户已同意排在 M3a、音标之后。
+    - **2026-11-17 真机反馈修复已验收通过**（方案附录 F）：
+      - Google 偶发「部分句子原样回显」被写进 7 天缓存，每次复现。新增 `src/lib/translate/echo.ts` 的 `isEchoedTranslation`；`scheduler.ts` 的 `complete()` 对回显条目不写缓存；`providers/google.ts` 的 `retryEchoed` 用 `/translate_a/single` 重试一次，失败则保留原结果并停止重试。已补回归测试。
+      - 卡片水平定位改为优先向右展开（`src/content/selection/place.ts`）；卡片滚动条改为透明轨道加细滑块。
+      - 验收第 3 项（错误文案）、第 8 项（DeepSeek 流式）通过。
+      - 体积（gzip）：content 6.99/7KB、page-runtime 21.86/24KB、selection-runtime 17.06/18KB、background 49.08/60KB、popup 79.59/90KB、options 86.21/150KB。
+    - **M3a 之后的待办**：
+      - **面板设置入口不易发现**：面板右下角设置按钮的图标是「圆加八条短线」，像太阳或亮度，用户没认出来。计划 M3a 合并后单独开小 PR，改为齿轮并加「设置」文字，先出效果给用户定。
+      - **卡片「重试」不绕过缓存**：只在出错时出现，成功但内容坏的卡片没有入口，暂不做。
+      - **「翻译服务返回了空结果」未能复现**（claude.dev，Google）：根因未知，推测与当时出口 IP 被 Google 限流降级有关；再遇到需要抓现场。
+      - **PR #10、#11 已合并到 main**（`cache.test.ts`、`service.test.ts` 偶发失败修复）：M3a 提交后需要合入 main。
+    - **已知待观察**：40 字以内的英文句子，Chrome 语言检测常报不可靠，卡片顶部显示「自动检测」，这是检测本身的限制。
 - **界面方向已确认**：「隐中生岛」加琥珀主题色，完整规范见 [`docs/plans/ui-isle-direction.md`](docs/plans/ui-isle-direction.md)。原型在 https://claude.ai/artifact/GJTgsP7SFHmhP6M2SczwTp 。最高原则：人的感受第一、少打扰、近乎原生的沉浸阅读。
   - 默认在所有页面上都不留痕迹，由用户主动唤起。
   - 不常驻悬浮球。
@@ -164,6 +216,7 @@ M1 和 M2（整页翻译）完成后即构成 MVP。
 
 | 日期 | 事项 |
 | --- | --- |
+| 2026-11-16 | **M2b PR2 灵岛已合并**（PR #9）。**M3 规划**：拆成 5 个小批次；调研 FluentRead。**M3a 划词翻译完成实现与自查**（分支 `feat/m3a-selection`，未提交）：原型确认 → 方案（Opus 审查查出 3 项阻断、12 项应修，已修订）→ 三段实现，887 个测试 → Chrome for Testing 自查 8 项通过。按用户要求，**暂停于 check Deep 审查之前**。<br>**另开事项**：`cache.test.ts` 的时序用例已在单独的会话中修稳（PR #10，只改了测试文件，待合并）；该会话又发现 `service.test.ts` 有一条偶发失败的用例，原因是 `waitFor` 只等到 8 个挂起请求中的 6 个已派发，`hanging[0]` 可能还没派发就被取消，导致 aborts 计数为 0。这条还没修，需要另行处理 |
 | 2026-11-16 | **M2b PR1 已合并**（PR #8）。**M2b PR2 灵岛完成实现与审查**（分支 `feat/m2b-isle`）。<br>**原型**：在 Design artifact 新增 `IsleM2` 页，用户确认；规范第 2 节第 7 条改为「暗色网页上也用深岛加描边」。<br>**方案**：m2b 方案第 9 节，经 Opus 对抗式审查（3 项阻断、14 项应修）修订，再由主会话对照代码复核。<br>**实现**：分两段（Sonnet 做接口和配置，Opus 做灵岛），page-runtime 21.34KB。<br>**审查**：check Deep，修了停靠来回切换后隐身、换引擎后错误算错引擎等，633 个测试。<br>**验收**：自动 10 条通过；用户真机 4 倍降速下 INP 40ms。<br>**真机后调整**：底部停靠改右下角、横幅抬升、避让对齐、提示框淡出、小点暗边（附录 H），增量审查修 5 项，682 个测试，用户复验通过。<br>**下一步**：PR 合并 → M3 |
 | 2026-11-16 | **M2b PR1 按需加载完成实现与审查**（分支 `feat/m2b-lazy-runtime`）。<br>**调研**：灵岛加载方式由 Fable 5.2 裁决，选动态 URL + 单文件按需模块；实测否决后台注入（需全站权限）。<br>**方案**：`docs/plans/m2b-lazy-runtime-and-isle.md`，经 Opus 对抗式审查修订。<br>**实现**：内容脚本 19.43KB → 4.88KB，会话代码拆进按需模块 `page-runtime.js`（12.29KB）；配置读取改原生 storage；最低 Chrome 130；构建检查用 `node:vm` 验证单文件、严格模式下可执行和注册生效。<br>**审查**：check Deep（安全与架构、对抗式各一位 Opus），修了 WXT 默认向网页广播扩展 ID 等 5 项，550 个测试。<br>**下一步**：真机验收 → 提交并开 PR → PR2 灵岛原型 |
 | 2026-11-13 | 熟悉骨架与旧方案；Fable 5.2 完成两轮评审，产出最终方案和 UI/UX 规范；用户拍板全部决策（见第 3 节）；暂不做高保真设计稿；创建本文和 `CHANGELOG.md`，提交并推送到 main。约定开发流程（见第 8 节）。下一步：M0 |

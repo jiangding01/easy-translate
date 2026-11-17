@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeBaseURL } from '@/lib/endpoint';
-import { collect, jsonResponse, makeCtx, mockFetch, sseResponse } from '../test-utils';
+import { collect, jsonResponse, makeCtx, mockFetch, sseResponse, TEXT_PROMPT } from '../test-utils';
 import { createOpenAICompatAdapter } from './openai-compat';
 
 const adapter = createOpenAICompatAdapter();
@@ -159,5 +159,95 @@ describe('openai-compat adapter', () => {
     const end = `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: reason }] })}\n\n`;
     const fn = mockFetch(sseResponse([delta(OUTPUT), end, 'data: [DONE]\n\n']));
     await expect(run(fn)).rejects.toMatchObject({ code, retryable: false });
+  });
+});
+
+describe('openai-compat adapter: text format', () => {
+  const runText = (fn: ReturnType<typeof mockFetch>, source = 'Hello', overrides = {}) =>
+    collect(adapter.translate([source], makeCtx({ fetch: fn, prompt: TEXT_PROMPT, ...overrides })));
+  const reply = (...parts: string[]) => sseResponse([...parts.map(delta), 'data: [DONE]\n\n']);
+
+  it('sends the text between markers made of a fresh nonce per request', async () => {
+    const fn = mockFetch(reply('你好'), reply('你好'));
+    await runText(fn);
+    await runText(fn);
+    const bodies = fn.mock.calls.map((call) =>
+      JSON.parse((call as unknown as [string, RequestInit])[1].body as string),
+    );
+    const nonces = bodies.map((body) => {
+      const nonce = /^SYS ([0-9a-f]{16})$/.exec(body.messages[0].content)?.[1];
+      expect(body.messages[1].content).toBe(`[${nonce}]\nHello\n[/${nonce}]`);
+      return nonce;
+    });
+    expect(nonces[0]).toBeDefined();
+    expect(nonces[0]).not.toBe(nonces[1]);
+  });
+
+  it('yields a delta per increment, then the whole text as the item', async () => {
+    const empty = `data: ${JSON.stringify({ choices: [{ delta: { role: 'assistant' } }] })}\n\n`;
+    const fn = mockFetch(
+      sseResponse([empty, delta('你'), delta(''), delta('好'), 'data: [DONE]\n\n']),
+    );
+    expect(await runText(fn)).toEqual([
+      { type: 'delta', index: 0, delta: '你' },
+      { type: 'delta', index: 0, delta: '好' },
+      { type: 'item', index: 0, text: '你好' },
+    ]);
+  });
+
+  it('keeps reasoning out of the increments and the result', async () => {
+    const fn = mockFetch(reply('<think>', 'Hello means', '…</think>\n', '你好'));
+    expect(await runText(fn)).toEqual([
+      { type: 'delta', index: 0, delta: '你好' },
+      { type: 'item', index: 0, text: '你好' },
+    ]);
+  });
+
+  it.each([
+    ['a think block', '<think>hmm</think>\n你好', 'Hello', '你好'],
+    ['an unclosed think block after the text', '你好<think>more', 'Hello', '你好'],
+    ['wrapping ASCII quotes', '"你好"', 'Hello', '你好'],
+    ['wrapping curly quotes', '“你好”', 'Hello', '你好'],
+    ['wrapping corner brackets', '「你好」', 'Hello', '你好'],
+    ['quotes the source also has', '"你好"', '"Hello"', '"你好"'],
+    ['quotes when the source is quoted in another style', '“你好”', '"Hello"', '“你好”'],
+    ['quotes that do not wrap the whole reply', '"甲" 和 "乙"', 'A and B', '"甲" 和 "乙"'],
+    ['a 译文 label', '译文：你好', 'Hello', '你好'],
+    ['a 翻译 label', '翻译: 你好', 'Hello', '你好'],
+    ['a Translation label', 'Translation: Hallo', 'Hello', 'Hallo'],
+    ['a label and quotes', 'Translation: "Hallo"', 'Hello', 'Hallo'],
+    ['a label the source also has', '翻译：你好', 'Translation: hello', '翻译：你好'],
+    ['surrounding whitespace', '\n  你好 \n', 'Hello', '你好'],
+  ])('cleans %s', async (_name, output, source, expected) => {
+    const events = await runText(mockFetch(reply(output)), source);
+    expect(events.at(-1)).toEqual({ type: 'item', index: 0, text: expected });
+  });
+
+  it.each([
+    ['only a think block', '<think>nothing to say</think>'],
+    ['only a label', '译文：'],
+    ['only quotes', '“ ”'],
+    ['whitespace', '  \n '],
+  ])('fails with empty-translation when %s is left', async (_name, output) => {
+    await expect(runText(mockFetch(reply(output)))).rejects.toMatchObject({
+      code: 'validation/empty-translation',
+    });
+  });
+
+  it('refuses more than one item', async () => {
+    const fn = mockFetch();
+    await expect(
+      collect(adapter.translate(['a', 'b'], makeCtx({ fetch: fn, prompt: TEXT_PROMPT }))),
+    ).rejects.toMatchObject({ code: 'internal/text-batch' });
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('keeps the output ceiling and finish_reason handling', async () => {
+    const chunks = Array.from({ length: 70 }, () => delta('x'.repeat(1000)));
+    const runaway = mockFetch(sseResponse([...chunks, 'data: [DONE]\n\n']));
+    await expect(runText(runaway)).rejects.toMatchObject({ code: 'provider/output-truncated' });
+    const end = `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] })}\n\n`;
+    const cut = mockFetch(sseResponse([delta('你'), end]));
+    await expect(runText(cut)).rejects.toMatchObject({ code: 'provider/output-truncated' });
   });
 });

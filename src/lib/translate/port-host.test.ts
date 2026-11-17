@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultConfig } from '@/lib/config/defaults';
+import { type AppError, appError } from '@/lib/errors';
 import type { PortLike } from '@/lib/messaging/port';
-import { TRANSLATE_PORT_NAME } from '@/lib/messaging/protocol';
+import { TRANSLATE_PORT_NAME, type TranslateChunk } from '@/lib/messaging/protocol';
 import { createTranslatePortHost } from './port-host';
 import { createScheduler } from './scheduler';
 import { createTranslateService } from './service';
@@ -53,6 +54,48 @@ describe('translate port host', () => {
     await vi.waitFor(() => expect(callers).toHaveLength(3));
     expect(callers[0]).toBe(callers[1]);
     expect(callers[2]).not.toBe(callers[0]);
+  });
+
+  it('passes chunk errors and error frames through decorateError', async () => {
+    const decorateError = (error: AppError) => ({ ...error, userMessage: `copy:${error.code}` });
+    const translate = vi.fn(
+      async (_payload: unknown, ctx: { emit(chunk: TranslateChunk): void }) => {
+        ctx.emit({ id: 'a', text: 'A', disposition: 'translated', cached: false });
+        ctx.emit({ id: 'b', error: appError('provider', 'provider/unauthorized', '401') });
+        throw appError('network', 'network/timeout', 'slow');
+      },
+    );
+    const host = createTranslatePortHost({ translate }, TRANSLATE_PORT_NAME, { decorateError });
+    const port = fakePort(TRANSLATE_PORT_NAME);
+    host(port.port);
+    port.send({ t: 'req', id: '1', payload: {} });
+    await vi.waitFor(() => expect(port.frames).toHaveLength(3));
+    expect(port.frames).toEqual([
+      {
+        t: 'chunk',
+        id: '1',
+        data: { id: 'a', text: 'A', disposition: 'translated', cached: false },
+      },
+      {
+        t: 'chunk',
+        id: '1',
+        data: {
+          id: 'b',
+          error: expect.objectContaining({
+            code: 'provider/unauthorized',
+            userMessage: 'copy:provider/unauthorized',
+          }),
+        },
+      },
+      {
+        t: 'error',
+        id: '1',
+        error: expect.objectContaining({
+          code: 'network/timeout',
+          userMessage: 'copy:network/timeout',
+        }),
+      },
+    ]);
   });
 
   it('round-robins the scheduler between two ports', async () => {

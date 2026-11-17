@@ -28,6 +28,11 @@ export interface AppError {
   message: string;
   retryable: boolean;
   retryAfterMs?: number;
+  /**
+   * User-facing copy filled in by the background from its static message table
+   * (never built from source text or secrets). Content scripts show it as text.
+   */
+  userMessage?: string;
 }
 
 export type Result<T> = { ok: true; data: T } | { ok: false; error: AppError };
@@ -45,14 +50,15 @@ export function appError<K extends ErrorKind>(
 
 export function isAppError(value: unknown): value is AppError {
   if (typeof value !== 'object' || value === null) return false;
-  const { kind, code, message, retryable } = value as Record<string, unknown>;
+  const { kind, code, message, retryable, userMessage } = value as Record<string, unknown>;
   return (
     typeof kind === 'string' &&
     (ERROR_KINDS as readonly string[]).includes(kind) &&
     typeof code === 'string' &&
     code.startsWith(`${kind}/`) &&
     typeof message === 'string' &&
-    typeof retryable === 'boolean'
+    typeof retryable === 'boolean' &&
+    (userMessage === undefined || typeof userMessage === 'string')
   );
 }
 

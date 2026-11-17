@@ -44,6 +44,10 @@ export function contentBlockedError(): AppError {
   return appError('provider', 'provider/content-blocked', 'Content was blocked by the provider');
 }
 
+export function emptyTranslationError(): AppError {
+  return appError('validation', 'validation/empty-translation', 'Translation is empty');
+}
+
 export function modelRequiredError(): AppError {
   return appError('config', 'config/model-required', 'A model must be configured');
 }

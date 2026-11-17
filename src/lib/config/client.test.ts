@@ -63,6 +63,17 @@ describe('readConfig', () => {
     expect((await readConfig()).data.page.isleDock).toBe('bottom');
   });
 
+  it('guards the selection dot flag and keeps a valid one', async () => {
+    await fakeBrowser.storage.local.set({
+      config: { schemaVersion: 1, data: { selection: { showDot: 'no' } } },
+    });
+    expect((await readConfig()).data.selection.showDot).toBe(true);
+    await fakeBrowser.storage.local.set({
+      config: { schemaVersion: 1, data: { selection: { showDot: false } } },
+    });
+    expect((await readConfig()).data.selection.showDot).toBe(false);
+  });
+
   it('guards the engine and source language enums', async () => {
     await fakeBrowser.storage.local.set({
       config: {
