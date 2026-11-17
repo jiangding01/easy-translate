@@ -37,7 +37,7 @@
     "@wxt-dev/module-react": "^1.2.2",
     "fake-indexeddb": "^6.2.8",
     "happy-dom": "^21.0.4",
-    "typescript": "^5.9.0",
+    "typescript": "^7.0.2",
     "vite": "^8.0.0",
     "vitest": "^5.1.0",
     "wxt": "^0.21.5"
