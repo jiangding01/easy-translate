@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { ProviderIcon } from '@/components/ProviderIcon';
 import { DEFAULT_OPENAI_BASE_URL } from '@/lib/config/defaults';
 import {
   engineFields,
@@ -15,6 +16,7 @@ import {
 import { useConfig } from '@/lib/config/use-config';
 import { normalizeBaseURL, requiredHostPermission } from '@/lib/endpoint';
 import {
+  customShort,
   type EngineEntry,
   engineReadiness,
   hostName,
@@ -24,6 +26,7 @@ import {
 import { appError } from '@/lib/errors';
 import { requestHostPermission, useHostPermission } from '@/lib/host-permission';
 import type { SecretStatusInfo } from '@/lib/messaging/protocol';
+import { providerIconFor } from '@/lib/provider-icons';
 import { admin } from './hooks';
 import { useNotice } from './notice';
 import styles from './options.module.css';
@@ -205,6 +208,11 @@ export function EngineItem(props: Props) {
           aria-controls={panelId}
           onClick={props.onToggle}
         >
+          <ProviderIcon
+            icon={providerIconFor(engine, saved.baseURL)}
+            fallback={customShort(saved.name)}
+            size={20}
+          />
           <span className={styles.rowText}>
             <span className={styles.rowTitle}>
               <span className={styles.rowName}>{entry.name}</span>

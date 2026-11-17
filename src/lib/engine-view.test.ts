@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultConfig } from '@/lib/config/defaults';
 import type { ConfigV1 } from '@/lib/config/types';
-import { engineEntries, engineReadiness, hostName, hostOf, permissionPattern } from './engine-view';
+import {
+  customShort,
+  engineEntries,
+  engineReadiness,
+  hostName,
+  hostOf,
+  permissionPattern,
+} from './engine-view';
 
 function config(): ConfigV1 {
   const value = createDefaultConfig('zh-CN');
@@ -118,5 +125,21 @@ describe('hostOf and hostName', () => {
   it('cuts long hosts to the stored name limit', () => {
     const host = `${'a'.repeat(60)}.example.com`;
     expect(hostName(`https://${host}/v1`)).toHaveLength(40);
+  });
+});
+
+describe('customShort', () => {
+  it('takes the first two characters of the name', () => {
+    expect(customShort('硅基流动')).toBe('硅基');
+    expect(customShort('  My LLM ')).toBe('My');
+  });
+
+  it('never cuts an emoji in half', () => {
+    expect(customShort('👩‍💻 Coder')).toBe('👩‍💻 ');
+  });
+
+  it('uses a generic label for an empty name', () => {
+    expect(customShort('')).toBe('自');
+    expect(customShort('   ')).toBe('自');
   });
 });

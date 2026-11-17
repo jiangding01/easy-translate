@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createDefaultConfig } from '@/lib/config/defaults';
 import { BUILTIN_ENGINES, type ConfigV1 } from '@/lib/config/types';
 import { NOT_READY_TEXT } from '@/lib/engine-view';
+import { PROVIDER_ICONS } from '@/lib/provider-icons';
 import { buildEngineOptions, UNNAMED_CUSTOM_NAME } from './engine-options';
 
 const keyed = { configured: true, last4: 'wxyz' };
@@ -145,6 +146,34 @@ describe('buildEngineOptions', () => {
     ]);
   });
 
+  it('carries vendor icons for the built-ins and the preset addresses only', async () => {
+    const result = await buildEngineOptions({
+      config: configWith({
+        'custom-aaaaaaaa': { name: 'Ollama', baseURL: 'http://localhost:11434/v1', model: 'm' },
+        'custom-bbbbbbbb': { name: 'LM', baseURL: 'http://127.0.0.1:1234/v1', model: 'm' },
+        'custom-cccccccc': { name: 'OR', baseURL: 'https://openrouter.ai/api/v1', model: 'm' },
+        'custom-dddddddd': { name: '硅基', baseURL: 'https://api.siliconflow.cn/v1', model: 'm' },
+        'custom-eeeeeeee': { name: '其他', baseURL: 'https://llm.example.com/v1', model: 'm' },
+        'custom-ffffffff': { name: '', baseURL: '', model: 'm' },
+      }),
+      secrets: {},
+      hasPermission: granted,
+    });
+    expect(result.options.map((option) => option.icon)).toEqual([
+      PROVIDER_ICONS.google,
+      PROVIDER_ICONS.openai,
+      PROVIDER_ICONS.deepseek,
+      PROVIDER_ICONS.gemini,
+      PROVIDER_ICONS.ollama,
+      PROVIDER_ICONS.lmstudio,
+      PROVIDER_ICONS.openrouter,
+      PROVIDER_ICONS.siliconflow,
+      undefined,
+      undefined,
+    ]);
+    expect(result.options.slice(-2).every((option) => !('icon' in option))).toBe(true);
+  });
+
   it('returns only whitelisted fields, never key material, URLs, hosts or models', async () => {
     const result = await buildEngineOptions({
       config: configWith({
@@ -162,7 +191,9 @@ describe('buildEngineOptions', () => {
     });
     for (const option of result.options) {
       expect(
-        Object.keys(option).every((key) => ['id', 'name', 'short', 'ready', 'note'].includes(key)),
+        Object.keys(option).every((key) =>
+          ['id', 'name', 'short', 'ready', 'note', 'icon'].includes(key),
+        ),
       ).toBe(true);
     }
     expect(Object.keys(result).sort()).toEqual(['configured', 'options']);
