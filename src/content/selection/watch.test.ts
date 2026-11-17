@@ -35,6 +35,8 @@ function stubGeometry() {
 interface Options {
   config?: (config: ConfigV1) => void;
   getConfig?: () => Promise<ConfigV1>;
+  /** Subscribing throws (the extension was reloaded: its context is invalidated). */
+  watchThrows?: boolean;
 }
 
 function setup(options: Options = {}) {
@@ -44,6 +46,11 @@ function setup(options: Options = {}) {
   const getConfig = vi.fn(options.getConfig ?? (async () => config));
   const unwatch = vi.fn();
   const watchConfig = vi.fn((callback: (config: ConfigV1) => void) => {
+    if (options.watchThrows) {
+      throw new Error(
+        "Failed to read the 'onChanged' property from 'Object': Extension context invalidated.",
+      );
+    }
     listener = callback;
     return unwatch;
   });
@@ -516,6 +523,31 @@ describe('the setting', () => {
     expect(t.watchConfig).toHaveBeenCalledTimes(2);
     expect(t.getConfig).toHaveBeenCalledTimes(2);
     expect(t.onCandidate).toHaveBeenCalledOnce();
+  });
+});
+
+describe('an invalidated extension context', () => {
+  it('ends the check quietly when subscribing throws, and tries again next time', async () => {
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      const t = start({ watchThrows: true });
+      select(para('Hello world, again'));
+      await release();
+      await vi.advanceTimersByTimeAsync(0);
+      // Let a rejection that nobody handled reach the process.
+      await new Promise((resolve) => process.nextTick(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(t.onCandidate).not.toHaveBeenCalled();
+      // Nothing is cached: the next selection subscribes again.
+      document.dispatchEvent(new Event('keyup'));
+      await vi.advanceTimersByTimeAsync(KEY_DELAY_MS);
+      await new Promise((resolve) => process.nextTick(resolve));
+      expect(t.watchConfig).toHaveBeenCalledTimes(2);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
   });
 });
 

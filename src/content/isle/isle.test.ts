@@ -112,6 +112,8 @@ interface SetupOptions {
   listEngines?: () => Promise<EngineOptions>;
   /** Holds the config read until `releaseConfig()`. */
   holdConfig?: boolean;
+  /** Subscribing throws (the extension was reloaded: its context is invalidated). */
+  watchThrows?: boolean;
 }
 
 async function setup(options: SetupOptions = {}) {
@@ -173,6 +175,11 @@ async function setup(options: SetupOptions = {}) {
       return config;
     }),
     watchConfig: vi.fn((callback: (config: ConfigV1) => void) => {
+      if (options.watchThrows) {
+        throw new Error(
+          "Failed to read the 'onChanged' property from 'Object': Extension context invalidated.",
+        );
+      }
       configListener = callback;
       subscriptions += 1;
       return () => {
@@ -451,6 +458,21 @@ describe('mounting', () => {
     expect(t.host()).toBeNull();
     expect(t.deps.watchConfig).not.toHaveBeenCalled();
     expect(t.deps.listEngines).not.toHaveBeenCalled();
+  });
+
+  it('leaves no unhandled rejection when subscribing throws (context invalidated)', async () => {
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      const t = await setup({ watchThrows: true });
+      await t.settle();
+      await new Promise((resolve) => process.nextTick(resolve));
+      expect(t.deps.watchConfig).toHaveBeenCalledOnce();
+      expect(unhandled).not.toHaveBeenCalled();
+      t.isle.destroy();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
   });
 
   it('only exists in the top frame', async () => {

@@ -202,12 +202,16 @@ export function createSelectionWatch(deps: SelectionWatchDeps): SelectionWatch {
   /** Read once on the first non-empty selection, then kept fresh by the watch. */
   const ensureConfig = (): Promise<ConfigV1 | undefined> => {
     configRead ??= (async () => {
-      // Subscribe first so a change between the read and the subscription is not lost.
-      unwatchConfig = deps.watchConfig((next) => {
-        config = next;
-        if (!next.selection.showDot) clearNow();
-      });
+      // Defer one tick so a synchronous failure cannot clear the cache before it is set.
+      await Promise.resolve();
       try {
+        // Subscribe first so a change between the read and the subscription is not lost.
+        // Inside the try: once the extension is reloaded, even reading
+        // `storage.onChanged` throws ("Extension context invalidated").
+        unwatchConfig = deps.watchConfig((next) => {
+          config = next;
+          if (!next.selection.showDot) clearNow();
+        });
         const read = await deps.getConfig();
         // A setting pushed while the read was out is newer than the read.
         config ??= read;
