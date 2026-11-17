@@ -7,7 +7,7 @@ Easy Translate 是面向 Chrome 的网页翻译扩展，围绕网页双语阅读
 ## 当前功能
 
 - **整页翻译**：点工具栏面板的「翻译此页」，或按快捷键（macOS `⌃⇧A`，Windows/Linux `Alt+A`）。译文出现在原文下方，沿用网页自己的字体；先翻眼前的段落，往下读时继续。面板里可以切换「双语 / 仅译文」、重试没译出的段落、「显示原文」还原网页，以及打开「总是翻译此站」。快捷键可以在 `chrome://extensions/shortcuts` 修改。
-- **划词翻译**：选中网页上的外文，选区末尾出现琥珀小点，点击（或停留片刻）长出翻译卡片，可切换引擎、折叠原文、复制、固定并拖动；也可用右键菜单「翻译选中文字」或快捷键（macOS `⌃⇧S`，Windows/Linux `Alt+Shift+S`）。AI 引擎的译文边生成边显示；朗读使用系统自带语音。
+- **划词翻译**：选中网页上的外文，选区末尾出现琥珀小点，点击（或停留片刻）长出翻译卡片，可切换引擎、折叠原文、复制、固定并拖动；也可用右键菜单「翻译选中文字」或快捷键（macOS `⌃⇧S`，Windows/Linux `Alt+Shift+S`）。AI 引擎的译文边生成边显示；选中单个英文单词时显示 UK / US 音标（离线词表，约 17.5 万 / 11.7 万词），点击按对应口音朗读；朗读使用系统自带语音。
 - **设置页 · 翻译服务**：选择默认引擎；为 OpenAI、DeepSeek、Gemini 填写密钥和模型；添加最多 10 个自定义服务（Ollama、LM Studio、OpenRouter、硅基流动等预设，或任意 OpenAI 兼容地址），添加时申请访问权限；每个服务都能用「Hello, world.」测试连接；查看和清空翻译缓存。密钥只保存在本机，页面只能看到末 4 位。
 - **设置页 · 通用**：目标语言、源语言（默认自动检测）、外观（跟随系统／浅色／深色）、译文样式（无装饰／淡化／下划线／高亮，带预览）和打开时的显示方式，选择即保存。
 - **工具栏面板**：显示当前网站和页面语言，切换目标语言和默认引擎；母语页面、浏览器页面、需要刷新的页面各有安静的提示；默认引擎缺密钥或未授权时给出「去设置」。
@@ -58,7 +58,7 @@ WXT 会监听源码并更新开发产物。修改 manifest 或后台逻辑后，
 | `npm run build` | 生成 `.output/chrome-mv3` 生产产物 |
 | `npm run check:build` | 校验 manifest 及其引用的入口资源 |
 | `npm run check:contrast` | 校验颜色 token 的对比度（文字 ≥ 4.5:1，控件与焦点环 ≥ 3:1，亮暗各一套） |
-| `npm run check:size` | 按入口检查 gzip 体积预算（content ≤ 7KB、page-runtime ≤ 24KB、selection-runtime ≤ 18KB、background ≤ 60KB、popup ≤ 90KB、options ≤ 150KB） |
+| `npm run check:size` | 按入口检查 gzip 体积预算（content ≤ 7KB、page-runtime ≤ 24KB、selection-runtime ≤ 19KB、background ≤ 60KB、popup ≤ 90KB、options ≤ 150KB） |
 | `npm run check` | 依次执行 lint、typecheck、check:contrast、test、build、check:build、check:size |
 | `npm run zip` | 在 `.output` 中生成扩展 ZIP 包 |
 

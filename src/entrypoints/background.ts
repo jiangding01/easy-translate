@@ -19,6 +19,7 @@ import {
   forbiddenSenderError,
   isExtensionPageSender,
 } from '@/lib/messaging/sender';
+import { createPhoneticLookup } from '@/lib/phonetic/lookup';
 import { createSiteMemoryStore } from '@/lib/site-memory';
 import { createAdminHandlers } from '@/lib/translate/admin';
 import { createTranslationCache } from '@/lib/translate/cache';
@@ -36,6 +37,7 @@ export default defineBackground(() => {
     getConfig: async () => (await repo.load()).data,
     secrets,
     cache,
+    lookupPhonetic: createPhoneticLookup(),
   });
   const config = createConfigHandlers({ repo, extensionRoot: browser.runtime.getURL('/') });
   const admin = createAdminHandlers({
