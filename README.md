@@ -62,7 +62,16 @@ WXT 会监听源码并更新开发产物。修改 manifest 或后台逻辑后，
 | `npm run check` | 依次执行 lint、typecheck、check:contrast、test、build、check:build、check:size |
 | `npm run zip` | 在 `.output` 中生成扩展 ZIP 包 |
 
-GitHub Actions（`.github/workflows/ci.yml`）在 PR 和推送到 `main` 时运行同一套检查。本地验证生产版本时，在扩展管理页加载 `.output/chrome-mv3`。
+GitHub Actions（`.github/workflows/ci.yml`）在 PR 和推送到 `main` 时运行同一套检查，另外还做三件事：
+
+- 依赖审计：运行时依赖有高危漏洞时拦截；开发依赖的漏洞只报告，不拦截；PR 新增或升级的依赖由 dependency review 检查，有高危漏洞时拦截。
+- CodeQL 安全扫描（`.github/workflows/codeql.yml`）：PR、推送到 `main` 时运行，另外每周一运行一次，使用 `security-extended` 规则集。
+- 校验依赖包的仓库签名。
+- 全部检查通过后，上传构建好的扩展。
+
+**下载验收包**：打开 PR 的 Checks，进入这次 CI 运行的 Summary 页，在 Artifacts 里下载 `easy-translate-chrome-<提交号>`（保留 7 天），解压后在扩展管理页「加载已解压的扩展程序」。本地验证生产版本时，加载 `.output/chrome-mv3`。
+
+依赖更新由 Dependabot 每周检查（`.github/dependabot.yml`），npm 和 GitHub Actions 的小版本、补丁更新分组提 PR。
 
 ## 项目结构
 
