@@ -120,6 +120,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
   const sent = new Set<Unit>();
   const settled = new Set<Unit>();
   const failed = new Set<Unit>();
+  /** Units of a failed request waiting for their delayed retry: neither pending nor sent. */
+  const waiting = new Set<Unit>();
   const translations = new Map<string, string>();
   const reinserts = new Map<string, number[]>();
   /** Texts a page keeps throwing our translation away for: left alone for the session. */
@@ -160,13 +162,13 @@ export function createPageSession(deps: SessionDeps): PageSession {
   function status(): PageStatus {
     if (phase === 'idle') return 'idle';
     if (engineError || failed.size > 0) return 'error';
-    return pending.size > 0 || inFlight > 0 ? 'running' : 'done';
+    return pending.size > 0 || inFlight > 0 || waiting.size > 0 ? 'running' : 'done';
   }
 
   function report() {
     notify();
     if (phase === 'idle' || halted) return;
-    phase = pending.size > 0 || inFlight > 0 ? 'running' : 'done';
+    phase = pending.size > 0 || inFlight > 0 || waiting.size > 0 ? 'running' : 'done';
     deps.reportStatus(status());
   }
 
@@ -221,6 +223,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
     if (
       queued.has(unit) ||
       sent.has(unit) ||
+      waiting.has(unit) ||
       settled.has(unit) ||
       failed.has(unit) ||
       renderer?.has(unit)
@@ -433,8 +436,17 @@ export function createPageSession(deps: SessionDeps): PageSession {
       return;
     }
     const current = epoch;
+    for (const unit of units) waiting.add(unit);
     setTimeout(() => {
-      if (current === epoch && !engineError) send(units, attempt + 1);
+      if (current !== epoch) return;
+      // Units forgotten while they waited (removed, rescanned) stay gone.
+      const alive = units.filter((unit) => waiting.delete(unit));
+      if (engineError) {
+        // Paused meanwhile: back to the queue for the resume, if still in range; the rest
+        // queue again when the viewport reports them. Retries count from 0 again.
+        for (const unit of alive) if (visibleRoots.has(unit.root)) pending.add(unit);
+      } else send(alive, attempt + 1);
+      report();
     }, delay);
   }
 
@@ -536,6 +548,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
     }
     pending.delete(unit);
     sent.delete(unit);
+    waiting.delete(unit);
     settled.delete(unit);
     failed.delete(unit);
     queued.delete(unit);
@@ -584,6 +597,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
     byId.clear();
     pending.clear();
     sent.clear();
+    waiting.clear();
     settled.clear();
     failed.clear();
     queued.clear();
@@ -596,14 +610,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
     engineError = undefined;
   }
 
-  /** A failed start (config unreadable) leaves nothing behind. */
-  async function start(options: { engine?: Engine } = {}): Promise<PageState> {
-    try {
-      return await begin(options);
-    } catch (error) {
-      if (phase !== 'idle') await stop();
-      throw error;
-    }
+  function start(options: { engine?: Engine } = {}): Promise<PageState> {
+    return begin(options);
   }
 
   async function begin(options: { engine?: Engine }): Promise<PageState> {
@@ -620,57 +628,64 @@ export function createPageSession(deps: SessionDeps): PageSession {
     if (phase !== 'idle') return state();
     epoch += 1;
     const current = epoch;
-    clearState();
-    phase = 'running';
-    notify();
-    // A restore still fading out must finish before new styles go in.
-    if (stopping) await stopping;
-    if (current !== epoch) return state();
-    engine = options.engine;
-    deps.reportStatus('running');
-    config = await deps.getConfig();
-    if (current !== epoch) return state();
-    readStyle = deps.createReadStyle();
-    sheet = injectStyles(doc);
-    renderer = createRenderer({
-      win,
-      style: config.page.style,
-      target: config.language.target,
-      // Always the current reader: it is refreshed on every mutation round.
-      readStyle: (el) => readStyle(el),
-    });
-    await renderer.setMode(config.page.mode);
-    if (current !== epoch) return state();
-    // The mode now comes from the config, not the default: push it right away.
-    notify();
-    viewport = deps.createViewport(onViewportChunked);
-    win.addEventListener('scroll', onScroll, { capture: true, passive: true });
-    const units = await discoverUnits(doc.body, {
-      readStyle,
-      pace: createPacer(),
-      cancelled: () => current !== epoch,
-    });
-    if (current !== epoch) return state();
-    register(units);
-    stopWatching = watch({
-      root: doc.body,
-      isOwn,
-      onDirty: (elements) => {
-        // Fresh computed styles for each round: cached ones go stale on live pages.
-        readStyle = deps.createReadStyle();
-        void rescan(elements);
-      },
-    });
-    // Only the style follows the setting live; language and engine stay fixed for
-    // the session so one page never mixes two target languages.
-    let style = config.page.style;
-    stopWatchingConfig = deps.watchConfig?.((next) => {
-      if (current !== epoch || next.page.style === style) return;
-      style = next.page.style;
-      renderer?.setStyle(style);
-    });
-    scheduleFlush(true);
-    return state();
+    // A failed start (config unreadable) leaves nothing behind, but only its own: a
+    // stale start failing late must not stop the session that replaced it.
+    try {
+      clearState();
+      phase = 'running';
+      notify();
+      // A restore still fading out must finish before new styles go in.
+      if (stopping) await stopping;
+      if (current !== epoch) return state();
+      engine = options.engine;
+      deps.reportStatus('running');
+      config = await deps.getConfig();
+      if (current !== epoch) return state();
+      readStyle = deps.createReadStyle();
+      sheet = injectStyles(doc);
+      renderer = createRenderer({
+        win,
+        style: config.page.style,
+        target: config.language.target,
+        // Always the current reader: it is refreshed on every mutation round.
+        readStyle: (el) => readStyle(el),
+      });
+      await renderer.setMode(config.page.mode);
+      if (current !== epoch) return state();
+      // The mode now comes from the config, not the default: push it right away.
+      notify();
+      viewport = deps.createViewport(onViewportChunked);
+      win.addEventListener('scroll', onScroll, { capture: true, passive: true });
+      const units = await discoverUnits(doc.body, {
+        readStyle,
+        pace: createPacer(),
+        cancelled: () => current !== epoch,
+      });
+      if (current !== epoch) return state();
+      register(units);
+      stopWatching = watch({
+        root: doc.body,
+        isOwn,
+        onDirty: (elements) => {
+          // Fresh computed styles for each round: cached ones go stale on live pages.
+          readStyle = deps.createReadStyle();
+          void rescan(elements);
+        },
+      });
+      // Only the style follows the setting live; language and engine stay fixed for
+      // the session so one page never mixes two target languages.
+      let style = config.page.style;
+      stopWatchingConfig = deps.watchConfig?.((next) => {
+        if (current !== epoch || next.page.style === style) return;
+        style = next.page.style;
+        renderer?.setStyle(style);
+      });
+      scheduleFlush(true);
+      return state();
+    } catch (error) {
+      if (current === epoch) await stop();
+      throw error;
+    }
   }
 
   async function stop(): Promise<PageState> {

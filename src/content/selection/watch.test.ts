@@ -470,6 +470,53 @@ describe('the setting', () => {
     await vi.advanceTimersByTimeAsync(KEY_DELAY_MS);
     expect(t.onCandidate).toHaveBeenCalledOnce();
   });
+
+  it('keeps a setting pushed while the first read was out over the older read', async () => {
+    let answer!: (config: ConfigV1) => void;
+    const t = start({
+      getConfig: () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    });
+    select(para('Hello world, again'));
+    await release();
+    expect(t.getConfig).toHaveBeenCalledOnce();
+    t.pushConfig({ ...t.config, selection: { showDot: false } });
+    // The read started before the change: it still says the dot is on.
+    answer(t.config);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.onCandidate).not.toHaveBeenCalled();
+    select(para('Another selection here'));
+    await release();
+    expect(t.onCandidate).not.toHaveBeenCalled();
+    expect(t.getConfig).toHaveBeenCalledOnce();
+  });
+
+  it('after a failed read, subscribes and reads again instead of keeping a pushed setting', async () => {
+    let attempt = 0;
+    let fail!: (error: Error) => void;
+    const t = start({
+      getConfig: () => {
+        attempt += 1;
+        if (attempt > 1) return Promise.resolve(createDefaultConfig('zh-CN'));
+        return new Promise((_resolve, reject) => {
+          fail = reject;
+        });
+      },
+    });
+    select(para('Hello world, again'));
+    await release();
+    t.pushConfig({ ...t.config, selection: { showDot: false } });
+    fail(new Error('storage unavailable'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.unwatch).toHaveBeenCalledOnce();
+    document.dispatchEvent(new Event('keyup'));
+    await vi.advanceTimersByTimeAsync(KEY_DELAY_MS);
+    expect(t.watchConfig).toHaveBeenCalledTimes(2);
+    expect(t.getConfig).toHaveBeenCalledTimes(2);
+    expect(t.onCandidate).toHaveBeenCalledOnce();
+  });
 });
 
 describe('the grace period', () => {
