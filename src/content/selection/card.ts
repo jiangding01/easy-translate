@@ -33,7 +33,13 @@ import {
   placeDetached,
   type Size,
 } from './place';
-import { type CardPort, createCardRequests, MAX_SOURCE_LENGTH, type RequestEvent } from './request';
+import {
+  type CardPort,
+  createCardRequests,
+  MAX_SOURCE_LENGTH,
+  type RequestEvent,
+  wantsPhonetic,
+} from './request';
 import { createSpeech, type SpeechEnv } from './speech';
 import { CARD_CSS } from './styles';
 
@@ -129,6 +135,9 @@ const TIP_CLEAR_MS = 160;
 const TIP_GAP = 6;
 const TIP_EDGE = 8;
 const COPIED_MS = 1500;
+/** Shown on the button that was pressed when no voice could read (speech.ts). */
+const SPEECH_FAILED = '朗读没有响应，请稍后再试';
+const SPEECH_FAILED_MS = 3000;
 /** Selection changes the copy fallback causes are ignored this long (debounce included). */
 const QUIET_MS = 400;
 /**
@@ -274,12 +283,17 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
   let text = '';
   let disposition: TranslateDisposition = 'translated';
   let error: AppError | undefined;
+  /** The source word's British / American IPA, shown after it on the source line. */
+  let phonetic: { uk?: string; us?: string; lemma?: string } | undefined;
   let options: EngineOptions | undefined;
   let optionsFailed = false;
   let loadingEngines: Promise<void> | undefined;
   let voices: boolean | undefined;
   let copied = false;
   let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The button whose reading failed: its tip says so for a while. */
+  let speechFailed: HTMLElement | undefined;
+  let speechFailedTimer: ReturnType<typeof setTimeout> | undefined;
   let quietUntil = Number.NEGATIVE_INFINITY;
   /** The last trusted pointerup or keyup outside the card. */
   let gestureAt = Number.NEGATIVE_INFINITY;
@@ -411,12 +425,18 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
       node('span', { class: 'dg', 'aria-hidden': 'true' }),
       engine,
     );
-    const sourceText = node('span', { class: 'st' });
-    const sourceLine = button('src', 'source', { 'aria-expanded': 'false' });
-    sourceLine.append(
-      node('span', { class: 'k' }, '原文'),
-      sourceText,
-      icon(12, PATH.chevron, {}, 'sc'),
+    // The word is the expand button; the phonetic buttons sit beside it (never inside a
+    // button), the label and the chevron expand too.
+    const sourceText = button('st', 'source', { 'aria-expanded': 'false' });
+    const phoneticText = node('span', { class: 'ph' });
+    const chevron = icon(12, PATH.chevron, {}, 'sc');
+    chevron.setAttribute('data-act', 'source');
+    const sourceLine = node(
+      'div',
+      { class: 'src' },
+      node('span', { class: 'k', 'data-act': 'source' }, '原文'),
+      node('span', { class: 'sw' }, sourceText, phoneticText),
+      chevron,
     );
     const content = node('div');
     const inner = node('div', { class: 'bi' }, sourceLine, content);
@@ -477,6 +497,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
       inner,
       sourceLine,
       sourceText,
+      phoneticText,
       content,
       copy,
       speak,
@@ -922,6 +943,29 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     }
   }
 
+  /** "lemma 英 /…/ 🔈 美 /…/ 🔈", rebuilt only when the phonetic changes. */
+  function renderPhonetic(into: HTMLElement) {
+    const key = phonetic ? `${phonetic.lemma}|${phonetic.uk}|${phonetic.us}` : '';
+    if (into.getAttribute('data-k') === key) return;
+    into.setAttribute('data-k', key);
+    const blocks: HTMLElement[] = [];
+    if (phonetic?.lemma) blocks.push(node('span', { class: 'lm' }, phonetic.lemma));
+    for (const [accent, label, name] of [
+      ['uk', 'UK', '英式'],
+      ['us', 'US', '美式'],
+    ] as const) {
+      const ipa = phonetic?.[accent];
+      if (!ipa) continue;
+      const say = button('pb', 'say', {
+        'data-l': accent,
+        'aria-label': `${name}发音 /${ipa}/，点击朗读`,
+      });
+      say.append(node('span', { class: 'pl' }, label), `/${ipa}/`, icon(16, PATH.speak));
+      blocks.push(say);
+    }
+    into.replaceChildren(...blocks);
+  }
+
   function renderNotice(words: string) {
     els?.content.replaceChildren(node('p', { class: 'nc' }, words));
     textWrap = undefined;
@@ -930,9 +974,11 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
 
   function renderBody() {
     if (!els || !current) return;
-    const { sourceLine, sourceText, content } = els;
+    const { sourceLine, sourceText, phoneticText, content } = els;
     if (sourceText.textContent !== current.source) sourceText.textContent = current.source;
-    setAttr(sourceLine, 'aria-expanded', String(sourceOpen));
+    renderPhonetic(phoneticText);
+    setAttr(sourceText, 'aria-expanded', String(sourceOpen));
+    sourceLine.toggleAttribute('data-open', sourceOpen);
     if (status === 'loading') {
       textWrap = undefined;
       shown = '';
@@ -999,8 +1045,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     els.root.toggleAttribute('data-pin', pinned);
     // A showing tip follows its button's words ("已复制", "停止朗读").
     if (tipButton && els.tip.textContent) {
-      const words = tipButton.getAttribute('aria-label') ?? '';
-      if (words !== els.tip.textContent) placeTip();
+      if (tipWords(tipButton) !== els.tip.textContent) placeTip();
     }
   }
 
@@ -1095,6 +1140,13 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
   function onRequest(id: number, event: RequestEvent) {
     // A request the card moved on from (the request module drops those too).
     if (id !== 0 && id !== requests.current()) return;
+    if (event.kind === 'phonetic') {
+      // Beside the source, whatever the translation is doing.
+      phonetic = event;
+      renderBody();
+      measure();
+      return;
+    }
     error = undefined;
     if (event.kind === 'loading') {
       // First words, or a retry's reset: anything shown so far is void.
@@ -1133,10 +1185,21 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     status = 'loading';
     text = '';
     disposition = 'translated';
+    phonetic = undefined;
     copied = false;
     speech.stop();
     if (els) els.body.scrollTop = 0;
-    const args = { source: current.source, engine: engineOverride, force };
+    const args = {
+      source: current.source,
+      engine: engineOverride,
+      force,
+      phonetic: wantsPhonetic({
+        source: current.source,
+        target: targetLanguage(),
+        detected: reliableLanguage(current.detected),
+        pageLanguage: doc.documentElement.lang,
+      }),
+    };
     // Events can arrive synchronously (too long, loading): number them once it is known.
     let id = 0;
     const early: RequestEvent[] = [];
@@ -1190,6 +1253,8 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
   function take(snapshot: SelectionSnapshot | undefined, source: string): Current {
     unpark();
     speech.stop();
+    clearSpeechFailed();
+    phonetic = undefined;
     const rect = snapshot?.rect ?? { left: 0, top: 0, right: 0, bottom: 0 };
     const anchor = snapshot?.anchor ?? { x: 0, y: 0 };
     const released = snapshot?.pointer;
@@ -1296,6 +1361,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     if (view === 'gone' || closing) return;
     requests.cancel();
     speech.stop();
+    clearSpeechFailed();
     hideTip();
     clearTimeout(hoverTimer);
     if (current && remember) dismissed = { source: current.source, range: current.range };
@@ -1475,7 +1541,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
   function placeTip() {
     if (!els || !tipButton) return;
     const { tip } = els;
-    tip.textContent = tipButton.getAttribute('aria-label') ?? '';
+    tip.textContent = tipWords(tipButton);
     const box = tipButton.getBoundingClientRect();
     const w = tip.offsetWidth;
     const h = tip.offsetHeight;
@@ -1490,6 +1556,11 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     tip.style.left = `${round2(left)}px`;
     tip.style.top = `${round2(top)}px`;
     tip.style.opacity = '1';
+  }
+
+  /** A button's tip: its label, or that its reading just failed. */
+  function tipWords(target: HTMLElement): string {
+    return target === speechFailed ? SPEECH_FAILED : (target.getAttribute('aria-label') ?? '');
   }
 
   /** Fades out at once; the words stay until it is transparent, then go (no empty shell). */
@@ -1579,10 +1650,44 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
   }
 
   function toggleSpeech() {
-    if (!current || voices === false) return;
+    if (!current || voices === false || !els) return;
+    const button = els.speak;
     if (speech.speaking()) speech.stop();
-    else speech.speak(current.source, reliableLanguage(current.detected), () => renderFooter());
+    else {
+      // English reads in an American voice by default: detected as English, or a word the
+      // tables gave a reading for (single words rarely detect reliably).
+      const lang = reliableLanguage(current.detected);
+      const english = lang ? /^en\b/i.test(lang) : phonetic !== undefined;
+      speech.speak(current.source, english ? 'en-US' : lang, (failed) => spoken(button, failed));
+    }
     renderFooter();
+  }
+
+  /** Reads the word (or the headword whose reading is shown) in a British or American voice. */
+  function sayWord(button: HTMLElement) {
+    if (!current) return;
+    const lang = button.getAttribute('data-l') === 'us' ? 'en-US' : 'en-GB';
+    speech.speak(phonetic?.lemma ?? current.source, lang, (failed) => spoken(button, failed));
+    renderFooter();
+  }
+
+  /** A reading is over: the footer shows it; a failed one says so on the button pressed. */
+  function spoken(button: HTMLElement, failed: boolean) {
+    renderFooter();
+    if (!failed || !els || view !== 'card' || closing || !button.isConnected) return;
+    speechFailed = button;
+    announce(SPEECH_FAILED);
+    showTip(button);
+    clearTimeout(speechFailedTimer);
+    speechFailedTimer = setTimeout(() => {
+      speechFailed = undefined;
+      if (tipButton === button) hideTip();
+    }, SPEECH_FAILED_MS);
+  }
+
+  function clearSpeechFailed() {
+    clearTimeout(speechFailedTimer);
+    speechFailed = undefined;
   }
 
   function act(action: string, element: HTMLElement) {
@@ -1608,6 +1713,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
       translate();
     } else if (action === 'copy') void copy();
     else if (action === 'speak') toggleSpeech();
+    else if (action === 'say') sayWord(element);
     else if (action === 'pin') togglePin();
     else if (action === 'close') close();
   }
@@ -1762,6 +1868,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     clearTimeout(hoverTimer);
     clearTimeout(foldTimer);
     clearTimeout(copiedTimer);
+    clearSpeechFailed();
     if (followFrame) cancelRaf(followFrame);
     followFrame = 0;
     if (dragFrame) cancelRaf(dragFrame);

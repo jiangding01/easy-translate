@@ -369,8 +369,9 @@ export function createPageSession(deps: SessionDeps): PageSession {
       },
       (chunk) => {
         if (current !== epoch) return;
-        // Stream increments belong to selection cards; page requests never ask for them.
-        if ('delta' in chunk || 'reset' in chunk) return;
+        // Stream increments and phonetics belong to selection cards; page requests never
+        // ask for them.
+        if ('delta' in chunk || 'reset' in chunk || 'phonetic' in chunk) return;
         const unit = byId.get(chunk.id);
         if (!unit) return;
         sent.delete(unit);

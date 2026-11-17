@@ -9,6 +9,8 @@ import {
   type TranslateItem,
   type TranslateRequest,
 } from '@/lib/messaging/protocol';
+import type { LookupPhonetic } from '@/lib/phonetic/lookup';
+import { phoneticKey } from '@/lib/phonetic/word';
 import type { TranslationCache } from './cache';
 import { makeCacheKey } from './cache-key';
 import { createSameLanguageCheck, type DetectLanguage, detectWithBrowser } from './language';
@@ -35,6 +37,8 @@ export interface TranslateServiceDeps {
   checkPermission?: (engine: Engine, baseURL: string) => Promise<Result<unknown>>;
   /** Shared scheduler; by default the service creates its own. */
   scheduler?: Scheduler;
+  /** British / American IPA for `phonetic` requests; without it they get no phonetic chunk. */
+  lookupPhonetic?: LookupPhonetic;
 }
 
 export interface TranslateContext {
@@ -153,6 +157,12 @@ export function parseTranslateRequest(payload: unknown): TranslateRequest {
     if (force !== true) throw invalidPayloadError();
     request.force = true;
   }
+  const { phonetic } = payload;
+  if (phonetic !== undefined) {
+    if (phonetic !== true) throw invalidPayloadError();
+    // A per-word extra: a batch simply does not get it.
+    if (items.length === 1) request.phonetic = true;
+  }
   return request;
 }
 
@@ -183,6 +193,28 @@ export function createTranslateService(deps: TranslateServiceDeps): TranslateSer
   const checkPermission = deps.checkPermission ?? checkEngineEndpoint;
   const { cache } = deps;
   let sequence = 0;
+
+  /** Emits the phonetic chunk of a `phonetic` request, if any; never rejects. */
+  async function lookupPhoneticFor(
+    request: TranslateRequest,
+    emit: (chunk: TranslateChunk) => void,
+  ): Promise<void> {
+    const item = request.items[0];
+    if (!request.phonetic || !deps.lookupPhonetic || !item || request.items.length !== 1) return;
+    // The background's own word check: the flag alone is not trusted.
+    if (phoneticKey(item.text) === undefined) return;
+    try {
+      const hit = await deps.lookupPhonetic(item.text);
+      if (!hit || (!hit.uk && !hit.us)) return;
+      const phonetic: { uk?: string; us?: string } = {};
+      if (hit.uk) phonetic.uk = hit.uk;
+      if (hit.us) phonetic.us = hit.us;
+      emit(hit.lemma ? { id: item.id, phonetic, lemma: hit.lemma } : { id: item.id, phonetic });
+    } catch {
+      // A phonetic is an extra: it never fails the translation.
+    }
+  }
+
   /** In-flight requests per caller; an entry is removed when it drops to zero. */
   const inflight = new Map<string, number>();
 
@@ -211,7 +243,13 @@ export function createTranslateService(deps: TranslateServiceDeps): TranslateSer
       if ('error' in chunk) failed += 1;
       ctx.emit(chunk);
     };
-    const done = (): TranslateDone => ({ total: request.items.length, failed });
+    // Looked up alongside the translation, never before it; awaited before the request
+    // ends, so the chunk always precedes `done`.
+    const phonetic = lookupPhoneticFor(request, emit);
+    const done = async (): Promise<TranslateDone> => {
+      await phonetic;
+      return { total: request.items.length, failed };
+    };
 
     // 1. Preprocess: blank items are returned as they are, without a request.
     const pending: Pending[] = [];

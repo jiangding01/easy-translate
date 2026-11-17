@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { access, readFile } from 'node:fs/promises';
+import { access, readdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import vm from 'node:vm';
 
@@ -118,7 +118,34 @@ for (const file of contentFiles) {
   }
 }
 
+// The phonetic tables (src/lib/phonetic/lookup.ts) are read by the background only, shard by
+// shard: packaged with their sources and licenses, and never web accessible.
+const PHONETIC_DIRS = ['dict/gb', 'dict/us'];
+const PHONETIC_FILES = [
+  'dict/SOURCES.txt',
+  'dict/ECDICT-LICENSE.txt',
+  'dict/ipa-dict-LICENSE.txt',
+  'dict/cmudict-ipa-LICENSE.txt',
+  'dict/CMUdict-LICENSE.txt',
+];
+for (const dir of PHONETIC_DIRS) {
+  const shards = (await readdir(resolve(output, dir))).filter((name) => name.endsWith('.tsv'));
+  assert.ok(shards.length > 0, `${dir} has no shards`);
+}
+assert.match(
+  await readFile(resolve(output, 'dict/SOURCES.txt'), 'utf8'),
+  /^# phonetic tables · build-phonetics v\d+\n/,
+  'dict/SOURCES.txt must start with its "# phonetic tables · build-phonetics <version>" line',
+);
+assert.ok(
+  !manifest.web_accessible_resources.some((entry) =>
+    entry.resources.some((resource) => resource.startsWith('dict/') || resource.includes('*')),
+  ),
+  'No phonetic table may be a web accessible resource',
+);
+
 const files = [
+  ...PHONETIC_FILES,
   ...runtimeFiles,
   manifest.background.service_worker,
   manifest.action.default_popup,
