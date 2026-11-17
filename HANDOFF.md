@@ -43,28 +43,19 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
 
 ## 4. 当前代码状态
 
-- **main**：M0 地基（PR #1 已合并）。
-- **main**：M1 翻译核心已合并（PR #2，合并提交 `ea507ec`）；验收修复在 PR #3。依据 `docs/plans/m1-translation-core.md`（3b 的修订见第 4.11 节）。
-  - 后台：`src/lib/translate/`（provider、调度器、缓存、密钥、权限、翻译服务、管理消息、Port `et-translate`）。
-  - 配置：内置引擎字段，加最多 10 个自定义服务 `customProviders`，按条目 `add` / `update` / `remove` 写入；字段映射只在 `src/lib/config/engine-fields.ts` 一处。
-  - 页面共用：`src/lib/engine-view.ts`（引擎列表与就绪判断）、`src/lib/endpoint.ts`（地址与权限判断）、`src/lib/host-permission.ts`、`src/components/Select.tsx`（自研下拉）。
-  - 界面：设置页（通用 / 翻译服务）与工具栏面板，按「隐中生岛」加琥珀主题重做；token 在 `src/styles/tokens.css`，对比度由 `scripts/check-contrast.mjs` 校验。
-- **可用命令**：`npm run dev | build | lint | format | typecheck | test | check | check:contrast | check:size | zip`。`npm run check` 通过（M2b PR1 分支上为 550 个测试）。
-- **main**：M2a 整页翻译已合并（PR #4，合并提交 `29bc384`）；真机验收发现的分段边界问题在 PR #6 修复（`cbd7a3b`）；扩展图标「暗岛微光」在 PR #5 合并（`4b61fca`）。依据 `docs/plans/m2-page-translation.md`。
-  - 内容脚本：`src/content/`（`discover` 扫描与分段、`segment` 行内标记、`session` 视口队列与会话、`render` 渲染与动效、`anchor` 阅读位置、`mutations` 动态内容、`auto-start` 站点记忆、`viewport` IntersectionObserver）；`src/entrypoints/content.ts` 只在被唤起后才建立 Port 和观察器。
-  - 后台：快捷键 `translate-page`、图标状态点（`src/lib/action-icon.ts`）、`site.setAlways`（只接受扩展页面）。
-  - 界面：工具栏面板接通整页翻译；设置页「通用 · 译文」。
-- **分支 `feat/m2b-lazy-runtime`（M2b PR1，未提交）**：内容脚本拆成首屏引导 `src/entrypoints/content.ts` 加 `src/content/bootstrap.ts`（4.88KB），以及按需模块 `src/entrypoints/page-runtime.ts`（12.29KB，WXT unlisted script，动态 URL 的 WAR）。由 `src/content/loader.ts` 在第一次唤起时 `import()`。最低 Chrome 130；配置读取改用原生 storage。依据 [`docs/plans/m2b-lazy-runtime-and-isle.md`](docs/plans/m2b-lazy-runtime-and-isle.md)。
-- **main**：M2b 已合并：PR #8 按需加载（首屏 4.96KB），PR #9 灵岛（`src/content/isle/`，配置 `page.isleDock`，后台 `engine.options`）。
-- **分支 `feat/m3a-selection`（M3a，未提交）**：
-  - 后台流式：`stream`/`force`、delta/reset 帧、`text` 格式提示词与清洗、调度器的插队与交互预留名额；
-  - 第二个按需模块 `selection-runtime.js`（16.84KB / 18KB）；
-  - 引导层的选区观察（`src/content/selection/watch.ts`，首屏 6.81KB / 7KB）；
-  - 卡片（`src/content/selection/{extract,place,card,request,speech,styles}.ts`）；
-  - 右键菜单（`contextMenus` 权限）与快捷键 `translate-selection`（Alt+Shift+S / ⌃⇧S）；
-  - 配置 `selection.showDot`。
-  - 依据 [`docs/plans/m3a-selection.md`](docs/plans/m3a-selection.md)。
-- **还没有**：M3d 动态页与站点规则、M3b 段落级交互、M3c 指令台与灵岛键盘、M3e 本地引擎。
+- **main**（截至 PR #14）：
+  - **M0 地基**（PR #1）：质量门禁、配置仓库、类型化消息与 Port、设计 token。
+  - **M1 翻译核心**（PR #2、#3）：`src/lib/translate/`（provider、调度器、缓存、密钥、权限、翻译服务、Port `et-translate`）；最多 10 个自定义服务；设置页与工具栏面板（「隐中生岛」琥珀主题，`src/styles/tokens.css`，对比度由 `scripts/check-contrast.mjs` 校验）；页面共用 `src/lib/engine-view.ts`、`src/lib/endpoint.ts`、`src/components/Select.tsx`。
+  - **M2a 整页翻译**（PR #4、#6）与扩展图标（PR #5）：`src/content/`（扫描分段、视口队列与会话、渲染、动态内容、站点记忆）。
+  - **M2b**（PR #8、#9）：内容脚本只留首屏引导（`src/entrypoints/content.ts` + `src/content/bootstrap.ts`），整页会话是按需模块 `page-runtime.js`（动态 URL 的 WAR，最低 Chrome 130）；灵岛 `src/content/isle/`（配置 `page.isleDock`）。
+  - **测试修复**（PR #10、#11）：`cache.test.ts`、`service.test.ts` 的偶发失败。
+  - **M3a 划词**（PR #12）：后台流式（`stream`/`force`、delta/reset）；第二个按需模块 `selection-runtime.js`；选区观察 `src/content/selection/watch.ts`；卡片 `src/content/selection/`；右键菜单（`contextMenus` 权限）与快捷键 `translate-selection`；配置 `selection.showDot`；Google 原样回显不写缓存（`src/lib/translate/echo.ts`）；错误文案由后台附 `userMessage`。
+  - **面板设置入口**（PR #13）：齿轮加「设置」文字。
+  - **引擎供应商图标**（PR #14）：`src/lib/provider-icons.ts`（路径数据，lobe-icons MIT）、`src/components/ProviderIcon.tsx`、`src/content/svg-icon.ts`；卡片和灵岛的图标随 `engine.options` 下发。
+- **分支 `feat/phonetics-en`（PR #15，待合并）**：UK/US 音标（`src/lib/phonetic/`，数据 `public/dict/gb|us/` 分片，生成脚本 `scripts/build-phonetics.mjs`）、朗读卡死修复（`src/content/selection/speech.ts`）、底部朗读英文默认美音；`docs/reviews/` 收录 Codex 复核清单与核实结论。方案 [`docs/plans/phonetics-en.md`](docs/plans/phonetics-en.md)。
+- **体积（gzip，`npm run check:size`）**：content 6.99/7KB（**几乎没有余量，改引导层前先瘦身或经用户同意调预算**）、page-runtime 22.06/24KB、selection-runtime 18.63/19KB、background 57.11/60KB、popup 84.48/90KB、options 90.95/150KB；音标分片英 1.41MB、美 0.80MB（各 2MB，单片 40KB）。
+- **可用命令**：`npm run dev | build | lint | format | typecheck | test | check | check:contrast | check:size | zip`。`npm run check` 通过（音标分支上 69 个测试文件、1349 个用例）。
+- **还没有**：M3d 动态页与站点规则、M3b 段落级交互、M3c 指令台与灵岛键盘、M3e 本地引擎；i18n。
 
 ## 5. 批次状态与下一步
 
@@ -72,7 +63,7 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
 - **M0 留给后续批次的约定**：
   - 新增配置字段时，在 `schema.ts` 和 `defaults.ts` 中追加并给出默认值，不需要提升版本号。只有破坏性变更才提升 `schemaVersion` 并编写迁移。
   - Port 的调用方在切换会话前必须先 `cancelAll()`。
-  - popup 的 gzip 体积已用到 74/80KB，往 popup 新增依赖之前要先评估。
+  - popup 的 gzip 体积预算已调到 90KB（现 84.48KB），往 popup 新增依赖之前要先评估。
   - **M1 开工前必须决定（来自 M0 深度审查）**：
     - 配置路径对数组和 Record 只支持整体替换。如果 provider 设置按 id 存成 Record，两个页面同时修改不同的 provider 时，后写入的会覆盖先写入的。二选一：改成固定键的对象（每个 provider 一个分支），或者给 `ConfigChange` 增加按记录合并或删除的操作。
     - Port 客户端本身没有超时，请求超时和中止由 M1 的调度器负责。否则 handler 不返回时，请求会一直挂起，ping 也会让 SW 一直保活。
@@ -94,7 +85,7 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
   - **M2b**：方案见 [`docs/plans/m2b-lazy-runtime-and-isle.md`](docs/plans/m2b-lazy-runtime-and-isle.md)，拆成两个 PR。
     - **加载方式已定（2026-11-16，用户拍板）**：内容脚本 `import()` 声明了 `use_dynamic_url` 的单文件 WAR。后台注入被否决：`executeScript` 只认 `host_permissions`，内容脚本的 `matches` 不算，必须申请全部网站权限。调研和实测见方案附录 A。
       - 硬约束：按触发时机分包；按需文件是单文件、零 import；跨包只共享类型和无副作用的常量；灵岛等 UI 里**禁止出现任何扩展地址**（图片、CSS `url()`、字体），否则网页能截获动态地址；自定义品牌字体基本不可用。
-    - **PR1 按需加载与首屏瘦身**：已实现，check Deep 审查完成（方案附录 C）。自动验收 8 条通过，第 6 条和版面观感由用户手动确认通过（方案附录 D），待提交并开 PR。
+    - **PR1 按需加载与首屏瘦身**：已合并（PR #8）；check Deep 审查完成（方案附录 C）。自动验收 8 条通过，第 6 条和版面观感由用户手动确认通过（方案附录 D），待提交并开 PR。
     - **PR2 灵岛**：原型已确认（Design artifact 的 `IsleM2` 页），方案见第 9 节；已实现，check Deep 审查完成（附录 F）；自动验收和用户真机验收通过（附录 G）；真机验收后，按新原型把底部停靠改为右下角，并补上横幅抬升、避让对齐、提示框淡出和小点暗边的修复，已经过增量审查（附录 H），用户复验通过，已提交并开 PR。分支 `feat/m2b-isle`。新增配置 `page.isleDock`、后台只读消息 `engine.options`、会话的 `subscribe`，以及 `src/content/isle/`、`src/styles/tokens-isle.css`。
     - **已知限制**：WXT 内容脚本包装层仍会在 `document` 上派发带扩展 ID 的 CustomEvent，已知 ID 的网页可以借它确认扩展存在；`postMessage` 广播已关闭。带 `CSP: sandbox` 头的本地页面实测能正常加载按需模块并翻译，没有回归。
     - **另开事项**：`src/lib/translate/cache.test.ts` 的「keeps serving reads while a large eviction runs in batches」是时序敏感用例，全量跑时偶发失败。
@@ -106,12 +97,7 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
     - 用户已同意：方案 1.4 节的全部文案；首屏预算 7KB；`selection-runtime` 预算 18KB；卡片语言名与面板统一（English → 简体中文）。
     - **2026-11-17 已完成 check Deep 审查**：两位 Opus 审查者按领域分工，发现中等问题 4 项、低等若干项，全部修复并补了回归测试，共 924 个测试（方案附录 B）。首屏体积 6.96KB / 7KB，余量很小，以后往引导层加东西前要先评估。
     - **2026-11-17 真机反馈调整与增量审查已完成**（方案附录 D、E）：卡片以小点为锚、滚出视口后停放、避开灵岛、朗读选声、小点避开指针；体积方案选择错误文案改由后台提供（Fable 裁决），共 993 个测试。**首屏 content 只剩约 10 字节余量，下次改引导层前要先处理**（瘦身，或经用户同意调预算）。
-    - **原暂停点（已推进到用户复验）**：
-      1. 用 check skill 对 M3a 做 Deep 审查（安全与架构、对抗式），修复，必要时做增量审查；
-      2. 在 Chrome for Testing 上跑方案 6.2 节的自动验收（产物复制到临时目录，不碰 `.output`）；
-      3. 用户真机验收，包括快捷键冲突核对：GitHub、Google Docs、Notion、Outlook、维基百科；
-      4. 同步 CHANGELOG、README，以及方案的状态和审查附录；
-      5. 提交并开 PR。
+    - **已合并**（PR #12，2026-11-17）：用户真机验收通过；真机反馈修复见方案附录 F。
     - **英文单词音标：已实现**（2026-11-17，分支 `feat/phonetics-en`，方案 `docs/plans/phonetics-en.md`，下面是最初的规划，最终实现见方案第 9–11 节）：UK/US 双音标，英音来自 ECDICT（约 17.5 万词）、美音来自 ipa-dict en_US（约 11.7 万词），按前两个字母分片、按需加载；规则变形按音系规则推导读音；英式拼写在美音表按美式拼写互查；朗读修了 Chrome 在线声音的队列卡死；底部朗读对英文默认美音。selection-runtime 预算调到 19KB（用户批准）。
     - **原始规划：M3a 之后的小 PR：英语单词音标**（2026-11-17 用户拍板）：
       - 显示规则：只在选中单个英文单词时显示（允许连字符、撇号），在原文行单词后面显示 `/IPA/`；查不到就不显示。
