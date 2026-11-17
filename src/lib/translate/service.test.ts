@@ -481,8 +481,13 @@ describe('translate service: endpoint checks', () => {
 describe('translate service: per-port limit and cooldown scope', () => {
   it('rejects a ninth in-flight request on the same port with port-busy', async () => {
     const { providers, run, request } = setup();
-    providers.handlers.google = (texts, call) =>
-      texts.some((text) => text.startsWith('hang')) ? hang(texts, call) : googleOk(texts, call);
+    /** Texts whose fetch hangs, in the order the scheduler started them. */
+    const started: string[] = [];
+    providers.handlers.google = (texts, call) => {
+      if (!texts.some((text) => text.startsWith('hang'))) return googleOk(texts, call);
+      started.push(...texts);
+      return hang(texts, call);
+    };
     // Finished and failed requests free their slot.
     for (let i = 0; i < 8; i += 1) await run({ items: items(`done${i}`) });
     for (let i = 0; i < 8; i += 1) {
@@ -491,7 +496,8 @@ describe('translate service: per-port limit and cooldown scope', () => {
       });
     }
     const hanging = Array.from({ length: 8 }, (_, i) => request({ items: items(`hang${i}`) }));
-    await vi.waitFor(() => expect(providers.calls.length).toBeGreaterThanOrEqual(8 + 6));
+    // Six run at once (the mt concurrency); the other two wait in the queue.
+    await vi.waitFor(() => expect(started).toHaveLength(6));
     const callsBefore = providers.calls.length;
     const busy = await run({ items: items('extra') });
     expect(busy.outcome).toMatchObject({
@@ -499,13 +505,16 @@ describe('translate service: per-port limit and cooldown scope', () => {
       error: { code: 'rate-limit/port-busy', retryable: true },
     });
     expect(providers.calls).toHaveLength(callsBefore);
-    // A cancelled request frees its slot as well.
-    hanging[0]?.cancel();
-    expect(await hanging[0]?.outcome).toEqual({ status: 'cancelled' });
+    // A cancelled request frees its slot as well. Requests reach the scheduler in
+    // no fixed order (async hashing and cache reads), so cancel one whose fetch is
+    // running: cancelling a queued one has no fetch to abort.
+    const running = hanging[Number(started[0]?.slice('hang'.length))];
+    running?.cancel();
+    expect(await running?.outcome).toEqual({ status: 'cancelled' });
     await vi.waitFor(() => expect(providers.aborts()).toBe(1));
     await flush();
     const after = request({ items: items('after') });
-    for (const handle of hanging.slice(1)) handle.cancel();
+    for (const handle of hanging) if (handle !== running) handle.cancel();
     expect(await after.outcome).toEqual({ status: 'done', data: { total: 1, failed: 0 } });
     expect(after.chunks).toEqual([
       { id: 'i0', text: 'G:after', disposition: 'translated', cached: false },
