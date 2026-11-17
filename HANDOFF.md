@@ -138,6 +138,13 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
            - happy-dom 升到 21.0.4，修复一个高危漏洞。
 
            2026-11-17 用户把仓库改为公开，同一个 PR 里补上了 CodeQL（`codeql.yml`，`security-extended`，PR、push 和每周一运行）和 `actions/dependency-review-action@v5.0.0`（只在 PR 上运行，`fail-on-severity: high`）。需要用户在 Settings → Code security 里开启 Dependabot alerts。**仓库还没有 LICENSE**，待用户决定用哪个许可证。
+        - **开源（2026-11-17）**：用户把仓库改为公开。已完成：
+          - CI 补上 CodeQL 和 dependency review（PR #18）；
+          - main 规则集 `main protection`：禁止删除和强推，合并必须走 PR（审批数 0），并且必须通过 check、dependency-review、analyze 三项检查。以后需要强推时，先临时停用这个规则集；
+          - 开启 Dependabot alerts、私密漏洞报告、secret scanning 和 push protection；
+          - 历史中 15 个使用公司邮箱的提交已改写成个人邮箱，并已强推；旧提交在 PR #8–#21 中的引用已提交 GitHub 支持工单 #5016642 申请清除，等待答复；本仓库的 local git 邮箱已改为 noreply；
+          - 开源准备 PR：LICENSE（MIT）、THIRD_PARTY_NOTICES（扩展包内也附一份，由 check-build 校验两份一致）、SECURITY.md、package.json 的元数据、去掉文档中的本机路径。
+          - Dependabot：TypeScript 7 已设为忽略（`@dependabot ignore this major version`）。以后单独升级时，需要修改 `src/entrypoints/options/providers.ts:37` 的 Uint8Array 类型。
         4. **i18n 基础设施**：用 `@wxt-dev/i18n` / `chrome.i18n`，文案放到 `_locales`（zh-CN、en）；读屏的 aria-label 也一起改。开工前请用户拍板：界面语言跟随浏览器，还是在扩展内单独切换。**同批完成中英双语 README**：`README.md` 改成英文（默认显示），新增 `README.zh-CN.md`，两份文件顶部互加 `English | 简体中文` 链接；术语和 i18n 的英文文案统一。
         5. **改名**（用户已定）：中文名 **译屿**，英文名 **Islet Translate**，`short_name` 用「Islet」/「译屿」。查重记录：「译屿」没有发现重名；「Islet Translate」也没有，但 Chrome 商店里有两个只叫「Islet」的扩展（一个日记、一个下载提示），都不是翻译类；Isleglow 已被 Cay Skin 的 Isle Glow 等占用，放弃。需要改的地方：manifest 的 `name`/`short_name`、面板和设置页标题、README、包名（另议）。图标沿用「暗岛微光」，微调成小岛的意象，**先在原型里新建画板出 2–3 个方案给用户挑**。放在发 v0.2.0 之前，和双语 README 一起做。
         6. **冒烟 e2e**（i18n 之后）：用 Playwright 加载构建产物，在本地测试页上验证三条主流程：整页翻译出译文、划词出现小点和卡片、面板能打开。翻译请求用 mock。

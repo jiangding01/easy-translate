@@ -1,6 +1,6 @@
 # FluentRead 调研：M3 相关机制（2026-11-16）
 
-> 来源：本地项目 `/Users/jiangding/FluentRead`，由 Sonnet 子代理只读调研。只借鉴思路，不搬代码。下文路径相对于该项目，`S` 代表 `src/features/selection-translation`。
+> 来源：[FluentRead](https://github.com/FluentRead/FluentRead) 的本地克隆，由 Sonnet 子代理只读调研。只借鉴思路，不搬代码。下文路径相对于该项目，`S` 代表 `src/features/selection-translation`。
 > 用途：为 M3a–M3e 各批次做方案时查阅。行号是调研当时的快照，引用前要重新核对。
 
 ## 1. 划词翻译
