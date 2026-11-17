@@ -13,15 +13,41 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  check:
+  # New or upgraded dependencies in a pull request: a known high-severity issue blocks.
+  dependency-review:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@v5.0.0
+        with:
+          fail-on-severity: high
+
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Later steps never get a token that can push to the repository.
+          persist-credentials: false
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # Dependencies that ship inside the extension: a known high-severity issue blocks.
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+      # Build and test tools: reported only, since a fix often waits on upstream.
+      - name: Audit all dependencies (report only)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+      - name: Verify registry signatures
+        run: npm audit signatures
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run check:contrast
@@ -29,3 +55,12 @@ jobs:
       - run: npm run build
       - run: npm run check:build
       - run: npm run check:size
+      # The verified build, ready to load: download it from the run's Summary page,
+      # unzip, then "Load unpacked" in chrome://extensions.
+      - name: Upload the built extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: easy-translate-chrome-${{ github.sha }}
+          path: .output/chrome-mv3
+          if-no-files-found: error
+          retention-days: 7
