@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createSpeech, pickVoice, type SynthLike, VOICES_WAIT_MS } from './speech';
+import {
+  createSpeech,
+  pickVoice,
+  SETTLE_MS,
+  START_TIMEOUT_MS,
+  type SynthLike,
+  speakingLimit,
+  VOICES_WAIT_MS,
+} from './speech';
 
 interface FakeUtterance {
   text: string;
@@ -7,6 +15,7 @@ interface FakeUtterance {
   onstart: (() => void) | null;
   onend: (() => void) | null;
   onerror: ((event: { error: string }) => void) | null;
+  onboundary: ((event: { charIndex: number }) => void) | null;
   voice?: unknown;
 }
 
@@ -60,6 +69,7 @@ function fakeSynth(voices: unknown[] = ['voice']) {
         onstart: null,
         onend: null,
         onerror: null,
+        onboundary: null,
       }) as unknown as SpeechSynthesisUtterance,
   });
   return { synth, speech };
@@ -71,10 +81,12 @@ afterEach(() => {
 
 describe('speech (plan 4.5 rule 4)', () => {
   it('reads the source with the detected language, or none', () => {
+    vi.useFakeTimers();
     const { synth, speech } = fakeSynth();
     speech.speak('A paper map', 'en', () => {});
     expect(synth.queue[0]).toMatchObject({ text: 'A paper map', lang: 'en' });
     speech.speak('map', undefined, () => {});
+    vi.advanceTimersByTime(SETTLE_MS);
     expect(synth.queue.at(-1)?.lang).toBe('');
   });
 
@@ -137,6 +149,7 @@ describe('speech (plan 4.5 rule 4)', () => {
   });
 
   it('stops its own utterance while it speaks, and reports the end', () => {
+    vi.useFakeTimers();
     const { synth, speech } = fakeSynth();
     const onEnd = vi.fn();
     speech.speak('mine', 'en', onEnd);
@@ -145,9 +158,11 @@ describe('speech (plan 4.5 rule 4)', () => {
     speech.stop();
     expect(synth.cancel).toHaveBeenCalledOnce();
     speech.speak('again', 'en', onEnd);
+    vi.advanceTimersByTime(SETTLE_MS);
     synth.start();
     synth.end();
     expect(onEnd).toHaveBeenCalledOnce();
+    expect(onEnd).toHaveBeenCalledWith(false);
     expect(speech.speaking()).toBe(false);
     // Nothing of ours is speaking: stop leaves the page's speech alone.
     synth.speaking = true;
@@ -199,6 +214,16 @@ describe('pickVoice (scheme A)', () => {
     expect(pickVoice([google, remote], 'en-US', { local: true })).toBeUndefined();
   });
 
+  it('never a macOS novelty voice, even the default one', () => {
+    const novelty = ['Albert', 'Bad News', 'Bells', 'Bubbles', 'Good News', 'Whisper', 'Zarvox'];
+    const voices = novelty.map((name) => voice(name, 'en-US', true, name === 'Bells'));
+    expect(pickVoice(voices, 'en-US')).toBeUndefined();
+    expect(pickVoice([...voices, plain], 'en-US')).toBe(plain);
+    expect(pickVoice([...voices, google, plain], 'en-US', { local: true })).toBe(plain);
+    // Only the name itself: another voice merely starting with the same letters is kept.
+    expect(pickVoice([voice('Albertine', 'en-US')], 'en-US')?.name).toBe('Albertine');
+  });
+
   it('leaves it to the browser when nothing fits', () => {
     expect(pickVoice([remote], 'en-US')).toBeUndefined();
     expect(pickVoice([], 'en')).toBeUndefined();
@@ -223,11 +248,13 @@ describe('pickVoice (scheme A)', () => {
 
 describe('speak picks the voice', () => {
   it('sets the voice for a reliable language, none without one', () => {
+    vi.useFakeTimers();
     const enhanced = voice('Ava (Enhanced)', 'en-US');
     const { speech, synth } = fakeSynth([voice('Samantha', 'en-US'), enhanced]);
     speech.speak('A paper map', 'en', () => {});
     expect((synth.queue[0] as unknown as { voice?: unknown }).voice).toBe(enhanced);
     speech.speak('map', undefined, () => {});
+    vi.advanceTimersByTime(SETTLE_MS);
     const last = synth.queue.at(-1) as unknown as { voice?: unknown; lang: string };
     expect(last.voice).toBeUndefined();
     expect(last.lang).toBe('');
@@ -265,6 +292,7 @@ describe('an online voice that fails (no network)', () => {
     synth.fail('synthesis-failed');
     expect(synth.speak).toHaveBeenCalledTimes(2);
     expect(onEnd).toHaveBeenCalledOnce();
+    expect(onEnd).toHaveBeenCalledWith(true);
     expect(speech.speaking()).toBe(false);
   });
 
@@ -282,6 +310,8 @@ describe('an online voice that fails (no network)', () => {
       synth.fail(error);
       expect(synth.speak).toHaveBeenCalledOnce();
       expect(onEnd).toHaveBeenCalledOnce();
+      // Cut off is over, not failed.
+      expect(onEnd).toHaveBeenCalledWith(error === 'network');
     }
   });
 
@@ -305,5 +335,176 @@ describe('an online voice that fails (no network)', () => {
     synth.fail('network');
     expect(synth.speak).toHaveBeenCalledOnce();
     expect(onEnd).not.toHaveBeenCalled();
+  });
+});
+
+describe('Chrome stalls on an online voice spoken right after cancel', () => {
+  const google = voice('Google UK English Female', 'en-GB', false);
+  const daniel = voice('Daniel', 'en-GB');
+
+  it('waits SETTLE_MS after its own cancel before speaking the next, shown as speaking', () => {
+    vi.useFakeTimers();
+    const { synth, speech } = fakeSynth([google, daniel]);
+    speech.speak('map', 'en-GB', () => {});
+    synth.start();
+    const onEnd = vi.fn();
+    speech.speak('map', 'en-US', onEnd);
+    expect(synth.cancel).toHaveBeenCalledOnce();
+    expect(synth.speak).toHaveBeenCalledOnce();
+    expect(speech.speaking()).toBe(true);
+    vi.advanceTimersByTime(SETTLE_MS - 1);
+    expect(synth.speak).toHaveBeenCalledOnce();
+    vi.advanceTimersByTime(1);
+    expect(synth.speak).toHaveBeenCalledTimes(2);
+    expect(synth.queue).toEqual([expect.objectContaining({ lang: 'en-US' })]);
+    synth.start();
+    synth.end();
+    expect(onEnd).toHaveBeenCalledWith(false);
+  });
+
+  it('stopped while settling: never spoken', () => {
+    vi.useFakeTimers();
+    const { synth, speech } = fakeSynth([google]);
+    speech.speak('map', 'en-GB', () => {});
+    synth.start();
+    const onEnd = vi.fn();
+    speech.speak('map', 'en-GB', onEnd);
+    speech.stop();
+    expect(speech.speaking()).toBe(false);
+    vi.advanceTimersByTime(START_TIMEOUT_MS * 2);
+    expect(synth.speak).toHaveBeenCalledOnce();
+    expect(synth.cancel).toHaveBeenCalledOnce();
+    expect(onEnd).not.toHaveBeenCalled();
+  });
+
+  it('a quick second click cancels the first still queued with only ours: read once', () => {
+    vi.useFakeTimers();
+    const { synth, speech } = fakeSynth([google]);
+    speech.speak('map', 'en-GB', () => {});
+    // Not started yet (an online voice takes a moment): ours alone in the queue.
+    speech.speak('map', 'en-US', () => {});
+    expect(synth.cancel).toHaveBeenCalledOnce();
+    expect(synth.queue).toHaveLength(0);
+    vi.advanceTimersByTime(SETTLE_MS);
+    expect(synth.queue).toEqual([expect.objectContaining({ lang: 'en-US' })]);
+  });
+
+  it('never started with only ours queued: cancelled, then read with the local voice', () => {
+    vi.useFakeTimers();
+    const { synth, speech } = fakeSynth([google, daniel]);
+    const onEnd = vi.fn();
+    speech.speak('map', 'en-GB', onEnd);
+    vi.advanceTimersByTime(START_TIMEOUT_MS - 1);
+    expect(synth.cancel).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(synth.cancel).toHaveBeenCalledOnce();
+    expect(speech.speaking()).toBe(true);
+    vi.advanceTimersByTime(SETTLE_MS);
+    expect(synth.speak).toHaveBeenCalledTimes(2);
+    expect(synth.queue[0]?.voice).toBe(daniel);
+    synth.start();
+    synth.end();
+    expect(onEnd).toHaveBeenCalledOnce();
+    expect(onEnd).toHaveBeenCalledWith(false);
+  });
+
+  it('the second attempt stalling too, or no local voice: given up as failed', () => {
+    vi.useFakeTimers();
+    for (const voices of [[google, daniel], [google], [daniel], []]) {
+      const { synth, speech } = fakeSynth(voices);
+      const onEnd = vi.fn();
+      speech.speak('map', 'en-GB', onEnd);
+      vi.advanceTimersByTime((START_TIMEOUT_MS + SETTLE_MS) * 2);
+      // At most two attempts in all; only an online voice gets the second.
+      expect(synth.speak).toHaveBeenCalledTimes(voices.length === 2 ? 2 : 1);
+      expect(onEnd).toHaveBeenCalledOnce();
+      expect(onEnd).toHaveBeenCalledWith(true);
+      expect(speech.speaking()).toBe(false);
+    }
+  });
+
+  it('the page’s speech ahead of ours: waits for it, never cancels', () => {
+    vi.useFakeTimers();
+    const { synth, speech } = fakeSynth([google, daniel]);
+    synth.speaking = true;
+    const onEnd = vi.fn();
+    speech.speak('map', 'en-GB', onEnd);
+    vi.advanceTimersByTime(START_TIMEOUT_MS * 5);
+    expect(synth.cancel).not.toHaveBeenCalled();
+    expect(speech.speaking()).toBe(true);
+    // Its turn comes at last.
+    synth.start();
+    synth.end();
+    expect(onEnd).toHaveBeenCalledWith(false);
+  });
+
+  it('stuck behind ours: a new reading cancels it rather than queueing behind it', () => {
+    vi.useFakeTimers();
+    const { synth, speech } = fakeSynth([google]);
+    speech.speak('map', 'en-GB', () => {});
+    // Chrome reports it speaking though it never starts.
+    synth.speaking = true;
+    speech.stop();
+    expect(synth.cancel).toHaveBeenCalledOnce();
+    speech.speak('road', 'en-GB', () => {});
+    vi.advanceTimersByTime(SETTLE_MS);
+    expect(synth.queue).toEqual([expect.objectContaining({ text: 'road' })]);
+  });
+
+  it('started but never ended: given up after its length limit, not as a failure', () => {
+    vi.useFakeTimers();
+    for (const pending of [false, true]) {
+      const { synth, speech } = fakeSynth([daniel]);
+      const onEnd = vi.fn();
+      speech.speak('map', 'en-GB', onEnd);
+      synth.start();
+      vi.advanceTimersByTime(speakingLimit('map') - 1);
+      expect(onEnd).not.toHaveBeenCalled();
+      // The page queued speech behind ours meanwhile: that is left alone.
+      synth.pending = pending;
+      vi.advanceTimersByTime(1);
+      expect(onEnd).toHaveBeenCalledWith(false);
+      expect(speech.speaking()).toBe(false);
+      expect(synth.cancel).toHaveBeenCalledTimes(pending ? 0 : 1);
+      expect(synth.speak).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('each word the voice reports pushes the length limit back', () => {
+    vi.useFakeTimers();
+    const text = 'A paper map never tells you where to go.';
+    const { synth, speech } = fakeSynth([daniel]);
+    const onEnd = vi.fn();
+    speech.speak(text, 'en-GB', onEnd);
+    synth.start();
+    vi.advanceTimersByTime(speakingLimit(text) - 100);
+    synth.queue[0]?.onboundary?.({ charIndex: 30 });
+    vi.advanceTimersByTime(speakingLimit(text.slice(30)) - 1);
+    expect(onEnd).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onEnd).toHaveBeenCalledWith(false);
+  });
+
+  it('the length limit: a base, more per character for CJK, at most a minute', () => {
+    expect(speakingLimit('map')).toBe(4000 + 3 * 120);
+    expect(speakingLimit('地图')).toBe(4000 + 6 * 120);
+    expect(speakingLimit('x'.repeat(2000))).toBe(60_000);
+  });
+
+  it('a normal reading sets off no watchdog and cancels nothing', () => {
+    vi.useFakeTimers();
+    const { synth, speech } = fakeSynth([google, daniel]);
+    const onEnd = vi.fn();
+    speech.speak('map', 'en-GB', onEnd);
+    vi.advanceTimersByTime(1200);
+    synth.start();
+    vi.advanceTimersByTime(2500);
+    synth.end();
+    vi.advanceTimersByTime(120_000);
+    expect(onEnd).toHaveBeenCalledOnce();
+    expect(onEnd).toHaveBeenCalledWith(false);
+    expect(synth.cancel).not.toHaveBeenCalled();
+    expect(synth.speak).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

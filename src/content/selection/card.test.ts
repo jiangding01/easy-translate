@@ -17,6 +17,7 @@ import { type CardEnv, createSelectionCard } from './card';
 import { extractText } from './extract';
 import { normalizeSelectionText } from './open';
 import type { CardPort } from './request';
+import { SETTLE_MS, START_TIMEOUT_MS } from './speech';
 
 const ENGINES: EngineOptions = {
   configured: 'deepseek',
@@ -355,7 +356,7 @@ describe('hard rules (plan 1.2)', () => {
     t.sent[0]?.chunk(final(SENTENCE, 'same-language'));
     expect(t.$('.tw')).toBeNull();
     expect(t.$('.nc')?.textContent).toBe('这段文字已经是 简体中文，不需要翻译。');
-    expect(t.$('.src')?.getAttribute('aria-expanded')).toBe('true');
+    expect(t.$('.st')?.getAttribute('aria-expanded')).toBe('true');
     expect(t.$('[data-act="copy"]')?.getAttribute('aria-disabled')).toBe('true');
     t.click('[data-act="retry"]');
     t.card.open({ source: '12345', selection: snapshotOf(p, 0, 5) });
@@ -1334,6 +1335,18 @@ describe('card', () => {
     expect(t.$('[data-act="copy"]')?.getAttribute('aria-label')).toBe('复制译文');
   });
 
+  it('reads a source in another language in its own language', async () => {
+    const { p } = page();
+    const t = setup({
+      detection: { isReliable: true, languages: [{ language: 'fr', percentage: 97 }] },
+    });
+    t.card.open({ source: 'Bonjour tout le monde', selection: snapshotOf(p) });
+    await t.advance(0);
+    t.click('[data-act="speak"]');
+    expect(t.synth.speak.mock.calls[0]?.[0]).toMatchObject({ lang: 'fr' });
+    t.card.dispose();
+  });
+
   it('reads the source aloud and stops on close; greys out without voices', async () => {
     const { p } = page();
     const t = setup();
@@ -1342,7 +1355,8 @@ describe('card', () => {
     t.click('[data-act="speak"]');
     expect(t.synth.speak).toHaveBeenCalledOnce();
     const utterance = t.synth.speak.mock.calls[0]?.[0] as unknown as { text: string; lang: string };
-    expect(utterance).toMatchObject({ text: SENTENCE, lang: 'en' });
+    // English reads in an American voice by default.
+    expect(utterance).toMatchObject({ text: SENTENCE, lang: 'en-US' });
     expect(t.$('[data-act="speak"]')?.getAttribute('aria-label')).toBe('停止朗读');
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(t.synth.cancel).toHaveBeenCalledOnce();
@@ -1406,5 +1420,220 @@ describe('card', () => {
     t.card.showDot({ source: '地图', rect: RECT, anchor: { x: 0, y: 0 }, range });
     await t.advance(0);
     expect(t.sent).toHaveLength(1);
+  });
+});
+
+describe('phonetic', () => {
+  /** Opens the card for "map" through the dot, so the config and the detection are known. */
+  async function openWord(t: ReturnType<typeof setup>, start = 8, end = 11) {
+    const { p } = page();
+    await dot(t, snapshotOf(p, start, end));
+    t.click('.zn');
+  }
+  const shown = (t: ReturnType<typeof setup>) => t.$('.ph')?.textContent;
+
+  afterEach(() => {
+    document.documentElement.removeAttribute('lang');
+  });
+
+  /** The phonetic buttons' accessible names. */
+  const labels = (t: ReturnType<typeof setup>) =>
+    [...(t.$('.ph')?.querySelectorAll('.pb') ?? [])].map((b) => b.getAttribute('aria-label'));
+
+  it('asks for it for a single English word, and shows both accents after the word', async () => {
+    const t = setup();
+    await openWord(t);
+    expect(t.sent[0]?.payload.phonetic).toBe(true);
+    expect(shown(t)).toBe('');
+    t.sent[0]?.chunk({ id: 's', phonetic: { uk: 'mæp', us: 'mæp' } });
+    expect(shown(t)).toBe('UK/mæp/US/mæp/');
+    expect(labels(t)).toEqual(['英式发音 /mæp/，点击朗读', '美式发音 /mæp/，点击朗读']);
+    expect(t.$('.st')?.textContent).toBe('map');
+    // The word and the phonetic share one wrapping box; the word is still the expand button.
+    expect(t.$('.sw')?.firstElementChild).toBe(t.$('.st'));
+    expect(t.$('.st')?.getAttribute('aria-expanded')).toBe('false');
+    t.sent[0]?.chunk(final('地图'));
+    expect(shown(t)).toBe('UK/mæp/US/mæp/');
+    expect(t.$('.tx')?.textContent).toBe('地图');
+  });
+
+  it('shows only the accent it has', async () => {
+    const t = setup();
+    await openWord(t);
+    t.sent[0]?.chunk({ id: 's', phonetic: { us: 'mæp' } });
+    expect(shown(t)).toBe('US/mæp/');
+    expect(labels(t)).toEqual(['美式发音 /mæp/，点击朗读']);
+  });
+
+  it('shows one that arrives after the translation, with its headword', async () => {
+    document.body.innerHTML = '<p id="p">Two maps.</p>';
+    const t = setup();
+    const text = (document.getElementById('p') as HTMLElement).firstChild as Text;
+    await dot(t, snapshotOf(text, 4, 8));
+    t.click('.zn');
+    expect(t.sent[0]?.payload).toMatchObject({ items: [{ text: 'maps' }], phonetic: true });
+    t.sent[0]?.chunk(final('地图'));
+    t.sent[0]?.chunk({ id: 's', phonetic: { uk: 'mæp', us: 'mæp' }, lemma: 'map' });
+    expect(shown(t)).toBe('mapUK/mæp/US/mæp/');
+    expect(t.$('.lm')?.textContent).toBe('map');
+    expect(t.$('.tx')?.textContent).toBe('地图');
+  });
+
+  it('reads the word in a British or an American voice, stopping the last one first', async () => {
+    const t = setup();
+    await openWord(t);
+    t.sent[0]?.chunk({ id: 's', phonetic: { uk: 'mæp', us: 'mæp' } });
+    t.click('.pb[data-l="uk"]');
+    expect(t.synth.speak).toHaveBeenCalledTimes(1);
+    expect(t.synth.speak.mock.calls[0]?.[0]).toMatchObject({ text: 'map', lang: 'en-GB' });
+    t.click('.pb[data-l="us"]');
+    expect(t.synth.cancel).toHaveBeenCalledTimes(1);
+    // Chrome stalls on a voice spoken right after cancel: it waits a moment.
+    expect(t.synth.speak).toHaveBeenCalledTimes(1);
+    await t.advance(SETTLE_MS);
+    expect(t.synth.speak.mock.calls[1]?.[0]).toMatchObject({ text: 'map', lang: 'en-US' });
+    // The footer's button still reads the source, and shows the word being read.
+    expect(t.$('[data-act="speak"]')?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('a reading no voice answers says so on the button pressed, for three seconds', async () => {
+    const t = setup();
+    await openWord(t);
+    t.sent[0]?.chunk({ id: 's', phonetic: { uk: 'mæp', us: 'mæp' } });
+    // The voice never starts (Chrome's stall, or an online voice with no answer).
+    t.synth.speak.mockImplementation(() => {});
+    const tip = () => t.$('.tp') as HTMLElement;
+    for (const selector of ['.pb[data-l="us"]', '[data-act="speak"]']) {
+      t.click(selector);
+      expect(t.$('[data-act="speak"]')?.getAttribute('aria-pressed')).toBe('true');
+      await t.advance(START_TIMEOUT_MS);
+      expect(t.$('[data-act="speak"]')?.getAttribute('aria-pressed')).toBe('false');
+      expect(tip().textContent).toBe('朗读没有响应，请稍后再试');
+      expect(tip().style.opacity).toBe('1');
+      t.run();
+      expect(t.$('[role="status"]')?.textContent).toBe('朗读没有响应，请稍后再试');
+      await t.advance(2900);
+      expect(tip().style.opacity).toBe('1');
+      await t.advance(100);
+      expect(tip().style.opacity).toBe('0');
+      await t.advance(SETTLE_MS);
+    }
+    // The footer's tip is its own label again.
+    t.$('[data-act="speak"]')?.dispatchEvent(new PointerEvent('pointerenter'));
+    await t.advance(1000);
+    expect(tip().textContent).toBe('朗读原文');
+  });
+
+  it('a reading that ends normally shows no tip', async () => {
+    const t = setup();
+    await openWord(t);
+    t.sent[0]?.chunk({ id: 's', phonetic: { uk: 'mæp' } });
+    t.click('.pb[data-l="uk"]');
+    const utterance = t.synth.speak.mock.calls[0]?.[0];
+    utterance?.onend?.({} as SpeechSynthesisEvent);
+    expect(t.$('[data-act="speak"]')?.getAttribute('aria-pressed')).toBe('false');
+    await t.advance(START_TIMEOUT_MS * 2);
+    expect((t.$('.tp') as HTMLElement).textContent).toBe('');
+    expect(t.synth.cancel).not.toHaveBeenCalled();
+  });
+
+  it('reads the headword when its readings are the ones shown', async () => {
+    document.body.innerHTML = '<p id="p">Two maps.</p>';
+    const t = setup();
+    const text = (document.getElementById('p') as HTMLElement).firstChild as Text;
+    await dot(t, snapshotOf(text, 4, 8));
+    t.click('.zn');
+    t.sent[0]?.chunk({ id: 's', phonetic: { us: 'mæp' }, lemma: 'map' });
+    t.click('.pb[data-l="us"]');
+    expect(t.synth.speak.mock.calls[0]?.[0]).toMatchObject({ text: 'map', lang: 'en-US' });
+  });
+
+  it('keeps the phonetic buttons out of the tab order like every card button (plan 4.3)', async () => {
+    const t = setup();
+    await openWord(t);
+    t.sent[0]?.chunk({ id: 's', phonetic: { uk: 'mæp' } });
+    const say = t.$('.pb') as HTMLButtonElement;
+    expect(say.tagName).toBe('BUTTON');
+    expect(say.getAttribute('tabindex')).toBe('-1');
+    expect(say.getAttribute('aria-label')).toBe('英式发音 /mæp/，点击朗读');
+  });
+
+  it('clears it on a retranslation, and asks again', async () => {
+    const t = setup();
+    await openWord(t);
+    t.sent[0]?.chunk({ id: 's', phonetic: { uk: 'mæp' } });
+    t.sent[0]?.chunk(final('地图'));
+    t.click('[data-act="engine"]');
+    await t.advance(0);
+    t.click('[data-id="google"]');
+    expect(shown(t)).toBe('');
+    expect(t.sent[1]?.payload).toMatchObject({ engine: 'google', phonetic: true });
+    // The old request's late phonetic is not shown on the new one.
+    t.sent[0]?.chunk({ id: 's', phonetic: { uk: 'old' } });
+    expect(shown(t)).toBe('');
+  });
+
+  it('clears it for a new selection on a pinned card', async () => {
+    const { p, q } = page();
+    const t = setup();
+    await dot(t, snapshotOf(p, 8, 11));
+    t.click('.zn');
+    t.sent[0]?.chunk({ id: 's', phonetic: { uk: 'mæp' } });
+    t.click('[data-act="pin"]');
+    document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    t.card.showDot(snapshotOf(q, 0, 8));
+    await t.advance(0);
+    expect(t.sent).toHaveLength(2);
+    expect(t.sent[1]?.payload.phonetic).toBeUndefined();
+    expect(shown(t)).toBe('');
+  });
+
+  it('does not ask for a sentence, an English target or a word detected as another language', async () => {
+    const sentence = setup();
+    const { p } = page();
+    await dot(sentence, snapshotOf(p));
+    sentence.click('.zn');
+    expect(sentence.sent[0]?.payload.phonetic).toBeUndefined();
+    sentence.card.dispose();
+
+    // Opened from the menu once the config is read: only the target says no.
+    document.documentElement.lang = 'en';
+    const english = setup({
+      config: (config) => {
+        config.language.target = 'en';
+      },
+    });
+    await english.advance(0);
+    english.card.open({ source: 'map', selection: snapshotOf(page().p, 8, 11) });
+    expect(english.sent[0]?.payload.phonetic).toBeUndefined();
+    english.card.dispose();
+    const chinese = setup();
+    await chinese.advance(0);
+    chinese.card.open({ source: 'map', selection: snapshotOf(page().p, 8, 11) });
+    expect(chinese.sent[0]?.payload.phonetic).toBe(true);
+    chinese.card.dispose();
+
+    const french = setup({
+      detection: { isReliable: true, languages: [{ language: 'fr', percentage: 99 }] },
+    });
+    await openWord(french);
+    expect(french.sent[0]?.payload.phonetic).toBeUndefined();
+  });
+
+  it('falls back to the page language when the detection is not reliable', async () => {
+    // A Chinese page (Google results with a Chinese interface): the word is English.
+    document.documentElement.lang = 'zh-CN';
+    const chinese = setup({ detection: { isReliable: false, languages: [] } });
+    await openWord(chinese);
+    expect(chinese.sent[0]?.payload.phonetic).toBe(true);
+    chinese.card.dispose();
+
+    // A French page: the word may be French.
+    document.documentElement.lang = 'fr';
+    const french = setup({ detection: { isReliable: false, languages: [] } });
+    await openWord(french);
+    expect(french.sent[0]?.payload.phonetic).toBeUndefined();
+    french.card.dispose();
+    document.documentElement.lang = '';
   });
 });

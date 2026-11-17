@@ -199,7 +199,7 @@ describe('page session: happy path', () => {
     expect(document.body.innerHTML).toBe(before);
   });
 
-  it('ignores stream delta and reset chunks and renders only the final one', async () => {
+  it('ignores stream delta, reset and phonetic chunks and renders only the final one', async () => {
     const { session, port, show } = setup('<p>Streamed paragraph text.</p>');
     await session.start();
     show();
@@ -208,6 +208,7 @@ describe('page session: happy path', () => {
     const id = call.payload.items[0]?.id ?? '';
     call.onChunk?.({ id, reset: true });
     call.onChunk?.({ id, delta: '半截' });
+    call.onChunk?.({ id, phonetic: { uk: 'ˈstriːmd' } });
     await wait();
     expect(translations()).toEqual([]);
     expect(session.state()).toMatchObject({ translated: 0, failed: 0 });

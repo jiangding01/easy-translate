@@ -155,6 +155,12 @@ export interface TranslateRequest {
   stream?: true;
   /** Skip the same-language check: the user explicitly asked (menu, shortcut). */
   force?: true;
+  /**
+   * Also send the item's British and American IPA in a `phonetic` chunk when it is a single
+   * English word the bundled tables know. Single item only (ignored otherwise); never part of the cache
+   * key. The caller decides whether the text is English.
+   */
+  phonetic?: true;
 }
 
 /**
@@ -168,12 +174,20 @@ export type TranslateDisposition = 'translated' | 'unchanged' | 'same-language';
  * One final chunk per item, in completion order. Stream requests may send `reset`
  * (drop the increments received so far: a new attempt starts) and `delta`
  * (append) chunks before it; the final chunk replaces whatever was accumulated.
+ * A `phonetic` request may also get one `phonetic` chunk, before or after the final
+ * chunk but always before the request ends; it is not a result, so consumers must test
+ * for it (like `delta` / `reset`) before treating a chunk as final.
  */
 export type TranslateChunk =
   | { id: string; text: string; disposition: TranslateDisposition; cached: boolean }
   | { id: string; error: AppError }
   | { id: string; delta: string }
-  | { id: string; reset: true };
+  | { id: string; reset: true }
+  /**
+   * British and American IPA without slashes, at least one of them. `lemma` is set only
+   * when the readings are the headword's (the form's own could not be derived).
+   */
+  | { id: string; phonetic: { uk?: string; us?: string }; lemma?: string };
 
 export interface TranslateDone {
   total: number;

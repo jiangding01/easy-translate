@@ -5,6 +5,7 @@ import type { ConfigV1 } from '@/lib/config/types';
 import { appError, fail, ok } from '@/lib/errors';
 import { createPortClient, type PortLike, servePort } from '@/lib/messaging/port';
 import type { TranslateChunk, TranslateDone, TranslateRequest } from '@/lib/messaging/protocol';
+import type { PhoneticHit } from '@/lib/phonetic/lookup';
 import { createTranslationCache, openCacheDb } from './cache';
 import type { DetectLanguage } from './language';
 import { checkEngineEndpoint } from './permissions';
@@ -806,4 +807,146 @@ describe('translate service: stream requests', () => {
       expect(word.chunks.at(-1)).toMatchObject({ cached: false, disposition: 'translated' });
     },
   );
+});
+
+// ------------------------------------------------------------ phonetic requests
+
+describe('translate service: phonetic', () => {
+  /** A lookup the test answers by hand. */
+  function deferredLookup() {
+    const calls: string[] = [];
+    let answer: (hit: PhoneticHit | undefined) => void = () => undefined;
+    let fail: (error: Error) => void = () => undefined;
+    const lookupPhonetic = vi.fn(
+      (text: string) =>
+        new Promise<PhoneticHit | undefined>((resolve, reject) => {
+          calls.push(text);
+          answer = resolve;
+          fail = reject;
+        }),
+    );
+    return {
+      lookupPhonetic,
+      calls,
+      answer: (hit: PhoneticHit | undefined) => answer(hit),
+      fail: (error: Error) => fail(error),
+    };
+  }
+
+  it('accepts phonetic only as `true`, and drops it for a batch without failing', () => {
+    const one = [{ id: 'a', text: 'word' }];
+    expect(parseTranslateRequest({ items: one, phonetic: true }).phonetic).toBe(true);
+    const batch = parseTranslateRequest({
+      items: [...one, { id: 'b', text: 'other' }],
+      phonetic: true,
+    });
+    expect(batch.phonetic).toBeUndefined();
+    expect(() => parseTranslateRequest({ items: one, phonetic: 'yes' })).toThrow(
+      expect.objectContaining({ code: 'validation/invalid-payload' }),
+    );
+  });
+
+  it('sends the phonetic chunk alongside the translation, before the request ends', async () => {
+    const lookup = deferredLookup();
+    const { request } = setup({ lookupPhonetic: lookup.lookupPhonetic });
+    const handle = request({ items: items('Hello'), phonetic: true });
+    // The translation does not wait for the lookup …
+    await vi.waitFor(() =>
+      expect(handle.chunks).toContainEqual(expect.objectContaining({ text: 'G:Hello' })),
+    );
+    expect(lookup.calls).toEqual(['Hello']);
+    let settled = false;
+    void handle.outcome.then(() => {
+      settled = true;
+    });
+    await flush();
+    // … but the request does not end before it.
+    expect(settled).toBe(false);
+    lookup.answer({ uk: 'həˈləʊ', us: 'həˈloʊ' });
+    expect(await handle.outcome).toEqual({ status: 'done', data: { total: 1, failed: 0 } });
+    expect(handle.chunks.at(-1)).toEqual({ id: 'i0', phonetic: { uk: 'həˈləʊ', us: 'həˈloʊ' } });
+  });
+
+  it('passes the headword on with its readings, and sends one accent alone', async () => {
+    const { run } = setup({ lookupPhonetic: async () => ({ uk: 'ˈæbsənt', lemma: 'absent' }) });
+    const result = await run({ items: items('absented'), phonetic: true, stream: true });
+    expect(result.chunks).toContainEqual({
+      id: 'i0',
+      phonetic: { uk: 'ˈæbsənt' },
+      lemma: 'absent',
+    });
+    const us = await setup({ lookupPhonetic: async () => ({ us: 'ˈpaɪθɑːn' }) }).run({
+      items: items('python'),
+      phonetic: true,
+    });
+    expect(us.chunks).toContainEqual({ id: 'i0', phonetic: { us: 'ˈpaɪθɑːn' } });
+  });
+
+  it('sends nothing for a hit with neither accent', async () => {
+    const { run } = setup({ lookupPhonetic: async () => ({ lemma: 'x' }) });
+    const result = await run({ items: items('Hello'), phonetic: true });
+    expect(result.chunks.some((chunk) => 'phonetic' in chunk)).toBe(false);
+  });
+
+  it('looks nothing up without the flag, for a batch, or for text that is not one word', async () => {
+    const lookupPhonetic = vi.fn(async (): Promise<PhoneticHit> => ({ uk: 'x' }));
+    const { run } = setup({ lookupPhonetic });
+    await run({ items: items('Hello') });
+    await run({ items: items('Hello', 'World'), phonetic: true });
+    for (const text of ['hello world', 'café', 'x2', 'a'.repeat(41)]) {
+      const result = await run({ items: items(text), phonetic: true });
+      expect(result.chunks.some((chunk) => 'phonetic' in chunk)).toBe(false);
+    }
+    expect(lookupPhonetic).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing when the word is unknown or the lookup fails, and still translates', async () => {
+    const lookup = deferredLookup();
+    const { request } = setup({ lookupPhonetic: lookup.lookupPhonetic });
+    const missing = request({ items: items('Hello'), phonetic: true });
+    await vi.waitFor(() => expect(lookup.calls).toHaveLength(1));
+    lookup.answer(undefined);
+    expect(await missing.outcome).toMatchObject({ status: 'done' });
+    const failing = request({ items: items('World'), phonetic: true });
+    await vi.waitFor(() => expect(lookup.calls).toHaveLength(2));
+    lookup.fail(new Error('boom'));
+    expect(await failing.outcome).toEqual({ status: 'done', data: { total: 1, failed: 0 } });
+    for (const handle of [missing, failing]) {
+      expect(handle.chunks).toHaveLength(1);
+      expect(handle.chunks[0]).toMatchObject({ disposition: 'translated' });
+    }
+  });
+
+  it('still sends the phonetic on a cache hit, and keeps the flag out of the cache key', async () => {
+    const lookupPhonetic = vi.fn(async (): Promise<PhoneticHit> => ({ uk: 'ˈhjuːmən' }));
+    const { cache, providers, run } = setup({ lookupPhonetic });
+    await run({ items: items('Human') });
+    await cached(cache, 1);
+    const hit = await run({ items: items('Human'), phonetic: true });
+    expect(providers.calls).toHaveLength(1);
+    expect(hit.chunks).toHaveLength(2);
+    expect(hit.chunks).toEqual(
+      expect.arrayContaining([
+        { id: 'i0', text: 'G:Human', disposition: 'translated', cached: true },
+        { id: 'i0', phonetic: { uk: 'ˈhjuːmən' } },
+      ]),
+    );
+  });
+
+  it('sends nothing once the request was aborted', async () => {
+    const lookup = deferredLookup();
+    const { service, providers } = setup({ lookupPhonetic: lookup.lookupPhonetic });
+    providers.handlers.google = hang;
+    const controller = new AbortController();
+    const emit = vi.fn();
+    const pending = service
+      .translate({ items: items('Hello'), phonetic: true }, { signal: controller.signal, emit })
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => expect(lookup.calls).toHaveLength(1));
+    controller.abort();
+    lookup.answer({ uk: 'həˈləʊ' });
+    expect(await pending).toMatchObject({ code: 'network/aborted' });
+    await flush();
+    expect(emit).not.toHaveBeenCalled();
+  });
 });
