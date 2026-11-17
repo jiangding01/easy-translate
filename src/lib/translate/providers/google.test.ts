@@ -193,4 +193,118 @@ describe('google adapter', () => {
       expect(en).toHaveBeenCalledTimes(1);
     });
   });
+  describe('items whose inline tags were dropped', () => {
+    // claude.dev, 2026-11-17: the plain endpoint dropped <t0>, HTML mode kept it.
+    const SOURCE =
+      'Our code is written and <t0>reviewed by Claude</t0>. At this scale, evidence matters.';
+    const DROPPED = '我们的代码由 Claude 编写和审查。在这种规模下，证据很重要。';
+    const HTML_REPLY =
+      '我们的代码都是<a id="t0">由 Claude 编写和审查的</a>。在这种规模下，证据很重要。';
+    const RESTORED = '我们的代码都是<t0>由 Claude 编写和审查的</t0>。在这种规模下，证据很重要。';
+    const runZh = (
+      batch: string[],
+      fetchImpl: ReturnType<typeof mockFetch>,
+      signal?: AbortSignal,
+    ) =>
+      collect(
+        adapter.translate(
+          batch,
+          makeCtx({
+            fetch: fetchImpl,
+            source: 'en',
+            target: 'zh-CN',
+            ...(signal ? { signal } : {}),
+          }),
+        ),
+      );
+    const texts = (events: Awaited<ReturnType<typeof runZh>>) =>
+      events.map((e) => (e.type === 'item' ? e.text : ''));
+
+    it('sends the broken items once more as HTML and takes the restored tags', async () => {
+      const fn = mockFetch(
+        jsonResponse([
+          [DROPPED, 'en'],
+          ['你好', 'en'],
+          [DROPPED, 'en'],
+        ]),
+        jsonResponse([HTML_REPLY, HTML_REPLY]),
+      );
+      const events = await runZh([SOURCE, 'Hello', `${SOURCE} `], fn);
+      expect(texts(events)).toEqual([RESTORED, '你好', RESTORED]);
+      expect(fn).toHaveBeenCalledTimes(2);
+      const second = call(fn, 1);
+      expect(second.init.method).toBe('POST');
+      expect(second.url).toBe(
+        'https://translate.googleapis.com/translate_a/t?client=gtx&sl=en&tl=zh-CN&format=html',
+      );
+      expect((second.init.body as URLSearchParams).getAll('q')).toEqual([
+        'Our code is written and <a id="t0">reviewed by Claude</a>. At this scale, evidence matters.',
+        'Our code is written and <a id="t0">reviewed by Claude</a>. At this scale, evidence matters. ',
+      ]);
+    });
+
+    it('keeps the translated answer when the HTML retry only echoes the source', async () => {
+      const echoed =
+        'Our code is written and <a id="t0">reviewed by Claude</a>. At this scale, evidence matters.';
+      const fn = mockFetch(jsonResponse([[DROPPED, 'en']]), jsonResponse([echoed]));
+      expect(texts(await runZh([SOURCE], fn))).toEqual([DROPPED]);
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
+
+    it('sends nothing more when the tags came back intact', async () => {
+      const fn = mockFetch(jsonResponse([[RESTORED, 'en']]));
+      expect(texts(await runZh([SOURCE], fn))).toEqual([RESTORED]);
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the first answer when the HTML retry fails or still loses the tags', async () => {
+      const limited = mockFetch(
+        jsonResponse([[DROPPED, 'en']]),
+        new Response('', { status: 429, headers: { 'retry-after': '3' } }),
+      );
+      expect(texts(await runZh([SOURCE], limited))).toEqual([DROPPED]);
+      expect(limited).toHaveBeenCalledTimes(2);
+
+      const blocked = mockFetch(
+        jsonResponse([[DROPPED, 'en']]),
+        new Response('<html>', { status: 200 }),
+      );
+      expect(texts(await runZh([SOURCE], blocked))).toEqual([DROPPED]);
+
+      const still = mockFetch(jsonResponse([[DROPPED, 'en']]), jsonResponse([DROPPED]));
+      expect(texts(await runZh([SOURCE], still))).toEqual([DROPPED]);
+
+      const offline = mockFetch(jsonResponse([[DROPPED, 'en']]), new TypeError('offline'));
+      expect(texts(await runZh([SOURCE], offline))).toEqual([DROPPED]);
+    });
+
+    it('retries only what fits in one request', async () => {
+      const long = `${'word '.repeat(950)}<t0>link</t0>.`;
+      const fn = mockFetch(
+        jsonResponse([
+          ['丢了', 'en'],
+          ['丢了', 'en'],
+        ]),
+        jsonResponse(['<a id="t0">链接</a>']),
+      );
+      const events = await runZh([long, long], fn);
+      expect(texts(events)).toEqual(['<t0>链接</t0>', '丢了']);
+      expect((call(fn, 1).init.body as URLSearchParams).getAll('q')).toHaveLength(1);
+    });
+
+    it('fails with the abort when the request is cancelled during the retry', async () => {
+      const controller = new AbortController();
+      const fn = mockFetch(jsonResponse([[DROPPED, 'en']]));
+      // Second call (the HTML retry): the user cancels while it is in flight.
+      fn.mockImplementationOnce(async () => jsonResponse([[DROPPED, 'en']])).mockImplementationOnce(
+        async () => {
+          controller.abort();
+          throw new DOMException('aborted', 'AbortError');
+        },
+      );
+      await expect(runZh([SOURCE], fn, controller.signal)).rejects.toMatchObject({
+        code: 'network/aborted',
+      });
+    });
+  });
 });
