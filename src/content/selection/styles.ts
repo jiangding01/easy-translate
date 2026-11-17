@@ -10,8 +10,6 @@
 /** tokens.css `--et-font-sans` (system fonts only). */
 const SANS =
   '-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif';
-/** tokens.css `--et-font-mono`. */
-const MONO = 'ui-monospace,"SF Mono",Menlo,Consolas,monospace';
 
 export const CARD_CSS = `
 .r{all:initial;position:absolute;inset:0;pointer-events:none;font:13px/20px ${SANS};color:var(--et-color-isle-text);cursor:default;user-select:none;-webkit-user-select:none;-webkit-font-smoothing:antialiased;--c3:oklch(0.34 0.01 70);--on:oklch(0.22 0.04 65)}
@@ -35,8 +33,8 @@ button{font:inherit;color:inherit;margin:0;padding:0;border:0;background:none;cu
 .dg{flex-grow:1;align-self:stretch}
 .eb{gap:3px;height:28px;padding:0 7px 0 9px;border-radius:999px;color:var(--et-color-isle-dim);font-size:11.5px;font-weight:600;letter-spacing:.02em}
 .eb:hover,.eb[aria-expanded="true"],.ib:hover:not([aria-disabled="true"]),.ib[aria-pressed="true"],.o:hover:not(:disabled){background:var(--et-color-isle-2);color:var(--et-color-isle-text)}
-.eb svg,.sc{transition:transform .2s}
-.eb[aria-expanded="true"] svg,.src[aria-expanded="true"] .sc{transform:rotate(180deg)}
+.eb>svg,.sc{transition:transform .2s}
+.eb[aria-expanded="true"]>svg,.src[aria-expanded="true"] .sc{transform:rotate(180deg)}
 .bd{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 14px 14px;scrollbar-width:thin}
 .bd,.op{scrollbar-color:color-mix(in oklab,var(--et-color-isle-dim) 40%,transparent) transparent}
 .bd,.ft,.ls{transition:opacity .12s}
@@ -81,7 +79,9 @@ button{font:inherit;color:inherit;margin:0;padding:0;border:0;background:none;cu
 .o[aria-selected="true"]{font-weight:500}
 .o:disabled{color:var(--et-color-isle-dim);cursor:default}
 .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sb{flex-shrink:0;font:11px/16px ${MONO};color:var(--et-color-isle-dim)}
+.pi{display:block;flex-shrink:0;width:15px;height:15px}
+.pf{display:flex;align-items:center;justify-content:center;width:auto;min-width:15px;padding:0 2px;border:1px solid;border-radius:4px;font-size:9.5px;line-height:1}
+.o:disabled .pi{opacity:.5}
 .cm,.no{flex-shrink:0;margin-left:auto}
 .cm{color:var(--et-color-accent)}
 .no{font-size:11.5px;font-weight:400;color:var(--et-color-isle-dim)}

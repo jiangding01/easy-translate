@@ -11,6 +11,7 @@ import { ISLE_TAG, SELECTION_TAG } from '../dom-rules';
 import { errorText } from '../error-text';
 import type { PageRuntimeDeps } from '../runtime-contract';
 import type { PageSession } from '../session';
+import { engineMark, SVG_NS, showMark } from '../svg-icon';
 import {
   alignedCenter,
   catchZone,
@@ -108,8 +109,6 @@ const TIP_FADE_MS = 120;
 /** Above the button, and inside the viewport by this much. */
 const TIP_GAP = 6;
 const TIP_EDGE = 8;
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
 
 function isActive(state: PageState): boolean {
   return state.phase !== 'idle' && !state.halted;
@@ -916,7 +915,7 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
     setAttr(retry, 'aria-label', label);
     const current = currentEngine();
     const option = options?.options.find((item) => item.id === current);
-    setText(engine, option?.short ?? '…');
+    showMark(doc, engine, option);
     const name = option?.name ?? '';
     const engineLabel = last.engineError
       ? `本页引擎：${name}（${errorText(last.engineError)}）`
@@ -962,8 +961,7 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
           'data-id': option.id,
         });
         row.disabled = !option.ready;
-        row.append(node('span', { class: 'nm' }, option.name));
-        if (option.ready) row.append(node('span', { class: 'sb' }, option.short));
+        row.append(engineMark(doc, option), node('span', { class: 'nm' }, option.name));
         if (selected) {
           const check = svg({ class: 'ck', width: '14', height: '14', viewBox: '0 0 14 14' }, [
             'path',

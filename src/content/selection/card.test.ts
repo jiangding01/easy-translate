@@ -27,6 +27,22 @@ const ENGINES: EngineOptions = {
   ],
 };
 
+/** Google with a two-part icon (one part in the text color); the others without one. */
+const WITH_ICONS: EngineOptions = {
+  ...ENGINES,
+  options: ENGINES.options.map((option) =>
+    option.id === 'google'
+      ? {
+          ...option,
+          icon: {
+            viewBox: '0 0 24 24',
+            paths: [{ d: 'M0 0h9z', fill: '#4285F4' }, { d: 'M1 1h9z' }],
+          },
+        }
+      : option,
+  ),
+};
+
 const RECT = { left: 100, top: 200, right: 300, bottom: 224 };
 
 function fakePort() {
@@ -730,6 +746,36 @@ describe('card', () => {
     expect(t.sent.at(-1)?.payload.engine).toBe('google');
     expect(t.config.translation.engine).toBe('deepseek');
     expect(t.$('.eb')?.textContent).toBe('G');
+  });
+
+  it('shows the engine as its vendor icon, or its short label without one', async () => {
+    const { p } = page();
+    const t = setup();
+    t.deps.listEngines.mockResolvedValue(WITH_ICONS);
+    t.card.open({ source: SENTENCE, selection: snapshotOf(p) });
+    await t.advance(0);
+    const engine = () => t.$('.eb') as HTMLElement;
+    expect(engine().querySelector('.pf')?.textContent).toBe('DS');
+    expect(engine().querySelector('svg.pi')).toBeNull();
+    expect(engine().getAttribute('aria-label')).toBe('引擎：DeepSeek（点击切换）');
+
+    t.click('[data-act="engine"]');
+    const row = (id: string) => t.$(`.o[data-id="${id}"]`) as HTMLElement;
+    expect(row('google').firstElementChild?.matches('svg.pi')).toBe(true);
+    expect(row('google').querySelectorAll('path')).toHaveLength(2);
+    expect(row('deepseek').firstElementChild?.matches('.pf')).toBe(true);
+    expect(row('deepseek').querySelector('.nm')?.textContent).toBe('DeepSeek');
+    expect(row('openai').querySelector('.pf')?.textContent).toBe('AI');
+
+    t.click('[data-id="google"]');
+    const icon = engine().querySelector('svg.pi');
+    expect(icon).not.toBeNull();
+    expect(
+      [...(icon?.querySelectorAll('path') ?? [])].map((path) => path.getAttribute('fill')),
+    ).toEqual(['#4285F4', 'currentColor']);
+    expect(engine().querySelector('.pf')).toBeNull();
+    expect(engine().textContent).toBe('');
+    expect(engine().getAttribute('aria-label')).toBe('引擎：Google 翻译（点击切换）');
   });
 
   it('says "auto-detect" when the detection is not reliable', async () => {

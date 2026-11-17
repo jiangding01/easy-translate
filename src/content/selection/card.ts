@@ -18,6 +18,7 @@ import type {
   SelectionRuntimeDeps,
   SelectionSnapshot,
 } from '../runtime-contract';
+import { engineMark, SVG_NS, showMark } from '../svg-icon';
 import { extractText } from './extract';
 import {
   type Box,
@@ -136,7 +137,6 @@ const QUIET_MS = 400;
  */
 const GESTURE_MS = 1000;
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
 /** Icon paths (the prototype's), one per icon. */
 const PATH = {
   aura: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z',
@@ -884,8 +884,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     );
     const id = currentEngine();
     const option = options?.options.find((item) => item.id === id);
-    if (engineText.textContent !== (option?.short ?? '…'))
-      engineText.textContent = option?.short ?? '…';
+    showMark(doc, engineText, option);
     setAttr(engine, 'aria-label', `引擎：${option?.name ?? ''}（点击切换）`);
     setAttr(engine, 'aria-expanded', String(listOpen));
   }
@@ -1020,8 +1019,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
           'data-id': option.id,
         });
         row.disabled = !option.ready || !listOpen;
-        row.append(node('span', { class: 'nm' }, option.name));
-        if (option.ready) row.append(node('span', { class: 'sb' }, option.short));
+        row.append(engineMark(doc, option), node('span', { class: 'nm' }, option.name));
         if (selected) {
           row.append(icon(14, PATH.check, { 'stroke-width': '1.6' }, 'cm'));
         } else if (!option.ready && option.note) {
