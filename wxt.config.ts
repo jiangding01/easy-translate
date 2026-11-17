@@ -2,12 +2,15 @@ import { defineConfig } from 'wxt';
 
 export default defineConfig({
   srcDir: 'src',
-  modules: ['@wxt-dev/module-react'],
+  modules: ['@wxt-dev/module-react', '@wxt-dev/i18n/module'],
   manifestVersion: 3,
   webExt: { disabled: true },
   manifest: {
-    name: 'Easy Translate',
-    description: '网页翻译工具，TypeScript 重构开发版。',
+    // UI copy lives in src/locales/*.yml; @wxt-dev/i18n turns it into _locales. Chrome picks
+    // the browser's language and falls back to en (docs/plans/i18n.md).
+    default_locale: 'en',
+    name: '__MSG_manifest_name__',
+    description: '__MSG_manifest_description__',
     permissions: ['storage', 'activeTab', 'contextMenus'],
     host_permissions: [
       'https://translate.googleapis.com/*',
@@ -34,19 +37,20 @@ export default defineConfig({
         use_dynamic_url: true,
       },
     ],
-    action: { default_title: 'Easy Translate' },
+    // popup/index.html has no <title> on purpose: WXT would copy it over this one.
+    action: { default_title: '__MSG_manifest_actionTitle__' },
     commands: {
       // Not Ctrl+Shift+A on Windows/Linux: Chrome's tab search owns it and the
       // declaration would silently fail. See docs/plans/m2-page-translation.md 5.1.
       'translate-page': {
         suggested_key: { default: 'Alt+A', mac: 'MacCtrl+Shift+A' },
-        description: '翻译此页 / 显示原文',
+        description: '__MSG_manifest_commands_translatePage__',
       },
       // Not Alt+S: it collides with Outlook on the web (send) and MediaWiki's save access key
       // in Chrome. See docs/plans/m3a-selection.md 4.6.
       'translate-selection': {
         suggested_key: { default: 'Alt+Shift+S', mac: 'MacCtrl+Shift+S' },
-        description: '翻译选中文字',
+        description: '__MSG_manifest_commands_translateSelection__',
       },
     },
     icons: {

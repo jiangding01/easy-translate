@@ -124,8 +124,9 @@ export default defineBackground(() => {
   });
   browser.tabs.onRemoved.addListener((tabId) => icon.forget(tabId));
 
-  // Context menu items and shortcuts. Listeners are registered synchronously at top level;
-  // the items themselves are rebuilt on install and update (menus persist across restarts).
+  // Context menu items and shortcuts. Listeners are registered synchronously at top level.
+  // Menus persist across restarts: the items are rebuilt on install and update, and on
+  // browser start, since a new browser language only applies after a restart.
   const menus = createMenuHandlers({
     send: (type, data, target) => sendMessage(type, data as never, target),
     activeTabId: async () =>
@@ -133,7 +134,7 @@ export default defineBackground(() => {
   });
   browser.contextMenus.onClicked.addListener((info, tab) => menus.onClicked(info, tab));
   browser.commands.onCommand.addListener((command, tab) => menus.onCommand(command, tab));
-  browser.runtime.onInstalled.addListener(() => {
+  const rebuildMenus = () => {
     rebuildContextMenus({
       removeAll: () => browser.contextMenus.removeAll(),
       create: (item) =>
@@ -147,7 +148,9 @@ export default defineBackground(() => {
     }).catch((error: unknown) => {
       console.warn('[context-menu] rebuild failed:', toAppError(error).code);
     });
-  });
+  };
+  browser.runtime.onInstalled.addListener(rebuildMenus);
+  browser.runtime.onStartup.addListener(rebuildMenus);
 
   // A key lives exactly as long as its custom provider, however the provider went
   // away (deleted on any page, reset, dropped by repair). The background owns this.

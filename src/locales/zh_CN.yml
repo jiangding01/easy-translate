@@ -1,0 +1,12 @@
+# 简体中文界面文案。键名与 en.yml 完全一致，规则见 en.yml 顶部与 docs/plans/i18n.md。
+
+meta:
+  locale: zh-CN
+
+manifest:
+  name: Easy Translate
+  description: 网页翻译工具，TypeScript 重构开发版。
+  actionTitle: Easy Translate
+  commands:
+    translatePage: 翻译此页 / 显示原文
+    translateSelection: 翻译选中文字

@@ -233,6 +233,7 @@ function TranslationSection({
                 <span className={styles.sample} data-host={host}>
                   Less, but better.
                   <Translation style={item} dark={dark}>
+                    {/* i18n-ignore: a sample translation on a web page, not UI copy */}
                     少，但更好。
                   </Translation>
                 </span>
@@ -243,6 +244,7 @@ function TranslationSection({
             Good software works the same way: it stays out of your way until you need it, then it is
             simply there.
             <Translation key={style} style={style} dark={dark} className={styles.previewIn}>
+              {/* i18n-ignore: a sample translation on a web page, not UI copy */}
               好的软件也是如此：在你需要之前，它不挡你的路；需要时，它就在那里。
             </Translation>
           </div>

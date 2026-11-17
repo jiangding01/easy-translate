@@ -1,10 +1,12 @@
 import { browser } from 'wxt/browser';
 
+// Endonyms, never localized: they also name the languages in LLM prompts, and this file is
+// in the resident content script (docs/plans/i18n.md 4.4).
 export const LANGUAGES = [
-  { code: 'zh-CN', name: '简体中文' },
-  { code: 'zh-TW', name: '繁體中文' },
+  { code: 'zh-CN', name: '简体中文' }, // i18n-ignore: endonym
+  { code: 'zh-TW', name: '繁體中文' }, // i18n-ignore: endonym
   { code: 'en', name: 'English' },
-  { code: 'ja', name: '日本語' },
+  { code: 'ja', name: '日本語' }, // i18n-ignore: endonym
   { code: 'ko', name: '한국어' },
 ] as const;
 
