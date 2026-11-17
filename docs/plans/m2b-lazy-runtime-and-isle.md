@@ -1,6 +1,6 @@
 # M2b 方案：按需加载与灵岛
 
-> 状态：**PR1 已实现并通过 check Deep 审查，自动验收和用户手动验收均通过（附录 D）**（2026-11-16，分支 `feat/m2b-lazy-runtime`；代码审查记录见附录 C）。PR2 方案见第 9 节。已拍板：加载方式选方案 A（动态 URL + 单文件按需模块）；`minimum_chrome_version` 从 117 提到 130；拆成两个 PR。
+> 状态：**已合并**（PR1 按需加载 PR #8、PR2 灵岛 PR #9，2026-11-16）。审查与验收记录见附录 C–H。
 > 审查：Opus 对抗式审查一轮，阻断 1 项、应修 6 项、建议 5 项，都已吸收进正文，见附录 B。
 > 依据：HANDOFF 第 5 节（M2b 开工前要决定的事项）、`docs/plans/m2-page-translation.md` 第 11 节、`docs/plans/ui-isle-direction.md`；加载方式的调研与实测见附录 A。
 

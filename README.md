@@ -2,7 +2,7 @@
 
 Easy Translate 是面向 Chrome 的网页翻译扩展，围绕网页双语阅读、划词翻译、输入翻译和视频字幕设计，使用 TypeScript、React、WXT 与 Manifest V3 开发。
 
-项目当前版本为 `0.1.0`，已完成 M0 地基、M1 翻译核心和 M2a 整页翻译：网页可以一键双语阅读，后台可以调用 Google、OpenAI、DeepSeek、Gemini 和最多 10 个自定义的 OpenAI 兼容服务（含本地模型），带调度、超时、退避、缓存与密钥管理。
+项目当前版本为 `0.1.0`，已完成 M0 地基、M1 翻译核心、M2 整页翻译与灵岛、M3a 划词翻译：网页可以一键双语阅读，选中文字即可在卡片里翻译（英文单词带 UK/US 音标）；后台可以调用 Google、OpenAI、DeepSeek、Gemini 和最多 10 个自定义的 OpenAI 兼容服务（含本地模型），带调度、超时、退避、缓存与密钥管理。
 
 ## 当前功能
 
@@ -10,7 +10,7 @@ Easy Translate 是面向 Chrome 的网页翻译扩展，围绕网页双语阅读
 - **划词翻译**：选中网页上的外文，选区末尾出现琥珀小点，点击（或停留片刻）长出翻译卡片，可切换引擎、折叠原文、复制、固定并拖动；也可用右键菜单「翻译选中文字」或快捷键（macOS `⌃⇧S`，Windows/Linux `Alt+Shift+S`）。AI 引擎的译文边生成边显示；选中单个英文单词时显示 UK / US 音标（离线词表，约 17.5 万 / 11.7 万词），点击按对应口音朗读；朗读使用系统自带语音。
 - **设置页 · 翻译服务**：选择默认引擎；为 OpenAI、DeepSeek、Gemini 填写密钥和模型；添加最多 10 个自定义服务（Ollama、LM Studio、OpenRouter、硅基流动等预设，或任意 OpenAI 兼容地址），添加时申请访问权限；每个服务都能用「Hello, world.」测试连接；查看和清空翻译缓存。密钥只保存在本机，页面只能看到末 4 位。
 - **设置页 · 通用**：目标语言、源语言（默认自动检测）、外观（跟随系统／浅色／深色）、译文样式（无装饰／淡化／下划线／高亮，带预览）和打开时的显示方式，选择即保存。
-- **工具栏面板**：显示当前网站和页面语言，切换目标语言和默认引擎；母语页面、浏览器页面、需要刷新的页面各有安静的提示；默认引擎缺密钥或未授权时给出「去设置」。
+- **工具栏面板**：显示当前网站和页面语言，切换目标语言和默认引擎（引擎带供应商图标），右下角「设置」进入设置页；母语页面、浏览器页面、需要刷新的页面各有安静的提示；默认引擎缺密钥或未授权时给出「去设置」。
 - 界面使用「隐中生岛」方向的琥珀主题，亮暗两套，下拉选择为自研组件。
 
 ## 规划模块
@@ -70,19 +70,22 @@ GitHub Actions（`.github/workflows/ci.yml`）在 PR 和推送到 `main` 时运�
 src/
   entrypoints/
     background.ts       # 后台 Service Worker：配置唯一写入点、翻译服务、消息与 Port handler
-    content.ts          # 网页内容脚本（首屏引导，约 5KB）：收消息、站点记忆自动翻译、按需加载 page-runtime
+    content.ts          # 网页内容脚本（首屏引导，约 7KB）：收消息、站点记忆自动翻译、按需加载 page-runtime
     page-runtime.ts     # 按需模块：唤起后由内容脚本 import()，装配整页翻译会话（动态 URL 的 web accessible resource）
     selection-runtime.ts # 按需模块：首次划词时加载，装配划词卡片
     popup/              # 工具栏面板
     options/            # 设置页（通用、翻译服务、添加服务对话框、连接测试）
   content/              # 整页翻译（内容脚本侧）：引导与加载器、扫描与分段、视口队列与会话、渲染与动效、还原、动态内容
     isle/               # 灵岛：弹簧、外形几何、悬停意图、碰撞与亮暗探测、Shadow DOM 宿主
-    selection/          # 划词：选区观察（常驻）、可见文字提取、卡片定位、请求与丢弃规则、朗读、卡片
-  components/           # 共享界面组件（自研下拉 Select）
+    selection/          # 划词：选区观察（常驻）、可见文字提取、卡片定位、请求与丢弃规则、朗读（含卡死兜底）、卡片
+    svg-icon.ts         # 卡片与灵岛共用的引擎图标绘制
+  components/           # 共享界面组件（自研下拉 Select、供应商图标 ProviderIcon）
   lib/
     config/             # 配置：schema、宽松解析、仓库（后台）、客户端与 useConfig（页面）、引擎字段映射
     messaging/          # 类型化消息协议、handle/call、Port 传输层、发送方校验
-    translate/          # 翻译核心（只在后台使用）：provider、调度器、缓存、密钥、权限
+    translate/          # 翻译核心（只在后台使用）：provider、调度器、缓存、密钥、权限、原样回显检测
+    phonetic/           # 英文音标：写法转换、分片查找、变形推导、英美拼写互查（后台）
+    provider-icons.ts   # 供应商图标的路径数据（lobe-icons，MIT）
     engine-view.ts      # 引擎列表与就绪判断（设置页和面板共用）
     endpoint.ts         # 接口地址规整与主机权限判断（页面和后台共用）
     host-permission.ts  # 页面侧的可选主机权限 hook
@@ -97,10 +100,12 @@ src/
     base.css            # 扩展页面的全局基础样式
     theme.ts            # 主题切换（data-et-theme）
 public/icon/            # 扩展图标
+public/dict/            # 音标分片 gb/、us/，来源 SOURCES.txt 与许可文件（由 scripts/build-phonetics.mjs 生成）
 scripts/
   check-build.mjs       # manifest 与入口资源校验；按需模块单文件、严格模式可执行、不含扩展地址
   check-size.mjs        # gzip 体积预算（零依赖）
   check-contrast.mjs    # 颜色 token 对比度校验（零依赖）
+  build-phonetics.mjs   # 从 ECDICT 与 ipa-dict 生成音标分片（手动运行，不在构建里）
 .github/workflows/      # CI
 docs/plans/             # 各批次技术方案
 docs/design/            # 旧方案（功能参考）
@@ -127,6 +132,12 @@ wxt.config.ts           # WXT 与 Manifest V3 配置
 | [M0 地基方案](docs/plans/m0-foundation.md) | 质量门禁、配置、消息、Port 与设计 token 的实现依据 |
 | [M1 翻译核心方案](docs/plans/m1-translation-core.md) | provider、调度、缓存、密钥、权限与设置页的实现依据 |
 | [界面方向：隐中生岛](docs/plans/ui-isle-direction.md) | 已确认的界面方向、动效规范与琥珀主题 token |
+| [M2 整页翻译方案](docs/plans/m2-page-translation.md) | 扫描分段、视口队列、渲染与验收清单 |
+| [M2b 按需加载与灵岛](docs/plans/m2b-lazy-runtime-and-isle.md) | 首屏瘦身、按需模块与灵岛 |
+| [M3a 划词翻译方案](docs/plans/m3a-selection.md) | 小点与卡片、流式、选区一致性、真机调整 |
+| [引擎供应商图标](docs/plans/provider-icons.md) | 图标数据、下发方式与体积 |
+| [英文单词音标](docs/plans/phonetics-en.md) | 数据来源、写法转换、分片、朗读卡死修复 |
+| [Codex 复核核实](docs/reviews/2026-11-17-core-findings-verification.md) | 核心实现问题的核实结论与修复排期 |
 
 ## 接入本地 Ollama
 
