@@ -360,21 +360,22 @@
 .notice .warnDot {
   margin-top: 6px;
 }
-.iconButton {
-  width: 30px;
+.settingsButton {
   height: var(--et-h-control-sm);
+  padding: 0 8px;
   border: 0;
   border-radius: var(--et-radius-md);
   background: transparent;
   color: var(--et-color-muted);
+  font: inherit;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 5px;
   transition:
     background-color var(--et-dur-fast) var(--et-ease-out),
     color var(--et-dur-fast) var(--et-ease-out);
 }
-.iconButton:hover {
+.settingsButton:hover {
   background: var(--et-color-surface);
   color: var(--et-color-text);
 }

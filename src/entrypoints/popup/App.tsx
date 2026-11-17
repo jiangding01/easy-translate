@@ -215,25 +215,23 @@ export function App() {
           onChange={(engine) => void save({ path: 'translation.engine', value: engine })}
         />
         <span className={styles.spacer} />
-        <button
-          type="button"
-          className={styles.iconButton}
-          aria-label="打开设置"
-          title="设置"
-          onClick={openSettings}
-        >
+        <button type="button" className={styles.settingsButton} onClick={openSettings}>
+          {/* Gear: Tabler Icons "settings" (MIT), stroke matched to the panel's 1.3px lines. */}
           <svg
             aria-hidden="true"
             width="15"
             height="15"
-            viewBox="0 0 16 16"
+            viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="1.4"
+            strokeWidth="2.1"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            <circle cx="8" cy="8" r="2.2" />
-            <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" />
+            <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37 1 .608 2.296.07 2.572-1.065z" />
+            <circle cx="12" cy="12" r="3" />
           </svg>
+          设置
         </button>
       </footer>
     </main>
