@@ -66,6 +66,7 @@ export function normalizeConfig(raw: unknown, uiLanguage: string): ConfigSnapsho
   const language = isPlainObject(merged.language) ? merged.language : {};
   const translation = isPlainObject(merged.translation) ? merged.translation : {};
   const page = isPlainObject(merged.page) ? merged.page : {};
+  const selection = isPlainObject(merged.selection) ? merged.selection : {};
   const customProviders = normalizeCustomProviders(merged.customProviders);
   const engine = translation.engine;
   const engineOk =
@@ -91,6 +92,13 @@ export function normalizeConfig(raw: unknown, uiLanguage: string): ConfigSnapsho
         style: oneOf(PAGE_STYLES, page.style) ?? defaults.data.page.style,
         mode: oneOf(PAGE_MODES, page.mode) ?? defaults.data.page.mode,
         isleDock: oneOf(ISLE_DOCKS, page.isleDock) ?? defaults.data.page.isleDock,
+      },
+      selection: {
+        ...selection,
+        showDot:
+          typeof selection.showDot === 'boolean'
+            ? selection.showDot
+            : defaults.data.selection.showDot,
       },
       translation: {
         ...translation,

@@ -77,6 +77,7 @@ interface FetchCall {
 }
 
 type Handler = (texts: string[], call: FetchCall) => Response | Promise<Response>;
+type TextHandler = (text: string, call: FetchCall) => Response | Promise<Response>;
 
 const googleOk: Handler = (texts) => jsonResponse(texts.map((text) => [`G:${text}`, 'en']));
 const singleOk: Handler = ([text]) => jsonResponse([[[`S:${text}`, text, null, null]]]);
@@ -85,6 +86,11 @@ const openaiDelta = (content: string) =>
 const openaiReply = (items: { i: number; t: string }[]) =>
   sseResponse([openaiDelta(JSON.stringify(items)), 'data: [DONE]\n\n']);
 const openaiOk: Handler = (texts) => openaiReply(texts.map((text, i) => ({ i, t: `O:${text}` })));
+/** Text-format reply in two increments: "流:" then the source. */
+const openaiTextOk: TextHandler = (text) =>
+  sseResponse([openaiDelta('流:'), openaiDelta(text), 'data: [DONE]\n\n']);
+/** The text between a text prompt's nonce markers, or undefined for a batch prompt. */
+const TEXT_MARKERS = /^-----BEGIN ([0-9a-f]+)-----\n([\s\S]*)\n-----END \1-----$/;
 
 /** Never answers; rejects like real fetch once aborted. */
 const hang: Handler = (_texts, call) =>
@@ -96,11 +102,14 @@ const hang: Handler = (_texts, call) =>
 
 function createProviders() {
   const calls: FetchCall[] = [];
-  const handlers: { google: Handler; single: Handler; openai: Handler } = {
+  const handlers: { google: Handler; single: Handler; openai: Handler; openaiText: TextHandler } = {
     google: googleOk,
     single: singleOk,
     openai: openaiOk,
+    openaiText: openaiTextOk,
   };
+  /** Texts sent to a provider, one entry per fetch (Google batches: one per text). */
+  const sent: string[] = [];
   const fetchFn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const signal = init?.signal as AbortSignal;
@@ -110,7 +119,9 @@ function createProviders() {
     });
     calls.push(call);
     if (url.includes('/translate_a/t?')) {
-      return handlers.google(new URLSearchParams(String(init?.body)).getAll('q'), call);
+      const texts = new URLSearchParams(String(init?.body)).getAll('q');
+      sent.push(...texts);
+      return handlers.google(texts, call);
     }
     if (url.includes('/translate_a/single?')) {
       return handlers.single([new URL(url).searchParams.get('q') ?? ''], call);
@@ -118,7 +129,13 @@ function createProviders() {
     if (url.endsWith('/chat/completions')) {
       const body = JSON.parse(String(init?.body)) as { messages: { content: string }[] };
       const content = body.messages[1]?.content ?? '';
+      const marked = TEXT_MARKERS.exec(content)?.[2];
+      if (marked !== undefined) {
+        sent.push(marked);
+        return handlers.openaiText(marked, call);
+      }
       const items = JSON.parse(content.slice(content.indexOf('['))) as { i: number; t: string }[];
+      sent.push(...items.map((item) => item.t));
       return handlers.openai(
         items.map((item) => item.t),
         call,
@@ -130,6 +147,7 @@ function createProviders() {
     fetch: fetchFn as unknown as typeof fetch,
     calls,
     handlers,
+    sent,
     aborts: () => calls.filter((call) => call.aborted).length,
   };
 }
@@ -288,8 +306,9 @@ describe('translate service over the port', () => {
         ? { isReliable: true, languages: [{ language: 'zh', percentage: 99 }] }
         : { isReliable: true, languages: [{ language: 'en', percentage: 99 }] },
     );
+    // Under the echo threshold (see echo.ts): the fake engine returns the source after a prefix.
     const result = await run({
-      items: items('这是一段足够长的中文文本内容', 'This is long English text'),
+      items: items('这是一段足够长的中文文本内容', 'This is English text'),
     });
     expect(result.byId.i0).toEqual({
       id: 'i0',
@@ -608,4 +627,174 @@ describe('cooldownKeyFor', () => {
     expect(a).toBe('custom|http://localhost:11434');
     expect(cooldownKeyFor('custom-bbbbbbbb', 'http://localhost:11434/v2')).toBe(a);
   });
+});
+
+// ------------------------------------------------------------ stream requests
+
+describe('translate service: stream requests', () => {
+  const zhDetect: DetectLanguage = async (text) => ({
+    isReliable: true,
+    languages: [{ language: /[一-鿿]/.test(text) ? 'zh' : 'en', percentage: 99 }],
+  });
+
+  it('accepts stream and force only as `true`, and stream only for a single item', () => {
+    const one = [{ id: 'a', text: 'x' }];
+    expect(parseTranslateRequest({ items: one, stream: true, force: true })).toMatchObject({
+      stream: true,
+      force: true,
+    });
+    for (const payload of [
+      { items: [...one, { id: 'b', text: 'y' }], stream: true },
+      { items: [], stream: true },
+      { items: one, stream: 1 },
+      { items: one, force: 'yes' },
+    ]) {
+      expect(() => parseTranslateRequest(payload)).toThrow(
+        expect.objectContaining({ code: 'validation/invalid-payload' }),
+      );
+    }
+  });
+
+  it('fails a multi-item stream request over the port without fetching', async () => {
+    const { providers, run } = setup();
+    const result = await run({ items: items('Hello', 'World'), stream: true });
+    expect(result.outcome).toMatchObject({
+      status: 'error',
+      error: { code: 'validation/invalid-payload' },
+    });
+    expect(providers.calls).toHaveLength(0);
+  });
+
+  it('streams reset and delta chunks from the LLM, then the final chunk', async () => {
+    const { config, run } = setup();
+    config.translation.engine = 'openai';
+    const result = await run({ items: items('Hello'), stream: true });
+    expect(result.outcome).toEqual({ status: 'done', data: { total: 1, failed: 0 } });
+    expect(result.chunks).toEqual([
+      { id: 'i0', reset: true },
+      { id: 'i0', delta: '流:' },
+      { id: 'i0', delta: 'Hello' },
+      { id: 'i0', text: '流:Hello', disposition: 'translated', cached: false },
+    ]);
+  });
+
+  it('sends a reset before the retry, so increments are never repeated', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const { config, providers, request } = setup();
+    config.translation.engine = 'openai';
+    let attempt = 0;
+    providers.handlers.openaiText = (text) => {
+      attempt += 1;
+      if (attempt === 1) return sseResponse([openaiDelta('半截')], new Error('reset'));
+      return openaiTextOk(text, {} as FetchCall);
+    };
+    const handle = request({ items: items('Hello'), stream: true });
+    for (let i = 0; i < 1000 && handle.chunks.length < 2; i += 1) await flush();
+    expect(handle.chunks).toEqual([
+      { id: 'i0', reset: true },
+      { id: 'i0', delta: '半截' },
+    ]);
+    // Retry after 1s (no jitter).
+    await vi.advanceTimersByTimeAsync(1000);
+    for (let i = 0; i < 1000 && handle.chunks.length < 6; i += 1) await flush();
+    expect(await handle.outcome).toEqual({ status: 'done', data: { total: 1, failed: 0 } });
+    expect(handle.chunks.slice(2)).toEqual([
+      { id: 'i0', reset: true },
+      { id: 'i0', delta: '流:' },
+      { id: 'i0', delta: 'Hello' },
+      { id: 'i0', text: '流:Hello', disposition: 'translated', cached: false },
+    ]);
+  });
+
+  it('answers a cache hit with the final chunk only', async () => {
+    const { config, cache, providers, run } = setup();
+    config.translation.engine = 'openai';
+    await run({ items: items('Hello'), stream: true });
+    await cached(cache, 1);
+    const second = await run({ items: items('Hello'), stream: true });
+    expect(second.chunks).toEqual([
+      { id: 'i0', text: '流:Hello', disposition: 'translated', cached: true },
+    ]);
+    expect(providers.calls).toHaveLength(1);
+  });
+
+  it('caches stream (text) and page (batch) LLM translations apart', async () => {
+    const { config, cache, providers, run } = setup();
+    config.translation.engine = 'openai';
+    await run({ items: items('Hello') });
+    await cached(cache, 1);
+    const streamed = await run({ items: items('Hello'), stream: true });
+    expect(streamed.chunks.at(-1)).toMatchObject({ text: '流:Hello', cached: false });
+    expect(providers.calls).toHaveLength(2);
+  });
+
+  it('sends no delta for Google', async () => {
+    const { run } = setup();
+    const result = await run({ items: items('Hello'), stream: true });
+    expect(result.chunks.some((chunk) => 'delta' in chunk)).toBe(false);
+    expect(result.chunks.at(-1)).toEqual({
+      id: 'i0',
+      text: 'G:Hello',
+      disposition: 'translated',
+      cached: false,
+    });
+  });
+
+  it('still reports same-language and unchanged results on a stream request', async () => {
+    const { detect, providers, run } = setup();
+    detect.mockImplementation(zhDetect);
+    const same = await run({ items: items('这是一段已经是中文的文字内容'), stream: true });
+    expect(same.chunks).toEqual([
+      {
+        id: 'i0',
+        text: '这是一段已经是中文的文字内容',
+        disposition: 'same-language',
+        cached: false,
+      },
+    ]);
+    providers.handlers.google = (texts) => jsonResponse(texts.map((text) => [text, 'en']));
+    const unchanged = await run({ items: items('GitHub API'), stream: true });
+    expect(unchanged.chunks.at(-1)).toMatchObject({ text: 'GitHub API', disposition: 'unchanged' });
+  });
+
+  it('skips the same-language check with force and returns a translation', async () => {
+    const { detect, providers, run } = setup();
+    detect.mockImplementation(zhDetect);
+    const result = await run({
+      items: items('这是一段已经是中文的文字内容'),
+      stream: true,
+      force: true,
+    });
+    expect(detect).not.toHaveBeenCalled();
+    expect(providers.calls).toHaveLength(1);
+    expect(result.chunks.at(-1)).toEqual({
+      id: 'i0',
+      text: 'G:这是一段已经是中文的文字内容',
+      disposition: 'translated',
+      cached: false,
+    });
+  });
+
+  it.each([
+    ['google', false],
+    ['openai', true],
+  ] as const)(
+    'looks a selected word up under its own key and text, not its paragraph (%s)',
+    async (engine, streamWord) => {
+      const { config, cache, providers, run } = setup();
+      config.translation.engine = engine;
+      const getMany = vi.spyOn(cache, 'getMany');
+      // Under the echo threshold (see echo.ts), so the fake "G:" answer is cached.
+      const paragraph = 'The quick brown fox.';
+      await run({ items: items(paragraph) });
+      await cached(cache, 1);
+      const word = await run({ items: items('fox'), stream: streamWord || undefined, force: true });
+      const [paragraphKeys, wordKeys] = getMany.mock.calls.map(([keys]) => keys);
+      expect(paragraphKeys).toHaveLength(1);
+      expect(wordKeys).toHaveLength(1);
+      expect(wordKeys?.[0]).not.toBe(paragraphKeys?.[0]);
+      expect(providers.sent).toEqual([paragraph, 'fox']);
+      expect(word.chunks.at(-1)).toMatchObject({ cached: false, disposition: 'translated' });
+    },
+  );
 });

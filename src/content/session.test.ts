@@ -199,6 +199,22 @@ describe('page session: happy path', () => {
     expect(document.body.innerHTML).toBe(before);
   });
 
+  it('ignores stream delta and reset chunks and renders only the final one', async () => {
+    const { session, port, show } = setup('<p>Streamed paragraph text.</p>');
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    const call = port.calls[0] as Call;
+    const id = call.payload.items[0]?.id ?? '';
+    call.onChunk?.({ id, reset: true });
+    call.onChunk?.({ id, delta: '半截' });
+    await wait();
+    expect(translations()).toEqual([]);
+    expect(session.state()).toMatchObject({ translated: 0, failed: 0 });
+    call.answer();
+    await vi.waitFor(() => expect(translations()).toEqual(['译:Streamed paragraph text.']));
+  });
+
   it('renders a repeated text from memory without asking again', async () => {
     const { session, port, show, observed } = setup('<p>Read more here.</p><p>Read more here.</p>');
     await session.start();
@@ -421,6 +437,38 @@ describe('page session: errors', () => {
     port.calls[1]?.answer();
     await vi.waitFor(() => expect(translations()).toEqual(['译:Fails once paragraph.']));
     expect(session.state().failed).toBe(0);
+  });
+
+  it('shows the userMessage from the background on a failed paragraph, else the generic text', async () => {
+    const { session, port, show } = setup('<p>First failing paragraph.</p>');
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    const call = port.calls[0] as Call;
+    call.onChunk?.({
+      id: call.payload.items[0]?.id ?? '',
+      error: { ...appError('provider', 'provider/bad-request', 'bad'), userMessage: '后台文案<b>' },
+    });
+    call.finish({ status: 'done', data: { total: 1, failed: 1 } });
+    await vi.waitFor(() =>
+      expect(document.querySelector('et-tr[data-et-state="error"]')?.getAttribute('title')).toBe(
+        '后台文案<b>',
+      ),
+    );
+    expect(document.querySelector('et-tr b')).toBeNull();
+    session.retryFailed();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(2));
+    const again = port.calls[1] as Call;
+    again.onChunk?.({
+      id: again.payload.items[0]?.id ?? '',
+      error: appError('provider', 'provider/bad-request', 'bad'),
+    });
+    again.finish({ status: 'done', data: { total: 1, failed: 1 } });
+    await vi.waitFor(() =>
+      expect(document.querySelector('et-tr[data-et-state="error"]')?.getAttribute('title')).toBe(
+        '操作失败，请重试。',
+      ),
+    );
   });
 
   it('splits a batch the background found too large', async () => {
@@ -766,6 +814,23 @@ describe('page session: subscribe', () => {
     host.append(document.createElement('p'));
     await wait();
     expect(dirtyRounds).toEqual([]);
+    expect(port.calls).toHaveLength(1);
+  });
+
+  it('keeps a selection card host out of translation, even inside the body', async () => {
+    const { session, show, port } = setup('<p>Card skip paragraph.</p>');
+    const card = document.createElement('et-selection');
+    card.textContent = 'Selection card text';
+    document.body.append(card);
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    const sent = port.calls.flatMap((call) => call.payload.items.map((item) => item.text));
+    expect(sent.join(' ')).not.toContain('Selection card');
+    await wait(30);
+    // A node inside the host is ours too: no rescan.
+    card.append(document.createElement('p'));
+    await wait();
     expect(port.calls).toHaveLength(1);
   });
 });

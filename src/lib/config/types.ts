@@ -63,6 +63,8 @@ export interface ConfigV1 {
   language: { target: LanguageCode; source: 'auto' | LanguageCode };
   translation: { engine: Engine };
   page: { style: PageStyle; mode: PageMode; isleDock: IsleDock };
+  /** Selection translation (M3a): the dot shown after selecting foreign text. */
+  selection: { showDot: boolean };
   providers: {
     openai: { baseURL: string; model: string };
     deepseek: { model: string };

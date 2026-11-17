@@ -1,5 +1,5 @@
 import { appError } from '@/lib/errors';
-import { decodeLlmOutput, renderUserMessage } from '../codec';
+import { cleanTextOutput, createThinkFilter, decodeLlmOutput, renderMessages } from '../codec';
 import { readSse } from '../sse';
 import type { ProviderAdapter, ProviderContext, ProviderEvent } from '../types';
 import {
@@ -37,6 +37,9 @@ async function* translate(batch: string[], ctx: ProviderContext): AsyncGenerator
   if (!prompt) throw appError('internal', 'internal/missing-prompt', 'LLM adapters need a prompt');
   const model = settings.model.trim().replace(/^models\//, '');
   if (!model) throw modelRequiredError();
+  const messages = renderMessages(prompt, batch);
+  const streaming = prompt.format === 'text';
+  const visible = createThinkFilter();
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (ctx.apiKey) headers['x-goog-api-key'] = ctx.apiKey;
@@ -47,8 +50,8 @@ async function* translate(batch: string[], ctx: ProviderContext): AsyncGenerator
       method: 'POST',
       headers,
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: prompt.system }] },
-        contents: [{ role: 'user', parts: [{ text: renderUserMessage(prompt.user, batch) }] }],
+        systemInstruction: { parts: [{ text: messages.system }] },
+        contents: [{ role: 'user', parts: [{ text: messages.user }] }],
       }),
     },
   );
@@ -72,12 +75,20 @@ async function* translate(batch: string[], ctx: ProviderContext): AsyncGenerator
     const candidate = chunk.candidates?.[0];
     if (BLOCKED_FINISH_REASONS.has(candidate?.finishReason)) throw contentBlockedError();
     if (candidate?.finishReason === 'MAX_TOKENS') throw outputTruncatedError();
+    let content = '';
     for (const part of candidate?.content?.parts ?? []) {
-      if (typeof part.text === 'string' && part.thought !== true) text += part.text;
+      if (typeof part.text === 'string' && part.thought !== true) content += part.text;
     }
+    text += content;
     if (text.length > MAX_LLM_OUTPUT_CHARS) throw outputTruncatedError();
+    const shown = streaming && content !== '' ? visible(content) : '';
+    if (shown !== '') yield { type: 'delta', index: 0, delta: shown };
   }
 
+  if (streaming) {
+    yield { type: 'item', index: 0, text: cleanTextOutput(text, batch[0] ?? '') };
+    return;
+  }
   for (const [index, item] of decodeLlmOutput(text, batch.length).entries()) {
     yield { type: 'item', index, text: item };
   }

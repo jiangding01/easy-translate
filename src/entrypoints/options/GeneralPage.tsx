@@ -39,6 +39,10 @@ const STYLE_LABELS: Record<PageStyle, string> = {
 };
 const MODE_LABELS: Record<PageMode, string> = { bilingual: '双语', translation: '仅译文' };
 const DOCK_LABELS: Record<IsleDock, string> = { right: '右侧', left: '左侧', bottom: '底部' };
+const DOT_OPTIONS = [
+  { value: true, label: '开' },
+  { value: false, label: '关' },
+] as const;
 const HOSTS = ['light', 'dark'] as const;
 const HOST_LABELS: Record<(typeof HOSTS)[number], string> = { light: '浅色网页', dark: '深色网页' };
 
@@ -167,6 +171,7 @@ function TranslationSection({
   const [host, setHost] = useState<(typeof HOSTS)[number]>('light');
   const dark = host === 'dark';
   const { style, mode, isleDock } = config.page;
+  const { showDot } = config.selection;
 
   useEffect(() => {
     const sheet = injectStyles(document);
@@ -294,6 +299,33 @@ function TranslationSection({
                   onChange={() => void change({ path: 'page.isleDock', value: item })}
                 />
                 {DOCK_LABELS[item]}
+              </label>
+            ))}
+          </fieldset>
+        </div>
+        <div className={styles.settingRow}>
+          <div className={styles.settingText}>
+            <span id="dot-label" className={styles.settingName}>
+              划词小点
+            </span>
+            <span className={styles.settingHint}>选中外文后在末尾显示翻译小点</span>
+          </div>
+          <fieldset
+            aria-labelledby="dot-label"
+            className={styles.segmented}
+            style={{ '--index': showDot ? 0 : 1 } as React.CSSProperties}
+          >
+            <span aria-hidden="true" className={styles.segmentThumb} />
+            {DOT_OPTIONS.map((item) => (
+              <label key={item.label} className={styles.segment}>
+                <input
+                  type="radio"
+                  name="selection-dot"
+                  className={styles.radioInput}
+                  checked={showDot === item.value}
+                  onChange={() => void change({ path: 'selection.showDot', value: item.value })}
+                />
+                {item.label}
               </label>
             ))}
           </fieldset>

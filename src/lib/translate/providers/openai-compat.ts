@@ -1,6 +1,6 @@
 import { isLocalEndpoint } from '@/lib/endpoint';
 import { appError } from '@/lib/errors';
-import { decodeLlmOutput, renderUserMessage } from '../codec';
+import { cleanTextOutput, createThinkFilter, decodeLlmOutput, renderMessages } from '../codec';
 import { readSse } from '../sse';
 import type { ProviderAdapter, ProviderContext, ProviderEvent } from '../types';
 import {
@@ -24,6 +24,9 @@ async function* translate(batch: string[], ctx: ProviderContext): AsyncGenerator
   const { prompt, settings } = ctx;
   if (!prompt) throw appError('internal', 'internal/missing-prompt', 'LLM adapters need a prompt');
   if (!settings.model.trim()) throw modelRequiredError();
+  const messages = renderMessages(prompt, batch);
+  const streaming = prompt.format === 'text';
+  const visible = createThinkFilter();
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (ctx.apiKey) headers.Authorization = `Bearer ${ctx.apiKey}`;
@@ -34,8 +37,8 @@ async function* translate(batch: string[], ctx: ProviderContext): AsyncGenerator
       model: settings.model,
       stream: true,
       messages: [
-        { role: 'system', content: prompt.system },
-        { role: 'user', content: renderUserMessage(prompt.user, batch) },
+        { role: 'system', content: messages.system },
+        { role: 'user', content: messages.user },
       ],
     }),
   });
@@ -67,14 +70,21 @@ async function* translate(batch: string[], ctx: ProviderContext): AsyncGenerator
       });
     }
     const choice = chunk.choices?.[0];
-    if (typeof choice?.delta?.content === 'string') text += choice.delta.content;
+    const content = typeof choice?.delta?.content === 'string' ? choice.delta.content : '';
+    text += content;
     if (text.length > MAX_LLM_OUTPUT_CHARS) throw outputTruncatedError();
     if (choice?.finish_reason === 'length') throw outputTruncatedError();
     if (choice?.finish_reason === 'content_filter') throw contentBlockedError();
     if (choice?.finish_reason) finished = true;
+    const shown = streaming && content !== '' ? visible(content) : '';
+    if (shown !== '') yield { type: 'delta', index: 0, delta: shown };
   }
   if (!finished) throw interruptedError();
 
+  if (streaming) {
+    yield { type: 'item', index: 0, text: cleanTextOutput(text, batch[0] ?? '') };
+    return;
+  }
   for (const [index, item] of decodeLlmOutput(text, batch.length).entries()) {
     yield { type: 'item', index, text: item };
   }

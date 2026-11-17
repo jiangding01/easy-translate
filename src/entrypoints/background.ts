@@ -4,6 +4,8 @@ import { createActionIcon, drawStatusIcon } from '@/lib/action-icon';
 import { createLocalStore } from '@/lib/config/local-store';
 import { createConfigRepository } from '@/lib/config/repository';
 import { CONFIG_STORAGE_KEY, type ConfigSnapshot } from '@/lib/config/types';
+import { createMenuHandlers, rebuildContextMenus } from '@/lib/context-menu';
+import { withUserMessage } from '@/lib/error-messages';
 import { appError, fail, toAppError } from '@/lib/errors';
 import { handle } from '@/lib/messaging/handle';
 import {
@@ -70,7 +72,10 @@ export default defineBackground(() => {
       }),
     ),
   );
-  browser.runtime.onConnect.addListener(createTranslatePortHost(service, TRANSLATE_PORT_NAME));
+  // Content scripts carry no copy table: errors leave the Port with `userMessage` attached.
+  browser.runtime.onConnect.addListener(
+    createTranslatePortHost(service, TRANSLATE_PORT_NAME, { decorateError: withUserMessage }),
+  );
 
   // Site memory ("总是翻译此站"): written here only, on behalf of extension pages.
   const extensionRoot = browser.runtime.getURL('/');
@@ -117,21 +122,29 @@ export default defineBackground(() => {
   });
   browser.tabs.onRemoved.addListener((tabId) => icon.forget(tabId));
 
-  // Shortcut: the same toggle as the panel button.
-  browser.commands.onCommand.addListener((command, tab) => {
-    if (command !== 'translate-page') return;
-    const target = tab?.id;
-    const resolve =
-      target !== undefined
-        ? Promise.resolve(target)
-        : browser.tabs.query({ active: true, currentWindow: true }).then(([active]) => active?.id);
-    resolve
-      .then((tabId) =>
-        tabId === undefined ? undefined : sendMessage('page.toggle', undefined, tabId),
-      )
-      .catch(() => {
-        // No content script on this tab (browser pages, store, or opened before install).
-      });
+  // Context menu items and shortcuts. Listeners are registered synchronously at top level;
+  // the items themselves are rebuilt on install and update (menus persist across restarts).
+  const menus = createMenuHandlers({
+    send: (type, data, target) => sendMessage(type, data as never, target),
+    activeTabId: async () =>
+      (await browser.tabs.query({ active: true, currentWindow: true }))[0]?.id,
+  });
+  browser.contextMenus.onClicked.addListener((info, tab) => menus.onClicked(info, tab));
+  browser.commands.onCommand.addListener((command, tab) => menus.onCommand(command, tab));
+  browser.runtime.onInstalled.addListener(() => {
+    rebuildContextMenus({
+      removeAll: () => browser.contextMenus.removeAll(),
+      create: (item) =>
+        new Promise<void>((resolve, reject) => {
+          browser.contextMenus.create(item, () => {
+            const error = browser.runtime.lastError;
+            if (error) reject(new Error(error.message));
+            else resolve();
+          });
+        }),
+    }).catch((error: unknown) => {
+      console.warn('[context-menu] rebuild failed:', toAppError(error).code);
+    });
   });
 
   // A key lives exactly as long as its custom provider, however the provider went
