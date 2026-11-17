@@ -8,8 +8,6 @@
 /** tokens.css `--et-font-sans` (system fonts only). */
 const SANS =
   '-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif';
-/** tokens.css `--et-font-mono`. */
-const MONO = 'ui-monospace,"SF Mono",Menlo,Consolas,monospace';
 
 export const ISLE_CSS = `
 .r{position:absolute;inset:0;pointer-events:none;font:400 13px/20px ${SANS};letter-spacing:normal;word-spacing:normal;text-transform:none;text-indent:0;text-align:left;text-shadow:none;direction:ltr;writing-mode:horizontal-tb;white-space:normal;color:var(--et-color-isle-text);visibility:visible;cursor:default;user-select:none;-webkit-user-select:none;-webkit-font-smoothing:antialiased}
@@ -58,7 +56,9 @@ export const ISLE_CSS = `
 .o[aria-selected="true"]{font-weight:500}
 .o:disabled{color:var(--et-color-isle-dim);cursor:default}
 .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sb{flex-shrink:0;font:400 11px/16px ${MONO};color:var(--et-color-isle-dim)}
+.pi{display:block;flex-shrink:0;width:15px;height:15px}
+.pf{display:flex;align-items:center;justify-content:center;width:auto;min-width:15px;padding:0 2px;border:1px solid;border-radius:4px;font-size:9.5px;line-height:1}
+.o:disabled .pi{opacity:.5}
 .ck{flex-shrink:0;margin-left:auto;color:var(--et-color-accent)}
 .nt{flex-shrink:0;margin-left:auto;font-size:11.5px;font-weight:400;color:var(--et-color-isle-dim)}
 .lf{flex-shrink:0;padding:6px 10px 0;font-size:11px;line-height:16px;color:var(--et-color-isle-dim)}

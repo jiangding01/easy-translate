@@ -15,6 +15,16 @@ const ENGINES: EngineOptions = {
   ],
 };
 
+/** DeepSeek with a one-path icon in the text color; the others without one. */
+const WITH_ICONS: EngineOptions = {
+  ...ENGINES,
+  options: ENGINES.options.map((option) =>
+    option.id === 'deepseek'
+      ? { ...option, icon: { viewBox: '0 0 24 24', paths: [{ d: 'M0 0h9z', evenOdd: true }] } }
+      : option,
+  ),
+};
+
 function fakeSession() {
   let state: PageState = { phase: 'idle', mode: 'bilingual', translated: 0, failed: 0 };
   const listeners = new Set<(state: PageState) => void>();
@@ -509,6 +519,32 @@ describe('dot and toolbar state', () => {
     expect(t.root().hasAttribute('data-run')).toBe(false);
     t.emit({ engine: 'deepseek' });
     expect(t.$('.eg').textContent).toBe('DS');
+  });
+
+  it('shows the engine as its vendor icon, or its short label without one', async () => {
+    const t = await setup({ listEngines: async () => WITH_ICONS });
+    await t.start();
+    expect(t.$('.eg .pf').textContent).toBe('G');
+    expect(t.$('.eg').querySelector('svg')).toBeNull();
+    const label = t.$('.eg').getAttribute('aria-label');
+    expect(label).toBe('本页引擎：Google 翻译（点击切换）');
+
+    t.emit({ engine: 'deepseek' });
+    const icon = t.$('.eg').querySelector('svg.pi');
+    expect(icon?.querySelectorAll('path')).toHaveLength(1);
+    expect(icon?.querySelector('path')?.getAttribute('fill')).toBe('currentColor');
+    expect(icon?.querySelector('path')?.getAttribute('fill-rule')).toBe('evenodd');
+    expect(t.$('.eg').textContent).toBe('');
+    expect(t.$('.eg').getAttribute('aria-label')).toBe('本页引擎：DeepSeek（点击切换）');
+
+    await t.hoverDot();
+    t.$('.eg').click();
+    await t.settle();
+    const row = (id: string) => t.$(`.o[data-id="${id}"]`);
+    expect(row('deepseek').firstElementChild?.matches('svg.pi')).toBe(true);
+    expect(row('google').firstElementChild?.matches('.pf')).toBe(true);
+    expect(row('google').querySelector('.nm')?.textContent).toBe('Google 翻译');
+    expect(row('openai').querySelector('.pf')?.textContent).toBe('AI');
   });
 
   it('keeps every button out of the tab order and the page focus where it is', async () => {
