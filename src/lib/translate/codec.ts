@@ -115,8 +115,8 @@ const QUOTE_PAIRS: readonly (readonly [string, string])[] = [
   ["'", "'"],
   ['“', '”'],
   ['‘', '’'],
-  ['「', '」'],
-  ['『', '』'],
+  ['「', '」'], // i18n-ignore: punctuation the codec matches
+  ['『', '』'], // i18n-ignore: punctuation the codec matches
   ['«', '»'],
   ['„', '“'],
 ];
@@ -138,14 +138,14 @@ const SOURCE_LABEL = /^[\p{L}\p{N}][^\n:：]{0,39}[:：]/u;
 
 /** Punctuation pairs that may wrap a whole source text, on top of the quote pairs. */
 const BRACKET_PAIRS: readonly (readonly [string, string])[] = [
-  ['《', '》'],
-  ['〈', '〉'],
+  ['《', '》'], // i18n-ignore: punctuation the codec matches
+  ['〈', '〉'], // i18n-ignore: punctuation the codec matches
   ['(', ')'],
-  ['（', '）'],
-  ['【', '】'],
+  ['（', '）'], // i18n-ignore: punctuation the codec matches
+  ['【', '】'], // i18n-ignore: punctuation the codec matches
   ['[', ']'],
-  ['〔', '〕'],
-  ['｢', '｣'],
+  ['〔', '〕'], // i18n-ignore: punctuation the codec matches
+  ['｢', '｣'], // i18n-ignore: punctuation the codec matches
 ];
 
 /** `true` when `text` starts and ends with the two halves of one pair. */

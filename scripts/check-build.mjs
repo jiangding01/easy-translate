@@ -27,6 +27,53 @@ assert.deepEqual(
   ['http://127.0.0.1/*', 'http://localhost/*', 'https://*/*'].sort(),
 );
 assert.ok(!manifest.key && !manifest.update_url, 'Legacy extension identity must not be copied');
+
+// UI copy (docs/plans/i18n.md 4.11): Chrome refuses to load the extension when default_locale
+// has no _locales, or when the manifest names a __MSG_…__ that is not defined. One _locales
+// folder per src/locales/<locale>.yml, en and zh_CN at least.
+const LOCALES = (await readdir(resolve('src/locales')))
+  .filter((name) => name.endsWith('.yml'))
+  .map((name) => name.slice(0, -'.yml'.length))
+  .sort();
+assert.deepEqual(
+  (await readdir(resolve(output, '_locales'))).sort(),
+  LOCALES,
+  '_locales must hold exactly one folder per src/locales/*.yml',
+);
+for (const locale of ['en', 'zh_CN']) assert.ok(LOCALES.includes(locale), `Missing ${locale}`);
+assert.equal(manifest.default_locale, 'en');
+const localeMessages = {};
+for (const locale of LOCALES) {
+  const messages = JSON.parse(
+    await readFile(resolve(output, '_locales', locale, 'messages.json'), 'utf8'),
+  );
+  // Message names are case-insensitive in Chrome.
+  localeMessages[locale] = new Set(Object.keys(messages).map((name) => name.toLowerCase()));
+}
+const manifestText = JSON.stringify(manifest);
+const usedMessages = [...manifestText.matchAll(/__MSG_(\w+?)__/g)].map((match) => match[1]);
+for (const name of usedMessages) {
+  for (const locale of LOCALES) {
+    assert.ok(
+      localeMessages[locale].has(name.toLowerCase()),
+      `manifest uses __MSG_${name}__, missing from _locales/${locale}/messages.json`,
+    );
+  }
+}
+// Localized, so English and Chinese browsers each read their own words. The popup's
+// <title>, if any, would replace default_title (WXT copies it over).
+const isMessage = (value) => typeof value === 'string' && /^__MSG_\w+__$/.test(value);
+for (const [field, value] of [
+  ['name', manifest.name],
+  ['description', manifest.description],
+  ['action.default_title', manifest.action?.default_title],
+  ...Object.entries(manifest.commands ?? {}).map(([id, command]) => [
+    `commands.${id}.description`,
+    command.description,
+  ]),
+]) {
+  assert.ok(isMessage(value), `manifest ${field} must be a __MSG_…__ reference, got ${value}`);
+}
 // The background draws the toolbar status dot over icon/16.png and icon/32.png.
 assert.equal(manifest.icons?.['16'], 'icon/16.png');
 assert.equal(manifest.icons?.['32'], 'icon/32.png');

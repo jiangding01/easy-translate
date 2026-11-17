@@ -1,0 +1,17 @@
+# English UI copy (default_locale). Keys are "module.meaning"; the types come from this file.
+# Rules (scripts/check-i18n.mjs): same keys and placeholders in every locale; substitutions
+# are $1–$9 only; a literal dollar sign is $$; quote values that look like numbers.
+# See docs/plans/i18n.md.
+
+meta:
+  # The locale this file is: the extension pages' <html lang> and number formatting follow
+  # it, not the browser language (a de browser gets this file).
+  locale: en
+
+manifest:
+  name: Easy Translate
+  description: Web page translator. TypeScript rewrite, development build.
+  actionTitle: Easy Translate
+  commands:
+    translatePage: Translate this page / Show original
+    translateSelection: Translate selected text

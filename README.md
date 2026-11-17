@@ -53,13 +53,14 @@ WXT 会监听源码并更新开发产物。修改 manifest 或后台逻辑后，
 | `npm run dev` | 启动 Chrome 扩展开发构建 |
 | `npm run lint` | Biome 只读检查（格式与 lint），即 `biome ci .` |
 | `npm run format` | Biome 自动格式化并应用安全修复 |
-| `npm run typecheck` | 执行 TypeScript 严格检查 |
+| `npm run typecheck` | 先 `wxt prepare` 生成类型（含界面文案键），再执行 TypeScript 严格检查 |
+| `npm run check:i18n` | 校验界面文案：各语言文件键与占位符一致；源码不得新增或改写中文硬编码（尚未迁移的以文本哈希记在 `scripts/i18n-baseline.json`，只减不增，迁移后用 `-- --update-baseline` 收缩） |
 | `npm test` | 运行 Vitest 单元测试；`npm run test:watch` 为监听模式 |
 | `npm run build` | 生成 `.output/chrome-mv3` 生产产物 |
-| `npm run check:build` | 校验 manifest 及其引用的入口资源 |
+| `npm run check:build` | 校验 manifest 及其引用的入口资源，以及 `_locales` 与 manifest 中的 `__MSG_*__` 文案 |
 | `npm run check:contrast` | 校验颜色 token 的对比度（文字 ≥ 4.5:1，控件与焦点环 ≥ 3:1，亮暗各一套） |
 | `npm run check:size` | 按入口检查 gzip 体积预算（content ≤ 7KB、page-runtime ≤ 24KB、selection-runtime ≤ 19KB、background ≤ 60KB、popup ≤ 90KB、options ≤ 150KB） |
-| `npm run check` | 依次执行 lint、typecheck、check:contrast、test、build、check:build、check:size |
+| `npm run check` | 依次执行 lint、typecheck、check:i18n、check:contrast、test、build、check:build、check:size |
 | `npm run zip` | 在 `.output` 中生成扩展 ZIP 包 |
 
 GitHub Actions（`.github/workflows/ci.yml`）在 PR 和推送到 `main` 时运行同一套检查，另外还做三件事：
@@ -88,6 +89,8 @@ src/
     isle/               # 灵岛：弹簧、外形几何、悬停意图、碰撞与亮暗探测、Shadow DOM 宿主
     selection/          # 划词：选区观察（常驻）、可见文字提取、卡片定位、请求与丢弃规则、朗读（含卡死兜底）、卡片
     svg-icon.ts         # 卡片与灵岛共用的引擎图标绘制
+    i18n.ts             # 按需模块取界面文案（getMessage 的类型化封装，含复数选择）
+  locales/              # 界面文案 en.yml（默认）、zh_CN.yml；构建时生成 _locales 与类型（@wxt-dev/i18n）
   components/           # 共享界面组件（自研下拉 Select、供应商图标 ProviderIcon）
   lib/
     config/             # 配置：schema、宽松解析、仓库（后台）、客户端与 useConfig（页面）、引擎字段映射
@@ -101,6 +104,7 @@ src/
     errors.ts           # AppError 与 Result
     error-messages.ts   # 错误码到中文文案
     languages.ts        # 支持的语言与语言标签归一化
+    ui-locale.ts        # 界面文案的实际语言（meta.locale），扩展页面的 <html lang>
     site-memory.ts      # 「总是翻译此站」的存储格式与写入（只由后台写）
     action-icon.ts      # 工具栏图标的状态小点
   styles/
@@ -114,6 +118,8 @@ scripts/
   check-build.mjs       # manifest 与入口资源校验；按需模块单文件、严格模式可执行、不含扩展地址
   check-size.mjs        # gzip 体积预算（零依赖）
   check-contrast.mjs    # 颜色 token 对比度校验（零依赖）
+  check-i18n.mjs        # 界面文案校验：语言文件一致性、中文硬编码基线（i18n-baseline.json）
+  i18n-messages.mjs     # 读取语言文件、模拟 Chrome getMessage（check-i18n 与单测共用）
   build-phonetics.mjs   # 从 ECDICT 与 ipa-dict 生成音标分片（手动运行，不在构建里）
 .github/workflows/      # CI
 docs/plans/             # 各批次技术方案

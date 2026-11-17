@@ -50,6 +50,8 @@ jobs:
         run: npm audit signatures
       - run: npm run lint
       - run: npm run typecheck
+      # UI copy: locale files agree, and no new hard-coded Chinese beyond scripts/i18n-baseline.json.
+      - run: npm run check:i18n
       - run: npm run check:contrast
       - run: npm test
       - run: npm run build
