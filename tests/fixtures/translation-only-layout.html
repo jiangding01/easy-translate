@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Translation-only layout fixture</title>
+    <!--
+      Manual check for "translation only" (docs/reviews/2026-11-17-translation-only-followups.md,
+      docs/dom-contract.md). Content scripts run on http(s) only, so serve this folder:
+        python3 -m http.server 8765 --directory tests/fixtures
+      then open http://localhost:8765/translation-only-layout.html with the dev build loaded.
+      Translate the page, switch to translation only, drag the window width, switch back.
+      The grey notes are marked translate="no" and stay in English.
+    -->
+    <style>
+      body {
+        margin: 0;
+        padding: 24px 16px 64px;
+        font: 16px/1.6 system-ui, -apple-system, sans-serif;
+        color: #222;
+        /* A centre line to judge horizontal centring by eye. */
+        background: linear-gradient(to right, transparent calc(50% - 1px), #e8a33d 0 calc(50% + 1px), transparent 0);
+      }
+      section {
+        margin: 0 0 40px;
+      }
+      .note {
+        margin: 6px 0 0;
+        padding: 6px 10px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #555;
+        background: #f2f2f2;
+        border-radius: 4px;
+      }
+      .note b {
+        color: #222;
+      }
+      /* Outlines and tints show each box without depending on em lengths. */
+      .box {
+        outline: 1px dashed #3d7be8;
+        background: rgba(61, 123, 232, 0.08);
+      }
+      .centred {
+        margin: 0 auto;
+        max-width: 32em;
+      }
+      .padded {
+        padding: 5%;
+      }
+      .spaced {
+        letter-spacing: 0.2em;
+        word-spacing: 1em;
+      }
+      .measure {
+        max-width: 40ch;
+      }
+      .viewport {
+        max-width: 50vw;
+      }
+      .sized {
+        width: 24em;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+      }
+      .row > p {
+        flex: 0 0 14em;
+        margin: 0;
+      }
+      .framed {
+        border: 0.5em solid #3d7be8;
+        border-radius: 1em;
+        padding: 0.75em;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Translation-only layout fixture</h1>
+    <p class="note" translate="no">
+      Each case is a paragraph whose own CSS uses a length that <code>font-size: 0</code> would
+      otherwise break. <b>Expected</b> notes describe translation only; bilingual must look
+      exactly like before translating.
+    </p>
+
+    <section>
+      <h2>Centred with auto margins</h2>
+      <p class="box centred">
+        Good tools stay out of the way. They let readers keep their attention on the text and
+        only appear when they are needed.
+      </p>
+      <p class="note" translate="no">
+        <code>margin: 0 auto; max-width: 32em</code>. <b>Expected:</b> the box stays centred on
+        the orange line while the window is resized (was frozen at pixel margins before
+        fix/translation-only-pins).
+      </p>
+    </section>
+
+    <section>
+      <h2>Percentage padding</h2>
+      <p class="box padded">
+        Every interruption has a cost. A quiet interface respects the time and focus of the
+        person using it.
+      </p>
+      <p class="note" translate="no">
+        <code>padding: 5%</code>. <b>Expected:</b> the tinted padding grows and shrinks with
+        the window (was frozen in pixels before fix/translation-only-pins).
+      </p>
+    </section>
+
+    <section>
+      <h2>Letter and word spacing in em</h2>
+      <p class="box spaced">
+        Wide spacing makes short headlines feel calm. The translation should keep the same
+        rhythm as the original line.
+      </p>
+      <p class="note" translate="no">
+        <code>letter-spacing: .2em; word-spacing: 1em</code>. <b>Expected:</b> the
+        translation keeps the same wide spacing as in bilingual (dropped to normal before
+        fix/translation-only-pins).
+      </p>
+    </section>
+
+    <section>
+      <h2>Measure in ch</h2>
+      <p class="box measure">
+        Always-on agents can run for hours. Long lines are hard to read, so articles often
+        limit the measure to a number of characters.
+      </p>
+      <p class="note" translate="no">
+        <code>max-width: 40ch</code>. <b>Expected:</b> a normal paragraph, not one character
+        per line (regression check for PR #27).
+      </p>
+    </section>
+
+    <section>
+      <h2>Fixed width in em</h2>
+      <p class="box sized">
+        Some layouts give a paragraph a fixed width. The translation should fill the same
+        box rather than collapse to nothing.
+      </p>
+      <p class="note" translate="no">
+        <code>width: 24em</code>. <b>Expected:</b> the same box width as in bilingual
+        (pinned in pixels).
+      </p>
+    </section>
+
+    <section>
+      <h2>Flex items with an em basis</h2>
+      <div class="row">
+        <p class="box">The first card in a row of fixed width cards.</p>
+        <p class="box">The second card sits next to the first one.</p>
+      </div>
+      <p class="note" translate="no">
+        <code>flex: 0 0 14em</code>. <b>Expected:</b> both cards keep their width and stay
+        side by side.
+      </p>
+    </section>
+
+    <section>
+      <h2>Viewport width (known limitation)</h2>
+      <p class="box viewport">
+        This paragraph is half as wide as the window. In translation only its width is
+        measured once and does not follow later resizing.
+      </p>
+      <p class="note" translate="no">
+        <code>max-width: 50vw</code>. <b>Known limitation:</b> frozen at the width it had
+        when translation only was turned on; switching back to bilingual restores it.
+      </p>
+    </section>
+
+    <section>
+      <h2>Border and radius in em (known limitation)</h2>
+      <p class="box framed">
+        A framed note with a thick border and rounded corners, both written in em.
+      </p>
+      <p class="note" translate="no">
+        <code>border: .5em; border-radius: 1em</code>. <b>Known limitation:</b> the border
+        and corners disappear in translation only (not fixed until a real site needs it).
+      </p>
+    </section>
+  </body>
+</html>

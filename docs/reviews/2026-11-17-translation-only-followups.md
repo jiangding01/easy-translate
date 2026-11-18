@@ -24,13 +24,13 @@ PR #27 的做法：在归零前读出 `PINNED`、`PINNED_TYPED` 里各属性的�
 
 ## 修复安排
 
-**小 PR `fix/translation-only-pins`**：处理第 1、1b、3 条。不必等 M3d，排在 i18n 第 2 批之后、冒烟 e2e 之前，赶在 v0.2.0 之前合入。
+**小 PR `fix/translation-only-pins`**（2026-11-18 已实现）：处理第 1、1b、3 条。不必等 M3d，排在 i18n 第 2 批之后、冒烟 e2e 之前，赶在 v0.2.0 之前合入。
 
 - **margin、padding 改读 Typed OM**（与 `width`/`height` 一样）：
   - 关键字（`auto`）不钉；
   - 百分比原样钉，不转成像素；
   - em/ch 等由 Typed OM 给出计算后的像素。
-  - 老浏览器没有 `computedStyleMap` 时退回 `getComputedStyle`，即现状。
+  - ~~老浏览器没有 `computedStyleMap` 时退回 `getComputedStyle`~~：实现时取消。扩展要求 Chrome 130+，`computedStyleMap` 自 Chrome 66 起就有，这条分支只有测试环境走得到。
 - **在 `et-tr` 上把可继承的文本间距设回去**：根元素归零前读出 `letter-spacing`、`word-spacing`，像 `--et-fs` 一样作为变量设回 `et-tr`。
   - 注意：`text-underline-offset` 在下划线样式里由我们自己用 `.28em` 设定，以 `et-tr` 自身字号计算，不受影响。
 - **回归测试**：stub `computedStyleMap`，断言 margin 为 `auto` 时不写内联样式、百分比原样写入、`et-tr` 拿到字距变量。

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { discoverUnits } from './discover';
-import type { StyleReader } from './dom-rules';
+import { ISLE_TAG, OWN_ATTR, OWN_TAG, SELECTION_TAG, type StyleReader } from './dom-rules';
 import { createRenderer } from './render';
 
 const readStyle: StyleReader = (el) => {
@@ -159,6 +159,63 @@ describe('renderer: translation only', () => {
     }
   });
 
+  it('keeps auto margins and % padding responsive, and carries the root text spacing', async () => {
+    // A centred `margin: 0 auto; padding: 5%` paragraph froze at its pixel margins (no longer
+    // centred after a resize), and `letter-spacing: .2em` on the root reached the translation
+    // as 0 once the root's font-size was zeroed (docs/reviews/2026-11-17-translation-only-followups.md).
+    const { units, renderer } = await setup('<p>A centred paragraph of text.</p>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    const root = unit.root as HTMLElement;
+    await renderer.insert([{ unit, translation: '居中的一段文字。' }]);
+    // What Chrome reports: getComputedStyle gives used pixels for margin and padding, the
+    // Typed OM keeps `auto` and percentages and resolves em to pixels.
+    const computed: Record<string, string> = {
+      'margin-left': '242px',
+      'margin-right': '242px',
+      'padding-left': '50px',
+      'padding-top': '16px',
+      'letter-spacing': '3.2px',
+      'word-spacing': '16px',
+    };
+    const typed: Record<string, string> = {
+      'margin-left': 'auto',
+      'margin-right': 'auto',
+      'padding-left': '5%',
+      'padding-top': '16px',
+    };
+    const real = window.getComputedStyle.bind(window);
+    const spy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) =>
+      el === root
+        ? ({
+            fontSize: '16px',
+            lineHeight: '24px',
+            getPropertyValue: (name: string) => computed[name] ?? '0px',
+          } as unknown as CSSStyleDeclaration)
+        : real(el, pseudo),
+    );
+    Object.defineProperty(root, 'computedStyleMap', {
+      configurable: true,
+      value: () => ({ get: (name: string) => typed[name] ?? '0px' }),
+    });
+    try {
+      await renderer.setMode('translation');
+      expect(root.style.getPropertyValue('margin-left')).toBe('');
+      expect(root.style.getPropertyValue('margin-right')).toBe('');
+      expect(root.style.getPropertyValue('padding-left')).toBe('5%');
+      expect(root.style.getPropertyValue('padding-top')).toBe('16px');
+      const el = root.querySelector('et-tr') as HTMLElement;
+      expect(el.style.getPropertyValue('--et-ls')).toBe('3.2px');
+      expect(el.style.getPropertyValue('--et-ws')).toBe('16px');
+      await renderer.setMode('bilingual');
+      expect(root.hasAttribute('style')).toBe(false);
+      expect(el.style.getPropertyValue('--et-ls')).toBe('');
+      expect(el.style.getPropertyValue('--et-ws')).toBe('');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('hides the original of a link paragraph whose tags were dropped, but keeps runs bilingual', async () => {
     // claude.dev: Google returned the sentence with `<t0>…</t0>` gone, the paragraph
     // fell back to plain text and its English stayed visible in translation-only.
@@ -264,5 +321,58 @@ describe('renderer: writes racing a restore', () => {
     await renderer.restoreAll();
     await inflight;
     expect(document.body.innerHTML).toBe(before);
+  });
+});
+
+// docs/dom-contract.md: export tools read these markers from a DOM clone without CSS.
+// A failing test here is a breaking change for them: update the contract and CHANGELOG.md.
+describe('renderer: DOM contract', () => {
+  it('marks block, inline, translation-only and failed translations as documented', async () => {
+    const { units, renderer } = await setup(
+      '<p>Block paragraph text.</p>' +
+        '<div>Run text here<p>Inner block text.</p></div>' +
+        '<div style="display:flex"><span>Flex item</span><span>Second item</span></div>' +
+        '<p>Failed paragraph text.</p>',
+    );
+    const [block, run, flex, failed] = [
+      units.find((unit) => unit.root.textContent === 'Block paragraph text.'),
+      units.find((unit) => unit.kind === 'run'),
+      units.find((unit) => (unit.root as HTMLElement).style?.display === 'flex'),
+      units.find((unit) => unit.root.textContent === 'Failed paragraph text.'),
+    ];
+    if (!block || !run || !flex || !failed) throw new Error('missing units');
+    await renderer.insert([
+      { unit: block, translation: '块' },
+      { unit: run, translation: '片段' },
+      { unit: flex, translation: '弹性' },
+    ]);
+    await renderer.fail(failed, () => {}, 'x');
+    const trOf = (root: Element) => [...root.querySelectorAll('et-tr')].at(-1) as Element;
+
+    const blockTr = trOf(block.root);
+    expect(blockTr.localName).toBe('et-tr');
+    expect(blockTr.getAttribute('lang')).toBe('zh-CN');
+    expect(blockTr.hasAttribute('data-et-inline')).toBe(false);
+    expect(blockTr.hasAttribute('data-et-state')).toBe(false);
+    expect(blockTr.textContent).toBe('块');
+    expect(trOf(run.root).hasAttribute('data-et-inline')).toBe(true);
+    expect(trOf(flex.root).hasAttribute('data-et-inline')).toBe(true);
+    expect(trOf(failed.root).getAttribute('data-et-state')).toBe('error');
+
+    await renderer.setMode('translation');
+    // Only block units are hidden; runs, flex items and failures stay bilingual.
+    expect(block.root.hasAttribute('data-et-only')).toBe(true);
+    for (const unit of [run, flex, failed]) {
+      expect(unit.root.hasAttribute('data-et-only')).toBe(false);
+    }
+  });
+
+  it('keeps the documented tag and attribute names for the plugin UI hosts', () => {
+    expect([OWN_TAG, ISLE_TAG, SELECTION_TAG, OWN_ATTR]).toEqual([
+      'ET-TR',
+      'ET-ISLE',
+      'ET-SELECTION',
+      'data-et',
+    ]);
   });
 });

@@ -1,7 +1,11 @@
 // The one stylesheet injected into pages. Specificity is raised by repeating the
 // attribute; only display, margin, decoration, background, opacity and font-size
-// are set, everything else is inherited from the host so translations read native.
+// are set (plus, in translation-only, the line height and text spacing the zeroed root
+// would otherwise pass down), everything else is inherited from the host so
+// translations read native.
 
+// The display these rules give `et-tr`, `data-et-inline` and `data-et-only` is a public
+// contract for tools that read the DOM without CSS (docs/dom-contract.md).
 export const STYLE_ATTR = 'data-et';
 
 const CSS = `
@@ -19,7 +23,7 @@ et-tr[data-et-state="error"] button{all:unset;cursor:pointer;margin-left:.4em;pa
 et-tr[data-et-state="error"] button:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 [data-et-only][data-et-only]{font-size:0!important}
 [data-et-only][data-et-only]>:not(et-tr){display:none!important}
-[data-et-only][data-et-only]>et-tr{font-size:var(--et-fs)!important;line-height:var(--et-lh)!important;margin-top:0}
+[data-et-only][data-et-only]>et-tr{font-size:var(--et-fs)!important;line-height:var(--et-lh)!important;letter-spacing:var(--et-ls,normal)!important;word-spacing:var(--et-ws,normal)!important;margin-top:0}
 [data-et-unclamp][data-et-unclamp]{-webkit-line-clamp:unset!important;line-clamp:unset!important}
 `;
 
