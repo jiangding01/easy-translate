@@ -451,10 +451,16 @@ describe('helpers', () => {
   it('rejects a placeholder followed by "$": Chrome reads "$1$" as a $name$ placeholder', () => {
     // A zh_CN value "$1$2" made Chrome refuse to load the whole extension.
     expect(dollarProblems('$1$2')).toEqual([
-      '"$1$…" reads as a $name$ placeholder in Chrome; put text between',
+      '"$…$" reads as a $name$ placeholder in Chrome; put text between',
     ]);
+    // Any name Chrome accepts between two "$", and "$1" followed by an escaped "$$".
+    expect(dollarProblems('$1x$2')).toHaveLength(1);
+    expect(dollarProblems('$1_$2')).toHaveLength(1);
     expect(dollarProblems('$1$$')).toHaveLength(1);
+    // Not a name: an escaped "$$" before a placeholder, or text with spaces between.
+    expect(dollarProblems('$$1$2')).toEqual([]);
     expect(dollarProblems('$1 $2')).toEqual([]);
+    expect(dollarProblems('$1：$2')).toEqual([]);
   });
 });
 

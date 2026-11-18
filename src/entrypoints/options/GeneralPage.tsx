@@ -162,7 +162,11 @@ export function GeneralPage({ config }: { config: ConfigV1 }) {
           >
             <span aria-hidden="true" className={styles.segmentThumb} />
             {THEMES.map((theme) => (
-              <label key={theme} className={styles.segment}>
+              <label
+                key={theme}
+                className={styles.segment}
+                data-label={i18n.t(THEME_LABELS[theme])}
+              >
                 <input
                   type="radio"
                   name="theme"
@@ -221,7 +225,7 @@ function TranslationSection({
             >
               <span aria-hidden="true" className={styles.segmentThumb} />
               {HOSTS.map((item) => (
-                <label key={item} className={styles.segment}>
+                <label key={item} className={styles.segment} data-label={i18n.t(HOST_LABELS[item])}>
                   <input
                     type="radio"
                     name="preview-host"
@@ -285,7 +289,7 @@ function TranslationSection({
           >
             <span aria-hidden="true" className={styles.segmentThumb} />
             {PAGE_MODES.map((item) => (
-              <label key={item} className={styles.segment}>
+              <label key={item} className={styles.segment} data-label={i18n.t(MODE_LABELS[item])}>
                 <input
                   type="radio"
                   name="page-mode"
@@ -312,7 +316,7 @@ function TranslationSection({
           >
             <span aria-hidden="true" className={styles.segmentThumb} />
             {ISLE_DOCKS.map((item) => (
-              <label key={item} className={styles.segment}>
+              <label key={item} className={styles.segment} data-label={i18n.t(DOCK_LABELS[item])}>
                 <input
                   type="radio"
                   name="isle-dock"
@@ -339,7 +343,7 @@ function TranslationSection({
           >
             <span aria-hidden="true" className={styles.segmentThumb} />
             {DOT_OPTIONS.map((item) => (
-              <label key={item.label} className={styles.segment}>
+              <label key={item.label} className={styles.segment} data-label={i18n.t(item.label)}>
                 <input
                   type="radio"
                   name="selection-dot"

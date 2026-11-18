@@ -36,6 +36,18 @@ describe('cacheSummary', () => {
       '1,234 cached translations · 3.0 MB · kept 7 days',
     );
   });
+
+  it('formats the count for the locale of the copy, not a fixed one', async () => {
+    // en and zh-CN both group as "1,234": report a locale that groups differently.
+    const getMessage = createGetMessage(await loadLocales(), 'en');
+    fakeBrowser.i18n.getMessage = ((name: string, substitutions?: string | string[]) =>
+      name === 'meta_locale'
+        ? 'de'
+        : getMessage(name, substitutions)) as typeof fakeBrowser.i18n.getMessage;
+    expect(cacheSummary({ count: 1234, totalBytes: 2048 })).toBe(
+      '1.234 cached translations · 2.0 KB · kept 7 days',
+    );
+  });
 });
 
 describe('splitAround', () => {

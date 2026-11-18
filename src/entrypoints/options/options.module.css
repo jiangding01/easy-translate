@@ -816,6 +816,8 @@
 .segment {
   position: relative;
   display: flex;
+  /* Column, so the hidden medium-weight copy below adds width but no height. */
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
@@ -832,6 +834,16 @@
 .segment:has(:checked) {
   color: var(--et-color-text);
   font-weight: var(--et-fw-medium);
+}
+/* The selected label turns medium: reserve that width so the columns (and the thumb) do
+   not jump when the selection moves. Hidden from view and from screen readers. */
+.segment::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: var(--et-fw-medium);
+  pointer-events: none;
 }
 
 /* ---------------------------------------------------------------- dialog */

@@ -44,7 +44,7 @@ describe('panel copy', () => {
 
   it('keeps the engine name and its reason apart', async () => {
     expect(i18n.t('popup.engineNotReady', ['DeepSeek', '还没有填写密钥'])).toBe(
-      'DeepSeek 还没有填写密钥',
+      'DeepSeek：还没有填写密钥',
     );
     await useEnglish();
     expect(i18n.t('popup.engineNotReady', ['DeepSeek', 'No API key yet'])).toBe(

@@ -292,13 +292,30 @@ function placeholders(message) {
     .join(',')}}`;
 }
 
+/** Whether Chrome would read part of `text` as a "$name$" placeholder. */
+function namedPlaceholder(text) {
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] !== '$') continue;
+    if (text[i + 1] === '$') {
+      i += 1;
+      continue;
+    }
+    const end = text.indexOf('$', i + 1);
+    if (end < 0) return false;
+    if (/^[A-Za-z0-9_@]+$/.test(text.slice(i + 1, end))) return true;
+  }
+  return false;
+}
+
 /** Problems with `$` in one text: Chrome reads `$…$` as a named placeholder. */
 export function dollarProblems(text) {
   if (text.includes('$$$')) return ['"$$$" is ambiguous; reword around the placeholder'];
-  // Chrome reads "$1$…" as a named placeholder ($name$) and refuses to load the extension
-  // ("Variable $1$ used but not defined"): a placeholder may not be followed by "$".
-  if (/\$[1-9]\$/.test(text))
-    return ['"$1$…" reads as a $name$ placeholder in Chrome; put text between'];
+  // Chrome reads "$name$" (letters, digits, _ or @ between two "$") as a named placeholder
+  // and refuses to load the extension when it is undefined ("Variable $1$ used but not
+  // defined"). Scanned as Chrome does, left to right, skipping "$$" escapes.
+  if (namedPlaceholder(text)) {
+    return ['"$…$" reads as a $name$ placeholder in Chrome; put text between'];
+  }
   const bad = text.replace(/\$\$|\$[1-9]/g, '').includes('$');
   return bad ? ['a literal "$" must be written "$$"; placeholders are $1–$9'] : [];
 }
