@@ -5,6 +5,8 @@ export default defineConfig({
   modules: ['@wxt-dev/module-react', '@wxt-dev/i18n/module'],
   manifestVersion: 3,
   webExt: { disabled: true },
+  // Release asset name, e.g. Islet-Translate-v0.2.0-chrome.zip (the default is the package name).
+  zip: { artifactTemplate: 'Islet-Translate-v{{version}}-{{browser}}.zip' },
   manifest: {
     // UI copy lives in src/locales/*.yml; @wxt-dev/i18n turns it into _locales. Chrome picks
     // the browser's language and falls back to en (docs/plans/i18n.md).
