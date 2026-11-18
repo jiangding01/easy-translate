@@ -68,4 +68,30 @@ describe('page translation', () => {
     expect(h.google.count).toBeGreaterThan(0);
     h.assertNoErrors();
   });
+
+  it('does not send edits made inside an editable area', async () => {
+    await h.openPage('e2e-article.html');
+    await h.tell('page.toggle');
+    await waitFor(async () => (await translated(FIRST_SCREEN)).done === 8, {
+      message: 'every first-screen block to be translated',
+    });
+
+    // Two kinds of change inside #editable (text node data, an appended <p>) and, in the same
+    // round, a control paragraph outside it: the control proves the rescan ran.
+    await h.evaluate(`(() => {
+      const editor = document.querySelector('#editable');
+      editor.firstChild.data = 'Zephyr draft typed into the note.';
+      const typed = document.createElement('p');
+      typed.textContent = 'Quokka draft paragraph typed inside.';
+      editor.append(typed);
+      const control = document.createElement('p');
+      control.textContent = 'Marmot control paragraph added outside the editor.';
+      document.querySelector('#intro').after(control);
+    })()`);
+    await waitFor(() => h.google.texts.some((text) => text.includes('Marmot control paragraph')), {
+      message: 'the control paragraph to be sent',
+    });
+    expect(h.google.texts.filter((text) => /Zephyr|Quokka/.test(text))).toEqual([]);
+    h.assertNoErrors();
+  });
 });

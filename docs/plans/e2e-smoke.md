@@ -53,7 +53,7 @@ CI：新增 `e2e` job，`needs: check`，下载 check job 上传的构建产物�
 15. 翻译中途重新加载扩展：旧页面不出现未处理的「Extension context invalidated」错误。
 16. 面板真实链路：把 popup.html 当普通标签页打开，`Page.addScriptToEvaluateOnNewDocument` 把 `chrome.tabs.query` 换成返回测试页，验证面板按钮 → 内容脚本的真实链路（不改扩展源码）。
 PR2 增补（2026-11-18 用户同意，开工时随 PR2 方案一起审查）：
-17. 整页动态重扫：编辑区（contenteditable、textarea 附近的富文本编辑器）里的文字始终不出现在翻译请求里（Codex 评审第 1 条，P1 修复的回归用例）。
+17. 整页动态重扫：编辑区（contenteditable、textarea 附近的富文本编辑器）里的文字始终不出现在翻译请求里（Codex 评审第 1 条，P1 修复的回归用例）。已在 P1 修复 PR（`fix/rescan-protected-areas`）中提前完成。
 18. 网站在翻译期间主动修改的行内样式，退出「仅看译文」后保留（Codex 第 2 条）。
 19. 初扫期间插入的内容也被翻译（Codex 第 4 条，随 M3d PR-B 修复后启用）。
 20. 灵岛：连续改变视口宽度时小点始终贴着窗口边缘（#36 的回归）。
@@ -76,7 +76,7 @@ revert 整个 PR；不改扩展源码，不涉及数据。
 
 ## 实施记录（PR1）
 
-分支 `feat/e2e-smoke`，2026-11-18 实现，尚未提交。
+分支 `feat/e2e-smoke`，2026-11-18 实现，已合并（#44）。
 
 ### 文件清单
 - `tests/e2e/harness.ts`（621 行）与 `tests/e2e/support.ts`：零依赖 CDP 驱动、Google mock、SW 拦截、可信输入、错误收集。

@@ -780,6 +780,134 @@ describe('page session: dynamic content', () => {
     expect(port.calls).toHaveLength(1);
   });
 
+  describe('protected areas', () => {
+    const FEED = '<div id="feed"><p>Existing post text.</p></div>';
+
+    async function started(markup: string) {
+      const ctx = setup(`${FEED}${markup}`);
+      await ctx.session.start();
+      ctx.show();
+      await vi.waitFor(() => expect(ctx.port.calls).toHaveLength(1));
+      ctx.port.calls[0]?.answer();
+      await vi.waitFor(() => expect(translations().length).toBeGreaterThan(0));
+      await wait();
+      return ctx;
+    }
+
+    /** Adds a control paragraph outside the protected area, in the same round as the change. */
+    function addControl(text: string) {
+      const control = document.createElement('p');
+      control.textContent = text;
+      document.getElementById('feed')?.append(control);
+    }
+
+    /** The control got translated (so the rescan ran) while the draft was never sent. */
+    async function expectDraftBlocked(
+      ctx: Awaited<ReturnType<typeof started>>,
+      control: string,
+      draft: string,
+      draftEl: Element,
+    ) {
+      await wait();
+      ctx.show();
+      await vi.waitFor(() => expect(ctx.sentTexts()).toContain(control));
+      await wait();
+      expect(ctx.sentTexts().filter((text) => text.includes(draft))).toEqual([]);
+      expect(ctx.observed.filter((el) => draftEl.contains(el))).toEqual([]);
+    }
+
+    it('(a) ignores a change to the protected element itself', async () => {
+      const ctx = await started('<div id="ed" contenteditable="true">Original draft words.</div>');
+      const editor = document.getElementById('ed') as HTMLElement;
+      (editor.firstChild as Text).data = 'Alpha draft typed words.';
+      addControl('Control paragraph alpha.');
+      await expectDraftBlocked(ctx, 'Control paragraph alpha.', 'Alpha draft', editor);
+      expect(ctx.dirtyRounds.flat()).toContain(editor);
+    });
+
+    it('(b) ignores a paragraph added inside an editor', async () => {
+      const ctx = await started('<div id="ed" contenteditable="true"><p>Original line.</p></div>');
+      const editor = document.getElementById('ed') as HTMLElement;
+      const typed = document.createElement('p');
+      typed.textContent = 'Bravo typed paragraph.';
+      editor.append(typed);
+      addControl('Control paragraph bravo.');
+      await expectDraftBlocked(ctx, 'Control paragraph bravo.', 'Bravo typed', editor);
+      expect(ctx.dirtyRounds.flat()).toContain(editor);
+    });
+
+    it('(c) ignores typing in editable spans inside a paragraph', async () => {
+      // The inline span is climbed to its paragraph, which drops it from the unit; the
+      // block-styled one stays its own root, so only the ancestor check keeps it out.
+      const ctx = await started(
+        '<p id="line">Lead text here <span id="inl" contenteditable="true">old</span> and <span id="blk" contenteditable="true" style="display:block">old</span></p>',
+      );
+      const inline = document.getElementById('inl') as HTMLElement;
+      const block = document.getElementById('blk') as HTMLElement;
+      (inline.firstChild as Text).data = 'Charlie inline draft';
+      (block.firstChild as Text).data = 'Charlie block draft';
+      addControl('Control paragraph charlie.');
+      await expectDraftBlocked(ctx, 'Control paragraph charlie.', 'Charlie', inline);
+      expect(ctx.observed.filter((el) => block.contains(el))).toEqual([]);
+      expect(ctx.dirtyRounds.flat()).toEqual(expect.arrayContaining([inline, block]));
+    });
+
+    it('(d) does not send a draft when the area became editable after its unit was sent', async () => {
+      const ctx = setup(`${FEED}<div id="box"><p id="mine">Original sentence text.</p></div>`);
+      await ctx.session.start();
+      ctx.show();
+      await vi.waitFor(() => expect(ctx.port.calls).toHaveLength(1));
+      const mine = document.getElementById('mine') as HTMLElement;
+      const observedBefore = ctx.observed.filter((el) => el === mine).length;
+      document.getElementById('box')?.setAttribute('contenteditable', 'true');
+      (mine.firstChild as Text).data = 'Delta typed draft.';
+      addControl('Control paragraph delta.');
+      await wait();
+      ctx.show();
+      await vi.waitFor(() => expect(ctx.sentTexts()).toContain('Control paragraph delta.'));
+      // The stale reply comes back and triggers its own rescan.
+      ctx.port.calls[0]?.answer();
+      await wait(100);
+      ctx.show();
+      expect(ctx.sentTexts().filter((text) => text.includes('Delta typed'))).toEqual([]);
+      expect(ctx.observed.filter((el) => el === mine)).toHaveLength(observedBefore);
+      expect(ctx.dirtyRounds.flat()).toContain(mine);
+    });
+
+    it('(e) ignores a paragraph added inside translate="no"', async () => {
+      const ctx = await started('<div id="nt" translate="no"><p>Kept as is.</p></div>');
+      const holder = document.getElementById('nt') as HTMLElement;
+      const added = document.createElement('p');
+      added.textContent = 'Echo untranslated paragraph.';
+      holder.append(added);
+      addControl('Control paragraph echo.');
+      await expectDraftBlocked(ctx, 'Control paragraph echo.', 'Echo untranslated', holder);
+      expect(ctx.dirtyRounds.flat()).toContain(holder);
+    });
+
+    it('(f) still translates a paragraph added inside an aria-hidden area', async () => {
+      const { session, show, sentTexts } = setup('<div id="hid" aria-hidden="true"></div>');
+      await session.start();
+      const added = document.createElement('p');
+      added.textContent = 'Foxtrot hidden area paragraph.';
+      document.getElementById('hid')?.append(added);
+      await wait();
+      show();
+      await vi.waitFor(() => expect(sentTexts()).toContain('Foxtrot hidden area paragraph.'));
+    });
+
+    it('(g) still translates a paragraph added in an ordinary area', async () => {
+      const { session, show, sentTexts } = setup('<div id="plain"></div>');
+      await session.start();
+      const added = document.createElement('p');
+      added.textContent = 'Golf ordinary area paragraph.';
+      document.getElementById('plain')?.append(added);
+      await wait();
+      show();
+      await vi.waitFor(() => expect(sentTexts()).toContain('Golf ordinary area paragraph.'));
+    });
+  });
+
   it('keeps one translation when a mixed parent loses its block child', async () => {
     const { session, port, show } = setup(
       '<div id="host">Inline lead text here. <div id="inner"><p>Block child text.</p></div></div>',

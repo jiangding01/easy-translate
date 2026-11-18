@@ -9,7 +9,14 @@ import type {
   TranslateRequest,
 } from '@/lib/messaging/protocol';
 import { createPacer, discoverUnits, type Unit } from './discover';
-import { ISLE_TAG, isInlineElement, OWN_TAG, SELECTION_TAG, type StyleReader } from './dom-rules';
+import {
+  ISLE_TAG,
+  isInlineElement,
+  OWN_TAG,
+  protectedAncestor,
+  SELECTION_TAG,
+  type StyleReader,
+} from './dom-rules';
 import { errorText } from './error-text';
 import { watchMutations } from './mutations';
 import { createRenderer, type Renderer } from './render';
@@ -490,6 +497,9 @@ export function createPageSession(deps: SessionDeps): PageSession {
     const current = epoch;
     const roots = new Set<Element>();
     for (const element of elements) {
+      // Drafts only enter units through discovery, so blocking here is enough; existing
+      // units are left alone so the editor's DOM is not touched while the user types.
+      if (protectedAncestor(element, doc.body)) continue;
       let el: Element | null = element;
       while (el && el !== doc.body && isInlineElement(el, readStyle)) el = el.parentElement;
       if (el?.isConnected) roots.add(el);
