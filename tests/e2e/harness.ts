@@ -108,6 +108,13 @@ export interface Harness {
   shadow<T = unknown>(tagName: string, fn: string): Promise<T>;
   /** Stops the worker; the next event restarts it, interception included. */
   stopServiceWorker(): Promise<void>;
+  /**
+   * Reloads the extension, as an update would: pages already open keep their old content
+   * scripts, now cut off from the extension; the new worker is armed when this resolves.
+   * Close extension pages first (the reload replaces them with a new tab), and do not `tell`
+   * an old page afterwards (it never answers); look at its DOM instead.
+   */
+  reloadExtension(): Promise<void>;
   /** A trusted click (CDP input) at a selector's centre or at viewport coordinates. */
   trustedClick(target: string | Point): Promise<void>;
   errors: string[];
@@ -325,6 +332,8 @@ async function start(
   /** Whether the worker runs with interception on; stops are counted for stopServiceWorker. */
   let swReady = false;
   let swStops = 0;
+  /** Set once the browser is in developer mode, which a reload needs (see reloadExtension). */
+  let developerMode = false;
 
   const evaluateIn = async <T>(sessionId: string, expression: string): Promise<T> => {
     const params = { expression, awaitPromise: true, returnByValue: true };
@@ -619,6 +628,34 @@ async function start(
       const stops = swStops;
       await workers('ServiceWorker.stopAllWorkers');
       await waitFor(() => swStops > stops, { message: 'the service worker to stop' });
+    },
+    async reloadExtension() {
+      if (!developerMode) {
+        // Without developer mode the browser disables a command-line extension on reload.
+        // chrome://extensions (attached like any page) can switch it on.
+        const { targetId } = await cdp.send('Target.createTarget', { url: 'chrome://extensions' });
+        const sessionId = await waitFor(
+          () => [...sessions].find(([, entry]) => entry.targetId === targetId)?.[0],
+          { message: 'chrome://extensions to attach' },
+        );
+        await waitFor(() => evaluateIn<boolean>(sessionId, '!!chrome.developerPrivate'), {
+          message: 'chrome.developerPrivate',
+        });
+        const turnOn =
+          'chrome.developerPrivate.updateProfileConfiguration({ inDeveloperMode: true })';
+        await evaluateIn(sessionId, turnOn);
+        await cdp.send('Target.closeTarget', { targetId });
+        developerMode = true;
+      }
+      const old = swSession;
+      // Deferred, so that the answer leaves before the worker goes away.
+      await sw('setTimeout(() => chrome.runtime.reload(), 20), true');
+      await waitFor(() => !sessions.has(old ?? ''), { message: 'the old worker to go away' });
+      await waitFor(() => swReady && swSession !== old, {
+        timeout: 15_000,
+        message: 'the reloaded worker',
+      });
+      await sw(`typeof chrome === 'object' && !!chrome.tabs`);
     },
     async trustedClick(target) {
       const point =

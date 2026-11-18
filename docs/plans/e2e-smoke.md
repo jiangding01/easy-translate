@@ -44,14 +44,14 @@ CI：新增 `e2e` job，`needs: check`，下载 check job 上传的构建产物�
 文档：`docs/plans/e2e-smoke.md`（本方案与实施记录）、README 双语（命令表、CI 说明、本地验收引用 e2e）、CHANGELOG、HANDOFF。
 
 ## PR2：P1 + 面板桩 + 设为阻断
-实施记录（2026-11-18，分支 `feat/e2e-smoke-pr2`，待合并）：修掉面板用例的偶发失败（等待条件弱于断言，等到 blocked 文案即可）；新增 10 条用例（第 9 到 14、16、21、22、23 条），e2e 现为 10 个文件、33 通过、2 跳过，约 37 秒；CI 能标出重试过的用例（`::warning::` 注解、首次失败的错误、重试产物另存）。harness 680 行，不再以行数为退出条件。第 15 条另开小 PR，第 19 条随 M3d PR-B，第 20 条单测已覆盖、不做。「设为必过」待 CI 上积累未经重试的全绿记录后由用户操作。细节见 [`docs/plans/e2e-smoke-pr2.md`](e2e-smoke-pr2.md)。
+实施记录（2026-11-18，分支 `feat/e2e-smoke-pr2`，待合并）：修掉面板用例的偶发失败（等待条件弱于断言，等到 blocked 文案即可）；新增 10 条用例（第 9 到 14、16、21、22、23 条），e2e 现为 10 个文件、33 通过、2 跳过，约 37 秒；CI 能标出重试过的用例（`::warning::` 注解、首次失败的错误、重试产物另存）。harness 680 行，不再以行数为退出条件。第 15 条另开小 PR（已完成，分支 `feat/e2e-reload-extension`，待合并，加入后 e2e 现为 11 个文件、38 通过、2 跳过），第 19 条随 M3d PR-B，第 20 条单测已覆盖、不做。「设为必过」待 CI 上积累未经重试的全绿记录后由用户操作。细节见 [`docs/plans/e2e-smoke-pr2.md`](e2e-smoke-pr2.md)。
 9. 「仅看译文」布局：沿用 `tests/fixtures/translation-only-layout.html` 各用例，切换前后译文根元素宽度与左边界不塌陷、不偏移，切回双语后原文布局复原（`getBoundingClientRect`，容差 0.5px）。
 10. 动态内容：翻译后插入新段落，新段落被翻译。
 11. 总是翻译此站：从 options 页发 `site.setAlways` 后重新加载页面，自动开始翻译。
 12. 引擎错误：mock 返回 403 → 翻译暂停，灵岛显示引擎错误状态。
 13. SW 被停掉后（CDP 关闭 SW target）：拦截自动重挂，继续翻译与重试正常（HANDOFF 的真实缺陷来源）。
 14. #30：Google 纯文本模式丢掉行内标签时改用 HTML 模式重试，链接回到译文里。
-15. 翻译中途重新加载扩展：旧页面不出现未处理的「Extension context invalidated」错误。
+15. 翻译中途重新加载扩展：旧页面不出现未处理的「Extension context invalidated」错误。（已完成，见 [`e2e-reload-extension.md`](e2e-reload-extension.md)）
 16. 面板真实链路：把 popup.html 当普通标签页打开，`Page.addScriptToEvaluateOnNewDocument` 把 `chrome.tabs.query` 换成返回测试页，验证面板按钮 → 内容脚本的真实链路（不改扩展源码）。
 PR2 增补（2026-11-18 用户同意，开工时随 PR2 方案一起审查）：
 17. 整页动态重扫：编辑区（contenteditable、textarea 附近的富文本编辑器）里的文字始终不出现在翻译请求里（Codex 评审第 1 条，P1 修复的回归用例）。已在 P1 修复 PR（`fix/rescan-protected-areas`）中提前完成。

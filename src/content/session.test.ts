@@ -550,6 +550,49 @@ describe('page session: errors', () => {
     expect(port.calls).toHaveLength(1);
   });
 
+  it('halts at its next notification once the extension is unreachable, keeping the translations', async () => {
+    let alive = true;
+    const { session, port, show, runFrame } = setup(
+      '<p>Gone paragraph one.</p><div><p>Gone paragraph two.</p></div>',
+      undefined,
+      {
+        alive: () => alive,
+        // Its unsubscribe needs the extension, like the real one's `storage.onChanged`.
+        watchConfig: () => () => {
+          throw new Error('Extension context invalidated.');
+        },
+      },
+    );
+    const seen: (true | undefined)[] = [];
+    session.subscribe((state) => seen.push(state.halted));
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    const call = port.calls[0] as Call;
+    const [first] = call.payload.items;
+    call.onChunk?.({
+      id: first?.id ?? '',
+      text: '第一段',
+      disposition: 'translated',
+      cached: false,
+    });
+    await vi.waitFor(() => expect(translations()).toEqual(['第一段']));
+    runFrame();
+    expect(session.state()).not.toHaveProperty('halted');
+
+    // The isle's own actions end up here; no request error has told the session anything.
+    alive = false;
+    session.retryFailed();
+    expect(session.state().halted).toBe(true);
+    seen.length = 0;
+    runFrame();
+    expect(seen).toEqual([true]);
+    document.querySelector('div')?.append(document.createElement('p'));
+    await wait();
+    expect(translations()).toEqual(['第一段']);
+    expect(port.calls).toHaveLength(1);
+  });
+
   it('classifies engine-level errors', () => {
     expect(isEngineLevel(engineError('config/missing-key'))).toBe(true);
     expect(isEngineLevel(engineError('provider/quota-exceeded'))).toBe(true);

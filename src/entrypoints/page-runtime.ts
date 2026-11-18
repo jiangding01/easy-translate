@@ -23,6 +23,8 @@ const createPageRuntime: PageRuntimeFactory = (deps) => {
     getConfig: deps.getConfig,
     watchConfig: deps.watchConfig,
     reportStatus: deps.reportStatus,
+    // Once the extension is reloaded or updated, `runtime.id` is gone.
+    alive: () => browser.runtime?.id !== undefined,
     createReadStyle: () => createStyleReader(window),
     createViewport: createIntersectionViewport,
   });

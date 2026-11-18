@@ -69,8 +69,17 @@ export type PluralFn<S = Structure> = <K extends PluralKey<S>>(
 
 function lookup(key: string, substitutions: readonly string[]): string {
   // WXT types `getMessage` from public/_locales only; these keys come from src/locales.
-  const getMessage = browser.i18n.getMessage as (name: string, substitutions?: string[]) => string;
-  return getMessage(key.replaceAll('.', '_'), [...substitutions]);
+  try {
+    const getMessage = browser.i18n.getMessage as (
+      name: string,
+      substitutions?: string[],
+    ) => string;
+    return getMessage(key.replaceAll('.', '_'), [...substitutions]);
+  } catch {
+    // The extension was reloaded or updated under this page: the API throws or the namespace is gone
+    // and there is no copy to show. Empty text, never cached; the page is being wound down.
+    return '';
+  }
 }
 
 /** The copy for `key`, with its `$1`…`$9` filled in. */
