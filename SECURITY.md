@@ -6,7 +6,7 @@ Please do not open a public issue for security problems.
 
 Report them privately through GitHub instead: open the repository's **Security** tab
 and choose **Report a vulnerability**
-(https://github.com/jiangding01/easy-translate/security/advisories/new).
+(https://github.com/jiangding01/islet-translate/security/advisories/new).
 
 Useful details: the affected version or commit, the browser and its version, steps to
 reproduce, and the impact you expect. You will get a reply as soon as possible; please

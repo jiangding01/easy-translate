@@ -25,6 +25,7 @@
 - 划词：首次读取设置期间若修改了设置（如关掉划词小点），不再被读到的旧值覆盖；读取失败后会重新读取。
 
 ### 变更
+- 仓库改名为 [jiangding01/islet-translate](https://github.com/jiangding01/islet-translate)（旧地址由 GitHub 自动跳转）：`package.json` 包名改为 `islet-translate`，仓库、主页、issues、安全公告与版本对比链接同步更新；CI 上传的构建产物改名为 `islet-translate-chrome-<提交号>`。
 - 改名为「译屿 / Islet Translate」：扩展名称、工具栏按钮提示、设置页标题跟随界面语言（中文「译屿」、英文「Islet Translate」），新增短名称（Islet / 译屿），扩展描述改为「双语网页阅读：整页、划词、单词翻译。」。图标微调为「暗岛微光 · 倒影」：琥珀胶囊（页面上的灵岛）下方多了一到两道淡琥珀倒影；新增无边距的 SVG 主图 `docs/assets/icon/icon.svg`。设置页左上角的琥珀圆点换成扩展图标。两份 README、第三方声明与 README 截图同步更新。仓库名、`package.json` 包名、翻译缓存的数据库名等内部标识不变，已有缓存不受影响。
 - 文档：新增[页面 DOM 约定](docs/dom-contract.md)，把 `et-tr`、`lang`、`data-et-inline`、`data-et-only`、`data-et-state` 定为对外约定，供网页导出等工具读取译文（如把双语页面导出为 Markdown），并用测试锁定。
 - 界面多语言（i18n）第 1 批：基础设施。界面语言跟随浏览器（Chrome 自动选择），默认英文，浏览器为中文时显示中文。本批只本地化了扩展名称、描述、工具栏按钮提示和两条快捷键说明（`chrome://extensions/shortcuts` 中可见），其余界面文案在后续批次迁移，迁移完成前不发版。文案写在 `src/locales/*.yml`，由 `@wxt-dev/i18n` 生成 `_locales`；新增 `npm run check:i18n`（语言文件一致性、禁止新增中文硬编码），check-build 校验 `_locales` 与 manifest 文案引用；更换浏览器语言并重启后，右键菜单也会重建。方案见 `docs/plans/i18n.md`。
@@ -163,5 +164,5 @@
 ### 文档
 - 2026-11-12：整理分模块技术方案 `docs/design/00–15`，把前期逆向研究资料归档。
 
-[未发布]: https://github.com/jiangding01/easy-translate/compare/7a03dbf...HEAD
-[0.1.0]: https://github.com/jiangding01/easy-translate/commit/51cdccd
+[未发布]: https://github.com/jiangding01/islet-translate/compare/7a03dbf...HEAD
+[0.1.0]: https://github.com/jiangding01/islet-translate/commit/51cdccd
