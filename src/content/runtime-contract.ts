@@ -7,7 +7,7 @@ import type { PageSession } from './session';
 // Types and side-effect-free constants only: both bundles import this file.
 
 /** The runtime module registers its factory under `Symbol.for(PAGE_RUNTIME_KEY)`. */
-export const PAGE_RUNTIME_KEY = 'easy-translate.page-runtime';
+export const PAGE_RUNTIME_KEY = 'islet-translate.page-runtime';
 
 /** Stateless functions the bootstrap lends to the runtime; there is one copy of each. */
 export interface PageRuntimeDeps {
@@ -29,7 +29,7 @@ export const IDLE_PAGE_STATE: Readonly<PageState> = {
 };
 
 /** The selection runtime registers its factory under `Symbol.for(SELECTION_RUNTIME_KEY)`. */
-export const SELECTION_RUNTIME_KEY = 'easy-translate.selection-runtime';
+export const SELECTION_RUNTIME_KEY = 'islet-translate.selection-runtime';
 
 /** What the bootstrap lends the selection runtime. The runtime opens its own Port. */
 export interface SelectionRuntimeDeps {

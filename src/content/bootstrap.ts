@@ -71,7 +71,7 @@ export function createBootstrap(deps: BootstrapDeps): Bootstrap {
         return create(deps.runtime);
       } catch (cause) {
         if (sessionPromise === pending) sessionPromise = undefined;
-        console.warn('[easy-translate] page runtime failed to load', cause);
+        console.warn('[islet-translate] page runtime failed to load', cause);
         throw appError('network', 'network/page-unreachable', 'Page runtime failed to load');
       }
     })();
@@ -113,7 +113,7 @@ export function createBootstrap(deps: BootstrapDeps): Bootstrap {
         if (selectionPromise === pending) selectionPromise = undefined;
         // The extension was updated or reloaded: expected, and nothing will load again.
         if (!isContextLost(cause)) {
-          console.warn('[easy-translate] selection runtime failed to load', cause);
+          console.warn('[islet-translate] selection runtime failed to load', cause);
         }
         throw appError('network', 'network/page-unreachable', 'Selection runtime failed to load');
       }

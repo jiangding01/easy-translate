@@ -6,7 +6,7 @@
 
 <p>Chrome 上的双语网页阅读：整页、划词、单词，安静地翻译。</p>
 
-[![CI](https://github.com/jiangding01/easy-translate/actions/workflows/ci.yml/badge.svg)](https://github.com/jiangding01/easy-translate/actions/workflows/ci.yml)
+[![CI](https://github.com/jiangding01/islet-translate/actions/workflows/ci.yml/badge.svg)](https://github.com/jiangding01/islet-translate/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-F5A524)](LICENSE)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-F5A524)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6-F5A524?logo=typescript&logoColor=white)
@@ -67,7 +67,7 @@
 **从 CI 构建产物安装**
 
 1. 在 GitHub 打开一个 PR，进入 **Checks**，点开这次 CI 运行，来到 **Summary** 页。
-2. 在 **Artifacts** 里下载 `easy-translate-chrome-<提交号>`，产物保留 7 天。
+2. 在 **Artifacts** 里下载 `islet-translate-chrome-<提交号>`，产物保留 7 天。
 3. 解压后打开 `chrome://extensions`，启用「开发者模式」，点击「加载已解压的扩展程序」。
 
 **从源码构建**

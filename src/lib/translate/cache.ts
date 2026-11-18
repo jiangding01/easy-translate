@@ -1,6 +1,6 @@
 import { type DBSchema, type IDBPDatabase, type IDBPTransaction, openDB } from 'idb';
 
-const DB_NAME = 'easy-translate';
+const DB_NAME = 'islet-translate';
 const DB_VERSION = 1;
 const META_TOTAL = 'totalBytes';
 

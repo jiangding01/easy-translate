@@ -137,7 +137,7 @@ providers: {
 
 ### 4.6 缓存（IndexedDB，使用 idb 8）
 
-- 库 `easy-translate`，对象仓库 `translations`：`{ key, text, createdAt, lastUsedAt, bytes }`，按 `lastUsedAt` 建索引；另有 `meta` 记录 `totalBytes`。
+- 库 `islet-translate`（改名前为 `easy-translate`），对象仓库 `translations`：`{ key, text, createdAt, lastUsedAt, bytes }`，按 `lastUsedAt` 建索引；另有 `meta` 记录 `totalBytes`。
 - **缓存键** = `'v1:' + sha256(stableJSON({ engine, endpoint, model, source, target, promptDigest, paramsDigest, text }))`。`v1` 是缓存格式版本（借鉴 FluentRead）：以后如果改变了结果判定规则或存储格式，只需升级版本号，旧记录自然不再命中，之后由 TTL 清理。
 - **单条上限 256KB**（借鉴 FluentRead）：超过的译文不写入缓存，防止一条异常的超长记录挤掉大量正常记录。`endpoint` 是归一化后的 baseURL。`paramsDigest` 在 M1 恒为 `''`；M4 加入 temperature 时再赋值。这里**不包含**密钥或 credential scope，因为同一端点、同一模型的译文与密钥无关。
 - TTL 7 天，读取时检查，过期即删除。超过 100 MiB 时按 `lastUsedAt` 从旧到新淘汰，直到降到 80 MiB。阈值用常量，沿用旧版默认值。
@@ -276,7 +276,7 @@ providers: {
 - **外部依赖故障**：provider 不可用时，错误逐段返回；缓存层故障时降级为无缓存。两者都不会影响配置和其他功能。
 - **SW 回收会丢失在途请求**：后台不做恢复，由 M2 内容脚本负责重连和重发（见 4.7）。这一点写入 HANDOFF，作为 M2 的前置约定。
 - **占位符经过 MT 后能否保留**：Google MT 可能改写 `{{n}}` 一类的占位符，导致 M2 无法把译文还原到 DOM 中。M1 不处理，在 HANDOFF 中列为 **M2 前置实测项**：统计占位符经 Google 翻译后的保留率，再决定 M2 的占位符格式。
-- **回滚**：新增的存储键只有 `secrets` 和 IndexedDB 中的 `easy-translate` 库，配置只追加了字段。回退这个 PR 后，旧代码会忽略这些数据，不需要迁移。
+- **回滚**：新增的存储键只有 `secrets` 和 IndexedDB 中的翻译缓存库（现名 `islet-translate`），配置只追加了字段。回退这个 PR 后，旧代码会忽略这些数据，不需要迁移。
 - **所需凭据**：Google 不需要。OpenAI、DeepSeek、Gemini 的密钥，以及可选的自定义 OpenAI 兼容端点，**都由用户在手工验收时自行填写**。实现和自动化测试全部使用模拟 fetch，不需要任何真实密钥。
 
 ## 8. Gemini 默认模型

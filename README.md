@@ -6,7 +6,7 @@
 
 <p>Bilingual web reading for Chrome: translate whole pages, selections and single words, quietly.</p>
 
-[![CI](https://github.com/jiangding01/easy-translate/actions/workflows/ci.yml/badge.svg)](https://github.com/jiangding01/easy-translate/actions/workflows/ci.yml)
+[![CI](https://github.com/jiangding01/islet-translate/actions/workflows/ci.yml/badge.svg)](https://github.com/jiangding01/islet-translate/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-F5A524)](LICENSE)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-F5A524)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6-F5A524?logo=typescript&logoColor=white)
@@ -67,7 +67,7 @@ Islet Translate is not in a web store yet. There are two ways to install it.
 **From a CI build**
 
 1. Open a pull request on GitHub, go to **Checks**, open the CI run, and scroll to **Summary**.
-2. Under **Artifacts**, download `easy-translate-chrome-<sha>`. Artifacts are kept for 7 days.
+2. Under **Artifacts**, download `islet-translate-chrome-<sha>`. Artifacts are kept for 7 days.
 3. Unzip it, open `chrome://extensions`, turn on Developer mode, and choose **Load unpacked**.
 
 **From source**

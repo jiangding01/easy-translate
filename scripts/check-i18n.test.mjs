@@ -148,7 +148,7 @@ describe('findHanLiterals', () => {
   it('reads HTML text and attributes, not comments', () => {
     const source = [
       '<!-- 注释 -->',
-      '<title>Easy Translate · 设置</title>',
+      '<title>Islet Translate · 设置</title>',
       '<meta content="说明" />',
       '<p>English &#20013;</p>',
       '<style>/* 样式注释 */ p { color: red }</style>',
