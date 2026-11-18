@@ -1,6 +1,6 @@
 # 重扫保护区域修复方案（P1）：动态重扫绕过祖先排除（编辑区草稿进入翻译请求）
 
-> 状态：已实施，待合并（2026-11-18 用户批准）。方案经 Opus 对抗式审查后修订（删掉发包前检查、检查前移到爬升前、补防空断言与漏掉的用例、e2e 不改 harness）。来源：Codex 评审第 1 条，核实见 `docs/reviews/2026-11-18-codex-review-verification.md`。
+> 状态：已合并（#45，2026-11-18）。2026-11-18 用户批准。方案经 Opus 对抗式审查后修订（删掉发包前检查、检查前移到爬升前、补防空断言与漏掉的用例、e2e 不改 harness）。来源：Codex 评审第 1 条，核实见 `docs/reviews/2026-11-18-codex-review-verification.md`。
 
 ## 问题与根因（已核实）
 - 初扫以 `body` 为根，`discoverUnits` 遍历时遇到 `isSkipped` 就拒绝整棵子树（`discover.ts:81`），所以编辑区、`translate="no"` 等子树扫不到。

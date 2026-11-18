@@ -1,6 +1,6 @@
 # 仅看译文样式精确恢复（Codex 第 2 条）
 
-> 状态：已实施，待合并（2026-11-18 用户批准）。方案经 Opus 对抗式审查后修订。来源：Codex 评审第 2 条（P2），核实见 `docs/reviews/2026-11-18-codex-review-verification.md`；顺带修掉 e2e 记录的已知问题「显示原文后残留空 `style=""`」。
+> 状态：已合并（#46，2026-11-18）。2026-11-18 用户批准。方案经 Opus 对抗式审查后修订。来源：Codex 评审第 2 条（P2），核实见 `docs/reviews/2026-11-18-codex-review-verification.md`；顺带修掉 e2e 记录的已知问题「显示原文后残留空 `style=""`」。
 
 ## 问题
 1. **整串覆盖抹掉网页的改动。** 进入「仅看译文」时，`applyOnly`（`render.ts:264-285`）记下块根元素整串 `style` 属性，再用 `style.setProperty` 钉住 min/max 宽高、flex-basis、text-indent、margin、padding、width、height（`render.ts:221-243`，防止根元素 `font-size:0` 后 em/ch 长度归零）。退出时 `removeOnly`（`render.ts:286-297`）把整串写回，网页在这期间对该元素内联样式的任何改动（例如颜色由红改蓝）都被抹掉。

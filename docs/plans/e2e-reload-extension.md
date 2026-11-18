@@ -1,6 +1,6 @@
 # 扩展重载后旧页面不报错（冒烟 e2e 第 15 条）
 
-> 状态：已实施，待合并。2026-11-18 用户批准（选择一并做「失联即 halt」）。方案经 Opus 对抗式审查后修订。来源：`docs/plans/e2e-smoke.md` PR2 第 15 条（PR2 时推迟，见 `docs/plans/e2e-smoke-pr2.md`）。
+> 状态：已合并（#51，2026-11-18）。2026-11-18 用户批准（选择一并做「失联即 halt」）。方案经 Opus 对抗式审查后修订。来源：`docs/plans/e2e-smoke.md` PR2 第 15 条（PR2 时推迟，见 `docs/plans/e2e-smoke-pr2.md`）。
 
 ## 实测（方案前，在 scratchpad 完成，仓库无改动）
 - **harness 可行**：在已开开发者模式的前提下，SW 里执行 `chrome.runtime.reload()` 后约 15ms 旧 SW 的 session 报 `targetCrashed` 并 detach，约 100ms 新 SW 以新 targetId 自动挂上、停在等待调试器，现有 `onAttached` → `armWorker` 自动重开拦截，扩展 id 不变。同一浏览器连续重载 10 次 10/10 稳定，sessions 不泄漏。
