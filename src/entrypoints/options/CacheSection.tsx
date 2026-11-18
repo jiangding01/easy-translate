@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { i18n } from '#i18n';
 import type { CacheStatsInfo } from '@/lib/messaging/protocol';
+import { uiLocale } from '@/lib/ui-locale';
 import { admin } from './hooks';
 import { useNotice } from './notice';
 import styles from './options.module.css';
@@ -8,6 +10,15 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** The one-line cache summary under the section title; copy follows the UI language. */
+export function cacheSummary(stats: CacheStatsInfo): string {
+  if (stats.count === 0) return i18n.t('options.cache.empty');
+  return i18n.t('options.cache.summary', stats.count, [
+    stats.count.toLocaleString(uiLocale()),
+    formatBytes(stats.totalBytes),
+  ]);
 }
 
 export function CacheSection() {
@@ -30,39 +41,33 @@ export function CacheSection() {
     setBusy(false);
     setConfirming(false);
     if (!result.ok) {
-      notice.failed(result.error, '清空失败，请重试。');
+      notice.failed(result.error, i18n.t('errors.action.clearFailed'));
       return;
     }
     setStats({ count: 0, totalBytes: 0 });
-    notice.saved('已清空缓存');
+    notice.saved(i18n.t('options.cache.cleared'));
   }
 
-  let summary = '正在统计…';
-  if (stats) {
-    summary =
-      stats.count === 0
-        ? '暂无缓存 · 译文保留 7 天'
-        : `${stats.count.toLocaleString('zh-CN')} 段译文 · ${formatBytes(stats.totalBytes)} · 保留 7 天`;
-  }
+  const summary = stats ? cacheSummary(stats) : i18n.t('options.cache.counting');
 
   return (
     <section aria-labelledby="cache-title" className={styles.cache}>
       <div>
         <h2 id="cache-title" className={styles.sectionTitle}>
-          翻译缓存
+          {i18n.t('options.cache.title')}
         </h2>
         <p className={styles.sectionHint}>{summary}</p>
       </div>
       {confirming ? (
         <div className={`${styles.appear} ${styles.inline}`}>
-          <span className={styles.hint}>清空后，翻译过的网页需要重新请求</span>
+          <span className={styles.hint}>{i18n.t('options.cache.clearHint')}</span>
           <button
             type="button"
             className={styles.ghostSmall}
             onClick={() => setConfirming(false)}
             disabled={busy}
           >
-            取消
+            {i18n.t('options.cache.cancel')}
           </button>
           <button
             type="button"
@@ -70,7 +75,7 @@ export function CacheSection() {
             onClick={() => void clear()}
             disabled={busy}
           >
-            清空
+            {i18n.t('options.cache.clear')}
           </button>
         </div>
       ) : (
@@ -80,7 +85,7 @@ export function CacheSection() {
           onClick={() => setConfirming(true)}
           disabled={stats?.count === 0}
         >
-          清空
+          {i18n.t('options.cache.clear')}
         </button>
       )}
     </section>

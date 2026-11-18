@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { i18n } from '#i18n';
 import {
   type ConfigV1,
   type CustomProviderId,
@@ -6,7 +7,7 @@ import {
   MAX_CUSTOM_PROVIDERS,
 } from '@/lib/config/types';
 import { useConfig } from '@/lib/config/use-config';
-import { engineEntries } from '@/lib/engine-view';
+import { builtinName, engineEntries } from '@/lib/engine-view';
 import { AddServiceDialog } from './AddServiceDialog';
 import { CacheSection } from './CacheSection';
 import { EngineItem } from './EngineItem';
@@ -31,7 +32,7 @@ export function ServicesPage({ config }: { config: ConfigV1 }) {
   async function makeDefault(engine: Engine) {
     if (engine === config.translation.engine) return;
     const result = await patch([{ path: 'translation.engine', value: engine }]);
-    if (result.ok) notice.saved('已设为默认');
+    if (result.ok) notice.saved(i18n.t('options.services.madeDefault'));
     else notice.failed(result.error);
   }
 
@@ -39,13 +40,17 @@ export function ServicesPage({ config }: { config: ConfigV1 }) {
     const wasDefault = config.translation.engine === id;
     const result = await patch([{ path: 'customProviders', key: id, remove: true }]);
     if (!result.ok) {
-      notice.failed(result.error, '删除失败，请重试。');
+      notice.failed(result.error, i18n.t('errors.action.deleteFailed'));
       return;
     }
     // The background deletes the provider's key; host grants are left alone, since
     // another provider may share the origin.
     setExpanded(undefined);
-    notice.saved(wasDefault ? '已删除，默认改用 Google 翻译' : '已删除');
+    notice.saved(
+      wasDefault
+        ? i18n.t('options.services.deletedFallback', [builtinName('google')])
+        : i18n.t('options.services.deleted'),
+    );
   }
 
   return (
@@ -54,9 +59,9 @@ export function ServicesPage({ config }: { config: ConfigV1 }) {
         <div className={styles.sectionHead}>
           <div className={styles.sectionTitleRow}>
             <h2 id="engines-title" className={styles.sectionTitle}>
-              引擎
+              {i18n.t('options.services.engines')}
             </h2>
-            <span className={styles.headHint}>圆点选中的是默认引擎，点一行查看和修改配置</span>
+            <span className={styles.headHint}>{i18n.t('options.services.enginesHint')}</span>
           </div>
           <button
             ref={addButton}
@@ -66,8 +71,8 @@ export function ServicesPage({ config }: { config: ConfigV1 }) {
             disabled={full}
             title={
               full
-                ? `最多添加 ${MAX_CUSTOM_PROVIDERS} 个自定义服务`
-                : '添加一个兼容 OpenAI 接口的服务'
+                ? i18n.t('options.services.limitReached', [String(MAX_CUSTOM_PROVIDERS)])
+                : i18n.t('options.services.addTooltip')
             }
           >
             <svg
@@ -81,7 +86,7 @@ export function ServicesPage({ config }: { config: ConfigV1 }) {
             >
               <path d="M6 2v8M2 6h8" />
             </svg>
-            添加服务
+            {i18n.t('options.services.addService')}
           </button>
         </div>
 
@@ -90,7 +95,7 @@ export function ServicesPage({ config }: { config: ConfigV1 }) {
             <div key={entry.id}>
               {entry.id === firstCustom && (
                 <div className={styles.groupHead}>
-                  <span>自定义 · OpenAI 兼容</span>
+                  <span>{i18n.t('options.services.customGroup')}</span>
                   <span>
                     {customIds.length} / {MAX_CUSTOM_PROVIDERS}
                   </span>
@@ -129,7 +134,9 @@ export function ServicesPage({ config }: { config: ConfigV1 }) {
           setExpanded(id);
           setFresh(id);
           refresh();
-          notice.saved(granted ? '已添加' : '已添加，等待授权');
+          notice.saved(
+            granted ? i18n.t('options.services.added') : i18n.t('options.services.addedPending'),
+          );
         }}
       />
     </>

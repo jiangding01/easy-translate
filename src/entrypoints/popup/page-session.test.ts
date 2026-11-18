@@ -42,9 +42,9 @@ describe('panel copy', () => {
     expect(failedText(1234)).toBe('1,234 paragraphs not translated');
   });
 
-  it('keeps the engine name and its reason apart in English, joined in Chinese', async () => {
+  it('keeps the engine name and its reason apart', async () => {
     expect(i18n.t('popup.engineNotReady', ['DeepSeek', '还没有填写密钥'])).toBe(
-      'DeepSeek还没有填写密钥',
+      'DeepSeek：还没有填写密钥',
     );
     await useEnglish();
     expect(i18n.t('popup.engineNotReady', ['DeepSeek', 'No API key yet'])).toBe(

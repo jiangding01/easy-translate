@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
+import { i18n } from '#i18n';
 import { useConfig } from '@/lib/config/use-config';
 import { describeError } from '@/lib/error-messages';
 import { useTheme } from '@/styles/theme';
@@ -10,14 +11,11 @@ import { ServicesPage } from './ServicesPage';
 
 type Page = 'general' | 'services';
 
-const PAGES: { id: Page; title: string; sub: string }[] = [
-  { id: 'general', title: '通用', sub: '语言、外观与译文样式，改动会立即生效。' },
-  {
-    id: 'services',
-    title: '翻译服务',
-    sub: 'Google 免费可用；AI 引擎和自定义服务需要你自己的密钥。',
-  },
-];
+// Key table only: the copy is looked up at render (tests switch the UI language per case).
+const PAGES = [
+  { id: 'general', title: 'options.nav.general', sub: 'options.nav.generalSub' },
+  { id: 'services', title: 'options.nav.services', sub: 'options.nav.servicesSub' },
+] as const satisfies { id: Page; title: string; sub: string }[];
 
 function pageFromHash(): Page {
   return location.hash === '#general' ? 'general' : 'services';
@@ -41,7 +39,7 @@ export function App() {
   return (
     <NoticeProvider api={api}>
       <div className={styles.shell}>
-        <nav aria-label="设置分区" className={styles.nav}>
+        <nav aria-label={i18n.t('options.nav.label')} className={styles.nav}>
           <div className={styles.brand}>
             <span aria-hidden="true" className={styles.brandDot} />
             <span lang="en">Easy Translate</span>
@@ -56,7 +54,7 @@ export function App() {
                 aria-current={item.id === page ? 'page' : undefined}
               >
                 {item.id === 'general' ? <GearIcon /> : <TranslateIcon />}
-                {item.title}
+                {i18n.t(item.title)}
               </a>
             ))}
           </div>
@@ -69,16 +67,18 @@ export function App() {
           <div className={styles.column}>
             <header className={styles.pageHeader}>
               <div>
-                <h1 className={styles.pageTitle}>{current?.title}</h1>
-                <p className={styles.pageSub}>{current?.sub}</p>
+                <h1 className={styles.pageTitle}>{i18n.t(current.title)}</h1>
+                <p className={styles.pageSub}>{i18n.t(current.sub)}</p>
               </div>
               <NoticeLine notice={notice} />
             </header>
 
-            {state.status === 'loading' && <p className={styles.pageSub}>正在加载设置…</p>}
+            {state.status === 'loading' && (
+              <p className={styles.pageSub}>{i18n.t('options.nav.loading')}</p>
+            )}
             {state.status === 'error' && (
               <p className={styles.fieldError} role="alert">
-                {describeError(state.error, '读取设置失败，请刷新后重试。')}
+                {describeError(state.error, i18n.t('errors.config.readFailed'))}
               </p>
             )}
             {state.status === 'ready' &&

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { i18n } from '#i18n';
 import { describeError } from '@/lib/error-messages';
 import type { AppError } from '@/lib/errors';
 import styles from './options.module.css';
@@ -31,8 +32,8 @@ export function useNoticeState(): {
     });
   }, []);
   const [api] = useState<NoticeApi>(() => ({
-    saved: (text = '已保存') => show({ kind: 'saved', text }),
-    failed: (error, fallback = '保存失败，请重试。') =>
+    saved: (text = i18n.t('options.notice.saved')) => show({ kind: 'saved', text }),
+    failed: (error, fallback = i18n.t('errors.config.writeFailed')) =>
       show({ kind: 'error', text: describeError(error, fallback) }),
   }));
 

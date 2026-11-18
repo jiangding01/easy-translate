@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { i18n } from '#i18n';
 import { describeError } from '@/lib/error-messages';
 import type { AppError, Result } from '@/lib/errors';
 import type { ProviderTestResult } from '@/lib/messaging/protocol';
@@ -66,7 +67,11 @@ export function TestStrip({ run, blocked, autoRun, resetKey }: Props) {
   }, [autoRun, blocked]);
 
   const label =
-    state.status === 'loading' ? '测试中' : state.status === 'idle' ? '测试连接' : '再测一次';
+    state.status === 'loading'
+      ? i18n.t('options.test.running')
+      : state.status === 'idle'
+        ? i18n.t('options.test.run')
+        : i18n.t('options.test.again');
   return (
     <>
       <div className={styles.strip}>
@@ -87,9 +92,11 @@ export function TestStrip({ run, blocked, autoRun, resetKey }: Props) {
         </svg>
         <span className={styles.stripResult} role="status" aria-live="polite">
           {state.status === 'idle' && (
-            <span className={styles.stripDim}>{blocked ?? '用这句话试一次'}</span>
+            <span className={styles.stripDim}>{blocked ?? i18n.t('options.test.prompt')}</span>
           )}
-          {state.status === 'loading' && <span className={styles.stripDim}>正在请求…</span>}
+          {state.status === 'loading' && (
+            <span className={styles.stripDim}>{i18n.t('options.test.requesting')}</span>
+          )}
           {state.status === 'ok' && (
             <>
               <span className={styles.appear}>{state.result.text}</span>
@@ -100,7 +107,9 @@ export function TestStrip({ run, blocked, autoRun, resetKey }: Props) {
             </>
           )}
           {state.status === 'fail' && (
-            <span className={`${styles.appear} ${styles.stripFail}`}>没有连通</span>
+            <span className={`${styles.appear} ${styles.stripFail}`}>
+              {i18n.t('options.test.failed')}
+            </span>
           )}
         </span>
         <button
@@ -119,14 +128,14 @@ export function TestStrip({ run, blocked, autoRun, resetKey }: Props) {
       </div>
       {state.status === 'fail' && (
         <p className={`${styles.appear} ${styles.failText}`}>
-          {describeError(state.error, '连接失败，请重试。')}
+          {describeError(state.error, i18n.t('errors.action.connectFailed'))}
           <button
             type="button"
             className={styles.textButton}
             onClick={() => setDetail(!detail)}
             aria-expanded={detail}
           >
-            {detail ? '收起' : '详情'}
+            {detail ? i18n.t('options.test.collapse') : i18n.t('options.test.details')}
           </button>
           {detail && <code className={styles.failCode}>{state.error.code}</code>}
         </p>

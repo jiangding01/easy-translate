@@ -783,9 +783,11 @@
 }
 .segmented {
   position: relative;
-  display: grid;
+  display: inline-grid;
   grid-auto-flow: column;
-  grid-auto-columns: var(--seg-w, 72px);
+  /* Equal segments: at least --seg-min, wider when a label needs it (longer copy in
+     other languages); every segment as wide as the longest one. */
+  grid-auto-columns: minmax(var(--seg-min, 72px), 1fr);
   margin: 0;
   border: 0;
   padding: 3px;
@@ -796,36 +798,52 @@
   flex-shrink: 0;
 }
 .segmentThumb {
+  /* Out of the flow but placed in the first grid cell, so it is exactly one segment. Both
+     lines are explicit: an absolutely positioned item's "auto" line is the padding edge,
+     which would stretch the thumb across the whole control. */
   position: absolute;
-  top: 3px;
-  left: 3px;
-  width: var(--seg-w, 72px);
-  height: var(--et-h-control-sm);
+  grid-row: 1 / 2;
+  grid-column: 1 / 2;
+  inset: 0;
   border-radius: var(--et-radius-md);
-  background: var(--et-color-elevated);
+  background: var(--et-color-segment-thumb);
   box-shadow:
     0 1px 2px oklch(0.2 0.02 70 / 0.12),
-    0 0 0 1px var(--et-color-border);
-  transform: translateX(calc(var(--index, 0) * (var(--seg-w, 72px) + 2px)));
+    0 0 0 1px var(--et-color-segment-ring);
+  transform: translateX(calc(var(--index, 0) * (100% + 2px)));
   transition: transform var(--et-dur-slide) var(--et-ease-spring);
 }
 .segment {
   position: relative;
   display: flex;
+  /* Column, so the hidden medium-weight copy below adds width but no height. */
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   height: var(--et-h-control-sm);
+  padding: 0 12px;
   border: 0;
   border-radius: var(--et-radius-md);
   background: transparent;
   color: var(--et-color-muted);
   font-size: var(--et-fs-page-sm);
+  white-space: nowrap;
   transition: color var(--et-dur-base) var(--et-ease-out);
 }
 .segment:has(:checked) {
   color: var(--et-color-text);
   font-weight: var(--et-fw-medium);
+}
+/* The selected label turns medium: reserve that width so the columns (and the thumb) do
+   not jump when the selection moves. Hidden from view and from screen readers. */
+.segment::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: var(--et-fw-medium);
+  pointer-events: none;
 }
 
 /* ---------------------------------------------------------------- dialog */

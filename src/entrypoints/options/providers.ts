@@ -1,20 +1,34 @@
+import { i18n } from '#i18n';
 import type { BuiltinEngine, CustomProviderId } from '@/lib/config/types';
 import { normalizeBaseURL } from '@/lib/endpoint';
 import { hostName, type NotReady } from '@/lib/engine-view';
 
 // Settings-page-only data: kept out of the shared engine view so the toolbar
-// panel does not carry it.
+// panel does not carry it. Copy is held as keys and looked up at use (docs/plans/i18n.md 4.2).
+
+type KeyLinkLabel = 'options.engine.getKey' | 'options.engine.getKeyAndModels';
 
 /** Where to get a key (and, for Gemini, the model list). */
-export const KEY_LINKS: Partial<Record<BuiltinEngine, { href: string; label: string }>> = {
-  openai: { href: 'https://platform.openai.com/api-keys', label: '获取 API Key ↗' },
-  deepseek: { href: 'https://platform.deepseek.com/api_keys', label: '获取 API Key ↗' },
-  gemini: { href: 'https://ai.google.dev/gemini-api/docs/models', label: '密钥与模型列表 ↗' },
+export const KEY_LINKS: Partial<Record<BuiltinEngine, { href: string; label: KeyLinkLabel }>> = {
+  openai: { href: 'https://platform.openai.com/api-keys', label: 'options.engine.getKey' },
+  deepseek: { href: 'https://platform.deepseek.com/api_keys', label: 'options.engine.getKey' },
+  gemini: {
+    href: 'https://ai.google.dev/gemini-api/docs/models',
+    label: 'options.engine.getKeyAndModels',
+  },
 };
+
+type PresetLabel =
+  | 'options.add.presetOllama'
+  | 'options.add.presetLmstudio'
+  | 'options.add.presetOpenrouter'
+  | 'options.add.presetSiliconflow'
+  | 'options.add.presetOther';
 
 export interface Preset {
   id: string;
-  label: string;
+  /** Copy key of the preset's name. */
+  label: PresetLabel;
   baseURL: string;
   /** Local servers usually take no key. */
   local: boolean;
@@ -22,11 +36,31 @@ export interface Preset {
 
 /** Base URLs checked against each vendor's docs (2026-11-14). */
 export const PRESETS: readonly Preset[] = [
-  { id: 'ollama', label: 'Ollama（本地）', baseURL: 'http://localhost:11434/v1', local: true },
-  { id: 'lmstudio', label: 'LM Studio（本地）', baseURL: 'http://localhost:1234/v1', local: true },
-  { id: 'openrouter', label: 'OpenRouter', baseURL: 'https://openrouter.ai/api/v1', local: false },
-  { id: 'siliconflow', label: '硅基流动', baseURL: 'https://api.siliconflow.cn/v1', local: false },
-  { id: 'other', label: '其他', baseURL: '', local: false },
+  {
+    id: 'ollama',
+    label: 'options.add.presetOllama',
+    baseURL: 'http://localhost:11434/v1',
+    local: true,
+  },
+  {
+    id: 'lmstudio',
+    label: 'options.add.presetLmstudio',
+    baseURL: 'http://localhost:1234/v1',
+    local: true,
+  },
+  {
+    id: 'openrouter',
+    label: 'options.add.presetOpenrouter',
+    baseURL: 'https://openrouter.ai/api/v1',
+    local: false,
+  },
+  {
+    id: 'siliconflow',
+    label: 'options.add.presetSiliconflow',
+    baseURL: 'https://api.siliconflow.cn/v1',
+    local: false,
+  },
+  { id: 'other', label: 'options.add.presetOther', baseURL: '', local: false },
 ];
 
 const ID_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -56,16 +90,16 @@ export function newCustomId(
 /** A preset keeps its label while its address is untouched; otherwise the host names it. */
 export function defaultProviderName(preset: Preset | undefined, baseURL: string): string {
   if (preset && preset.id !== 'other' && normalizeBaseURL(baseURL) === preset.baseURL) {
-    return preset.label;
+    return i18n.t(preset.label);
   }
   return hostName(baseURL);
 }
 
 /** Why the connection test is disabled. */
-export const TEST_BLOCKED_TEXT: Record<NotReady, string> = {
-  'bad-url': '先填写正确的地址',
-  'checking-grant': '正在检查授权…',
-  'needs-grant': '授权后可以测试',
-  'needs-key': '填写 API Key 后可以测试',
-  'needs-model': '填写模型后可以测试',
-};
+export const TEST_BLOCKED_TEXT = {
+  'bad-url': 'options.test.blocked.badUrl',
+  'checking-grant': 'options.test.blocked.checkingGrant',
+  'needs-grant': 'options.test.blocked.needsGrant',
+  'needs-key': 'options.test.blocked.needsKey',
+  'needs-model': 'options.test.blocked.needsModel',
+} as const satisfies Record<NotReady, string>;
