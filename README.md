@@ -152,6 +152,7 @@ wxt.config.ts           # WXT 与 Manifest V3 配置
 | [M3a 划词翻译方案](docs/plans/m3a-selection.md) | 小点与卡片、流式、选区一致性、真机调整 |
 | [引擎供应商图标](docs/plans/provider-icons.md) | 图标数据、下发方式与体积 |
 | [英文单词音标](docs/plans/phonetics-en.md) | 数据来源、写法转换、分片、朗读卡死修复 |
+| [页面 DOM 约定（对外）](docs/dom-contract.md) | 译文插进网页后留下的标记，供网页导出等第三方工具读取；修改属于不兼容变更 |
 | [Codex 复核核实](docs/reviews/2026-11-17-core-findings-verification.md) | 核心实现问题的核实结论与修复排期 |
 
 ## 接入本地 Ollama
@@ -178,6 +179,7 @@ wxt.config.ts           # WXT 与 Manifest V3 配置
 7. 清空翻译缓存后，条数归零。
 8. 在 `chrome://serviceworker-internals` 停止 Service Worker 后再修改设置或测试连接，确认仍能正常工作。
 9. 整页翻译的完整验收清单（含 4 倍 CPU 降速下的动效检查）见 [`docs/plans/m2-page-translation.md`](docs/plans/m2-page-translation.md) 第 10 节。
+10. 「只看译文」的版面：运行 `python3 -m http.server 8765 --directory tests/fixtures`，打开 `http://localhost:8765/translation-only-layout.html`（内容脚本只在 http/https 页面运行，不能直接打开文件），翻译整页、切到只看译文、拖动窗口宽度，按每个用例下方的灰色说明核对，再切回双语确认原样恢复。
 
 安装或重新加载扩展后，请刷新已有网页，使内容脚本生效。Chrome 内部页、网上应用店和内置 PDF 阅读器等页面受浏览器注入限制。
 
