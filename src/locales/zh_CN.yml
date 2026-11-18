@@ -51,6 +51,9 @@ errors:
   rateLimit:
     tooManyRequests: 请求过于频繁，服务暂时限流。请稍等片刻后重试。
     portBusy: 当前页面同时进行的翻译请求过多。请稍等片刻后重试。
+  action:
+    panelReadFailed: 读取设置失败，请重新打开面板。
+    openSettingsFailed: 无法打开设置页，请重试。
 
 # 引擎名称与就绪状态（src/lib/engine-view.ts、src/lib/translate/engine-options.ts）。
 engine:
@@ -75,3 +78,57 @@ engine:
     notConfigured: 未配置
     noModel: 未填模型
     unsaved: 未保存
+
+# 面板与设置页共用、意思完全相同的词。
+common:
+  autoDetect: 自动检测
+  modeBilingual: 双语
+  modeTranslation: 仅译文
+
+# 工具栏面板（src/entrypoints/popup）。
+popup:
+  loading: 正在加载…
+  browserPage: 浏览器页面
+  # $1：页面语言的自称（不翻译）。
+  detected: 检测到 $1
+  noLanguage: 未声明语言
+  translateTo: 翻译成
+  # $1：页面语言的自称。
+  nativeTitle: 这一页已经是$1
+  nativeHint: 不需要翻译。
+  reloadTitle: 需要刷新这个网页
+  reloadHint: 扩展安装或更新之后，已经打开的网页要刷新一次才能翻译。
+  blockedTitle: 这个页面不能翻译
+  blockedHint: 浏览器不允许扩展读取它自己的页面和应用商店页面。换到普通网页再试。
+  readingPage: 正在读取页面…
+  alwaysSite: 总是翻译此站
+  # $1：网站主机名。
+  alwaysOn: 打开 $1 时自动翻译
+  alwaysOff: 只在你唤起时翻译
+  settings: 设置
+  goSettings: 去设置
+  # $1：Google 引擎的名称（engine.googleName）。
+  useGoogleOnce: 这次先用 $1
+  translatePage: 翻译此页
+  noShortcut: 还没有快捷键 ·
+  setShortcut: 设置快捷键 ↗
+  # $1：默认引擎名，$2：它还不能翻译的原因（engine.notReady.*）。
+  engineNotReady: $1$2
+  # $1：引擎名，$2：暂停原因（popup.pausedReason.*）。
+  pausedNotice: $1 $2，翻译已暂停
+  pausedReason:
+    unauthorized: 密钥无效
+    quotaExceeded: 额度已用完
+    localRejected: 本地服务拒绝了请求
+    permissionMissing: 还没有授权访问接口
+    incomplete: 设置不完整
+  retry: 重试
+  showOriginal: 显示原文
+  stopShowOriginal: 停止并显示原文
+  progress: 正在翻译眼前的段落，往下读时继续
+  # $1：没有译出的段数。
+  failedCount:
+    1: $1 段没有译出
+    n: $1 段没有译出
+  displayMode: 显示方式
+  defaultEngine: 默认引擎

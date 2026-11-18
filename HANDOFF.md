@@ -1,6 +1,6 @@
 # Easy Translate 交接文档（HANDOFF）
 
-> 最后更新：2026-11-18 · 阶段：**路线图前 3 项已完成**（PR-A #17、CI 增强 #18），仓库已开源（#23，MIT）；**i18n 第 1 批基础设施已合并**（#26）；只看译文的两处修复已合并（#27、#28），Google 丢标签时改用 HTML 模式重试、保住译文里的链接（#30）。插件改名为 **译屿 / Islet Translate**（已定，待实施）。**i18n 第 2 批已合并**（#33），运行时依赖审计支持按公告 ID 限期豁免（#34，picomatch，到期 2026-12-18）。**`fix/translation-only-pins` 已合并**（#35，含对外 DOM 约定 `docs/dom-contract.md` 与手工验收页 `tests/fixtures/translation-only-layout.html`）；灵岛拖动窗口时的残影修复待合并（#36）。之后 i18n 第 3–6 批与双语 README → 改名 → 冒烟 e2e → 发 v0.2.0 → M3d，详见第 5 节「路线图与发版」。
+> 最后更新：2026-11-18 · 阶段：**路线图前 3 项已完成**（PR-A #17、CI 增强 #18），仓库已开源（#23，MIT）；**i18n 第 1 批基础设施已合并**（#26）；只看译文的两处修复已合并（#27、#28），Google 丢标签时改用 HTML 模式重试、保住译文里的链接（#30）。插件改名为 **译屿 / Islet Translate**（已定，待实施）。**i18n 第 2 批已合并**（#33），运行时依赖审计支持按公告 ID 限期豁免（#34，picomatch，到期 2026-12-18）。**`fix/translation-only-pins` 已合并**（#35，含对外 DOM 约定 `docs/dom-contract.md` 与手工验收页 `tests/fixtures/translation-only-layout.html`）；灵岛拖动窗口时的残影修复已合并（#36）。**i18n 第 3 批拆成两个 PR**：3a 面板已实现（分支 `feat/i18n-batch3-popup`，待提交、开 PR），3b 设置页待做。之后 i18n 第 3–6 批与双语 README → 改名 → 冒烟 e2e → 发 v0.2.0 → M3d，详见第 5 节「路线图与发版」。
 > 本文给接手的 Agent 或开发者用，按顺序读完即可直接开工。文中凡与其他文档冲突的地方，以本文和「权威文档」为准。
 
 ## 1. 项目一句话
@@ -249,6 +249,7 @@ M1 和 M2（整页翻译）完成后即构成 MVP。
 
 | 日期 | 事项 |
 | --- | --- |
+| 2026-11-18 | **i18n 第 3 批 3a（工具栏面板）已实现**：方案经 /think 与 Opus 审查（阻断 1 条：Mac 上 Chromium 不认 `--lang`，英文截图会截成中文；应修 4 条：面板引擎名与原因直接拼接、设置页分段控件定宽、测试计划假设了不存在的组件测试、`common.*` 过宽），拆成面板 3a 与设置页 3b。3a 迁移 44 条，基线 233→189；新增 4 个英文用例（复数、暂停原因、拼接）；迁移前后中文逐条比对一致（段数超过 999 时改为带千位分隔符）。英文布局：Chrome for Testing 用删掉 zh_CN 语言包的副本截图，`openPopup()` 拿不到 activeTab 只截到「浏览器页面」状态，其余长串用实际字体测量，均不溢出。popup 83.58→83.10KB。<br>**下一步**：用户确认后提交并开 PR；合并后做 3b 设置页 |
 | 2026-11-18 | **灵岛拖动窗口时的残影已修**（分支 `fix/isle-resize`）：用户在只看译文 fixture 上拖动窗口发现，变宽时圆点拉出黑色长条、变窄时圆点消失。原因：灵岛的 clip-path 和内容按缓存的视口像素定位，`onResize` 要等 100ms 不再变化才重算，慢速拖动时一直用旧尺寸。改为每次 resize 立即读视口、贴边重绘，避让页面元素的探测仍等窗口停下。划词卡片的 `onResize` 本来就立即刷新视口，无同类问题。先红后绿，新增 1 个回归用例。用户在 Chrome 里用 #35 与本修复的合并构建验收了 fixture 全部 8 个用例，灵岛贴边无长条。已开 PR #36。<br>**下一步**：合并后开始 i18n 第 3 批（面板与设置页） |
 | 2026-11-18 | **`fix/translation-only-pins` 已实现**：只看译文时 margin/padding 改读 Typed OM，`margin: 0 auto` 保持居中、百分比 padding 随窗口变化；根元素的 `letter-spacing`/`word-spacing` 以变量设回译文。先红后绿，新增 1 个回归用例（另有 2 个 DOM 约定锁定用例）；page-runtime 22.04→22.11KB；真机验收待做。**Inkmark 协作需求**（网页转 Markdown 扩展，文档在用户本地）：经核实 P1、P3 合理，写成 `docs/dom-contract.md` 并加锁定测试，随本 PR 单独提交；P2（代码块工具栏不翻译）记入 M3d 待处理项第 5 条。**CI**：picomatch 无补丁高危公告拦下所有分支，经 Fable 5.2 决策改为按公告 ID 限期豁免（#34），#33 随后合并。<br>**下一步**：用户确认后提交并开 PR；之后 i18n 第 3 批（面板与设置页） |
 | 2026-11-18 | **i18n 第 2 批（后台与公共库）已实现**：错误文案 31 条加兜底、引擎名称与就绪状态、右键菜单迁到 `src/locales`；`error-text.ts` 与完整错误表共用键；check-build 改用键名标记并加正向断言，另断言常驻 `content.js` 不含 `getMessage`。方案经 /think 与 Opus 审查（无阻断，4 条应修已并入，含「`session.ts` 被误列为常驻脚本」）；实现后 check 审查发现两处可简化（engine-options 复用 `readiness.problem`、去掉多余的 `hasOwn`），已修。中文文案经脚本逐条比对与迁移前一致；`npm run check` 通过（73 个文件、1452 个用例），基线 287→233，background 58.20→57.14KB。<br>**下一步**：用户确认后提交并开 PR；合并后做 `fix/translation-only-pins` |
