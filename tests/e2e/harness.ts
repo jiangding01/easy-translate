@@ -170,8 +170,12 @@ async function connect(url: string) {
   const listeners: Listener[] = [];
   ws.onmessage = (event) => {
     const message = JSON.parse(String(event.data));
-    if (typeof message.id === 'number') waiting.get(message.id)?.(message);
-    else for (const listen of listeners) listen(message.method, message.params, message.sessionId);
+    if (typeof message.id !== 'number') {
+      for (const listen of listeners) listen(message.method, message.params, message.sessionId);
+      return;
+    }
+    const reply = waiting.get(message.id);
+    if (typeof reply === 'function') reply(message);
   };
   ws.onclose = () => {
     for (const settle of waiting.values()) settle({ error: { message: 'CDP connection closed' } });
@@ -273,7 +277,7 @@ async function start(
 
   // DevTools writes its port and browser path here once it listens.
   const portFile = join(profileDir, 'DevToolsActivePort');
-  const [port, path] = await waitFor(
+  const [rawPort = '', rawPath = ''] = await waitFor(
     () => {
       if (exited) throw new Error(`the browser did not start: ${exited}`);
       const lines = existsSync(portFile) ? readFileSync(portFile, 'utf8').split('\n') : [];
@@ -281,7 +285,14 @@ async function start(
     },
     { timeout: 20_000, message: 'DevToolsActivePort' },
   );
-  const cdp = await connect(`ws://127.0.0.1:${port}${path}`);
+  // Chrome writes this file itself and we only ever connect to localhost, but validate
+  // strictly so file content can never steer the URL somewhere else.
+  const port = /^\d{1,5}$/.test(rawPort) ? Number.parseInt(rawPort, 10) : 0;
+  if (port < 1 || port > 65535) throw new Error(`invalid port in DevToolsActivePort: ${rawPort}`);
+  if (!/^\/devtools\/browser\/[0-9a-f-]+$/i.test(rawPath)) {
+    throw new Error(`invalid browser path in DevToolsActivePort: ${rawPath}`);
+  }
+  const cdp = await connect(`ws://127.0.0.1:${port}${rawPath}`);
   cleanup.push(() => cdp.close());
 
   const errors: string[] = [];

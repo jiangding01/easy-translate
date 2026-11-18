@@ -13,7 +13,7 @@
 ## 选型：零依赖 CDP 驱动 + 现有 Vitest
 - 理由：SW 拦截已实测；不新增依赖、不管理浏览器下载；仓库检查脚本一贯零依赖；Vitest 已有断言、重试、报告。
 - **退出条件**：harness 超过约 400 行，或偶发失败压不住，就改用 `playwright-core` 作为库（Vitest 不变）。
-  - 实施结果（2026-11-18）：harness 610 行，超出部分主要是 SW 重启处理（重启后同一 session 会再次停在等待调试器、需在新执行上下文上重开拦截并恢复运行）、网络错误过滤和接口注释；复杂度未失控，`--retry=0` 连跑稳定，主会话判断暂不触发退出条件。
+  - 实施结果（2026-11-18）：harness 621 行，超出部分主要是 SW 重启处理（重启后同一 session 会再次停在等待调试器、需在新执行上下文上重开拦截并恢复运行）、网络错误过滤和接口注释；复杂度未失控，`--retry=0` 连跑稳定，主会话判断暂不触发退出条件。
 - `vitest.e2e.config.ts`：node 环境，`tests/e2e/**/*.e2e.test.ts`，文件串行、每个文件一个浏览器，`retry: 1`，被重试过的用例在报告里显式列出；用例与钩子超时 60 秒，高于启动浏览器自身约 35 秒的等待上限，避免超时后仍在启动的浏览器无人关闭；单测 `npm test` 的 include 不变。
 - `npm run test:e2e`，不进 `npm run check`。
 
@@ -79,7 +79,7 @@ revert 整个 PR；不改扩展源码，不涉及数据。
 分支 `feat/e2e-smoke`，2026-11-18 实现，尚未提交。
 
 ### 文件清单
-- `tests/e2e/harness.ts`（610 行）与 `tests/e2e/support.ts`：零依赖 CDP 驱动、Google mock、SW 拦截、可信输入、错误收集。
+- `tests/e2e/harness.ts`（621 行）与 `tests/e2e/support.ts`：零依赖 CDP 驱动、Google mock、SW 拦截、可信输入、错误收集。
 - `tests/e2e/` 下六个用例文件：`load`、`page`、`modes`、`retry-cache`、`selection`、`ui`（均为 `*.e2e.test.ts`）。
 - `scripts/lib/find-chrome.mjs`（含 `.d.mts`）：查找 Chrome for Testing，harness 与 `scripts/screenshots/shoot.mjs` 共用。
 - `tests/fixtures/e2e-article.html`：整页翻译用的测试页。
@@ -99,7 +99,7 @@ revert 整个 PR；不改扩展源码，不涉及数据。
 - 每种验证后精确还原，`git diff -- src/` 为空，恢复后全量通过。
 
 ### 实施中的取舍
-- harness 为 610 行，超出约 400 行的目标。主会话判断暂不触发退出条件，不换 `playwright-core`：多出的部分主要是 SW 重启处理与错误收集，且 5 次连跑无偶发失败。
+- harness 为 621 行，超出约 400 行的目标。主会话判断暂不触发退出条件，不换 `playwright-core`：多出的部分主要是 SW 重启处理与错误收集，且 5 次连跑无偶发失败。
 - 默认 mock 译文为「【MOCK】」加原文转大写。逐字带原文会被扩展判为回声，触发重试。
 - 灵岛与划词卡片的 shadow root 是 closed，用 CDP `DOM.resolveNode` 访问。
 - 面板读不到测试页（没有 activeTab），所以 PR1 只测渲染；真实链路留给 PR2 第 16 条。
