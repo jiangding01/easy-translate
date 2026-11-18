@@ -48,15 +48,15 @@ Islet Translate is at version `0.1.0`. M0 (foundation), M1 (translation core), M
 
 | Feature | What it does | Preview |
 | --- | --- | --- |
-| Whole-page translation | Translations appear below the original text and keep the page's own font. The visible paragraphs are translated first, and the rest follows as you read down.<br>Switch between **Bilingual** and **Translation only**, retry paragraphs that were not translated, or choose **Show original** to restore the page.<br>Turn on **Always translate this site** to translate a site on every visit. Inline formatting such as links is kept. | <img src="docs/assets/readme/en-page-isle.png" width="240" alt="A Chinese article translated into English"> |
+| Whole-page translation | Translations appear below the original text and keep the page's own font. The visible paragraphs are translated first, and the rest follows as you read down.<br>Switch between **Bilingual** and **Translation only**, retry paragraphs that were not translated, or choose **Show original** to restore the page.<br>Turn on **Always translate this site** to translate a site on every visit. Inline formatting such as links is kept.<br>A paragraph that waits more than about 0.6 seconds for its translation shows a small dot at its end. Text fields and `translate="no"` areas are never translated, including content added later. | <img src="docs/assets/readme/en-page-isle.png" width="240" alt="A Chinese article translated into English"> |
 | Control bar | While a page is being translated, a small bar docks to the edge of the page.<br>It switches the display mode, retries paragraphs that were not translated, and changes the engine for this page only.<br>It can dock on the right, on the left or at the bottom. | <img src="docs/assets/readme/en-isle.png" width="240" alt="The control bar docked on the right"> |
 | Selection card and phonetics | Select foreign text and an amber dot appears at the end of the selection. Click it, or pause on it, and the card opens. The right-click menu and a keyboard shortcut work too.<br>AI engines stream the translation as it is written. The card can switch engine, collapse the original, copy the translation, read the text aloud, and be pinned and dragged.<br>A single English word shows **UK** and **US** phonetics from offline word lists (about 175,000 and 117,000 words). Click one to hear it in that accent. | <img src="docs/assets/readme/en-card.png" width="240" alt="The selection card"> |
 | Translation only | Hides the original and shows only the translation, while keeping the page layout. Switch back to Bilingual at any time to restore the page exactly. | <img src="docs/assets/readme/en-only.png" width="240" alt="A page in Translation only mode"> |
-| Toolbar panel | Shows the current site and page language, and switches the target language and default engine.<br>Quiet hints for pages already in your language, browser pages, and pages that need a reload. | <sub>Coming soon</sub> |
+| Toolbar panel | Shows the current site and page language, and switches the target language and default engine.<br>Quiet hints for pages already in your language, browser pages, and pages that need a reload. On a page that already declares your language, **Translate anyway** and the target language stay available. | <sub>Coming soon</sub> |
 | Settings: General | Target and source language, appearance, translation style with a live preview, how a page is shown when translation starts, control bar position, and the selection dot. | <img src="docs/assets/readme/en-options-general.png" width="240" alt="Settings, General page"> |
 | Settings: Translation services | Default engine, keys and models, up to 10 custom OpenAI-compatible services (local models included), **Test connection**, and the translation cache. | <img src="docs/assets/readme/en-options-services.png" width="240" alt="Settings, Translation services page"> |
 | Interface language | Follows the browser language: English, Simplified Chinese and Traditional Chinese, with English as the default. Chinese text uses the right Simplified or Traditional font forms. | <sub>Coming soon</sub> |
-| Privacy and keys | API keys stay on your computer, and pages only ever see the last 4 characters of a key.<br>There are no accounts and no analytics or tracking code. Page text is sent only to the translation engine you choose. | |
+| Privacy and keys | API keys stay on your computer, and pages only ever see the last 4 characters of a key.<br>There are no accounts and no analytics or tracking code. Page text is sent only to the translation engine you choose.<br>Translations are cached on your computer, and entries older than 7 days are removed every day. | |
 
 <!-- Preview images: add screenshots or GIFs to the Preview column and keep them in docs/assets/readme/. -->
 
@@ -178,7 +178,7 @@ Open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**, an
 - Verification of the registry signatures of installed packages.
 - CodeQL with the `security-extended` query suite (`.github/workflows/codeql.yml`), on pull requests, pushes to `main` and weekly.
 - Upload of the verified build as an artifact, kept for 7 days.
-- An `e2e` job that runs the smoke end-to-end tests (`npm run test:e2e`) against that build in Chrome for Testing. It covers page translation, display modes, retries, caching, selection, the settings page, the action panel, the 403 engine error, restarts and layout. A test that only passed on retry leaves a warning annotation on the run. Failed or retried tests upload `test-results/e2e/`. It does not block merging yet; it will be made required once it stays green without retries.
+- An `e2e` job that runs the smoke end-to-end tests (`npm run test:e2e`) against that build in Chrome for Testing. It covers page translation, display modes, retries, caching, selection, the settings page, the action panel, the 403 engine error, the loading dot, extension reload, restarts and layout. A test that only passed on retry leaves a warning annotation on the run. Failed or retried tests upload `test-results/e2e/`. It does not block merging yet; it will be made required once it stays green without retries.
 
 Dependabot (`.github/dependabot.yml`) checks npm and GitHub Actions weekly, and groups minor and patch updates into one pull request per group.
 
@@ -194,7 +194,7 @@ Run `npm run test:e2e` first. The items it covers automatically are listed in [`
 3. Click **Add service**, choose a preset such as Ollama, enter a model, and add it. The browser asks for access. After you allow it, the new service appears under the custom group and is tested once. If you decline, it is marked as needing access and can be granted from its details.
 4. Delete a custom service that is the default. The default engine returns to Google.
 5. In **General**, change the target and source language with the dropdowns, using the keyboard (arrow keys, Enter, Esc, first letter), and switch Appearance to Dark.
-6. On a regular page, open the toolbar panel and check that it shows the site and page language and lets you change the target language and default engine. On a page already in your language, on `chrome://extensions`, and on a page opened before the extension was installed, check that each shows its own hint.
+6. On a regular page, open the toolbar panel and check that it shows the site and page language and lets you change the target language and default engine. On a page already in your language, on `chrome://extensions`, and on a page opened before the extension was installed, check that each shows its own hint; on the page already in your language, "Translate anyway" still starts a translation.
 7. Clear the translation cache and check that the count goes to zero.
 8. Stop the service worker at `chrome://serviceworker-internals`, then change a setting or test a connection. It should still work.
 9. The full checklist for page translation, including motion checks at 4x CPU slowdown, is in section 10 of [`docs/plans/m2-page-translation.md`](docs/plans/m2-page-translation.md).
@@ -304,7 +304,7 @@ It finds the newest Playwright Chrome for Testing, or takes a path from `CHROME`
 │   └── lib/                     # Shared script helpers, such as find-chrome.mjs
 ├── tests/
 │   ├── e2e/                     # Smoke end-to-end tests (real Chrome, mocked translation)
-│   └── fixtures/                # Test pages: translation-only-layout.html (manual), e2e-article.html (e2e)
+│   └── fixtures/                # Test pages: translation-only-layout.html (manual), e2e-article.html and e2e-native.html (e2e)
 ├── .npmrc                       # Pins the official npm registry
 ├── .nvmrc                       # Node.js version (24)
 ├── biome.json                   # Biome config
@@ -374,7 +374,7 @@ Design docs and the changelog are in Chinese.
 
 ## 🔒 Privacy and security
 
-Keys are stored only on your computer and are never exported or synced. To report a security issue, do not open a public issue. Use **Report a vulnerability** on the repository's Security page. See [SECURITY.md](SECURITY.md).
+Keys are stored only on your computer and are never exported or synced. The translation cache also stays on your computer, and entries older than 7 days are removed every day. To report a security issue, do not open a public issue. Use **Report a vulnerability** on the repository's Security page. See [SECURITY.md](SECURITY.md).
 
 ## 📄 License
 

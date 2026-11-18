@@ -48,15 +48,15 @@
 
 | 功能 | 说明 | 示例 |
 | --- | --- | --- |
-| 整页双语翻译 | 译文出现在原文下方，沿用网页自己的字体。先翻眼前的段落，往下读时继续。<br>可以切换「双语 / 仅译文」，重试没译出的段落，或点「显示原文」还原网页。<br>打开「总是翻译此站」后，每次访问该站都自动翻译。链接等行内格式在译文里保留。 | <img src="docs/assets/readme/zh-page-isle.png" width="240" alt="英文文章译成中文"> |
+| 整页双语翻译 | 译文出现在原文下方，沿用网页自己的字体。先翻眼前的段落，往下读时继续。<br>可以切换「双语 / 仅译文」，重试没译出的段落，或点「显示原文」还原网页。<br>打开「总是翻译此站」后，每次访问该站都自动翻译。链接等行内格式在译文里保留。<br>段落等待译文超过约 0.6 秒时，段末会显示一个小圆点。文本输入框和 `translate="no"` 区域不会被翻译，之后动态新增的内容也一样。 | <img src="docs/assets/readme/zh-page-isle.png" width="240" alt="英文文章译成中文"> |
 | 控制条（灵岛） | 翻译时，一个小条贴在网页边缘。<br>可以切换显示方式、重试没译出的段落，并只为本页更换引擎。<br>可停靠在右侧、左侧或底部。 | <img src="docs/assets/readme/zh-isle.png" width="240" alt="停靠在右侧的控制条"> |
 | 划词卡片与音标 | 选中外文，选区末尾出现琥珀小点；点击或停留片刻，翻译卡片就长出来。右键菜单和快捷键同样可用。<br>AI 引擎的译文边生成边显示。卡片可以换引擎、折叠原文、复制译文、朗读原文，也可以固定并拖动。<br>选中单个英文单词时显示 **UK** / **US** 音标，来自离线词表（约 17.5 万 / 11.7 万词），点击按对应口音朗读。 | <img src="docs/assets/readme/zh-card.png" width="240" alt="划词卡片，单词带英美音标"> |
 | 仅译文 | 隐藏原文，只显示译文，同时保持网页版面。随时切回双语，页面会原样恢复。 | <img src="docs/assets/readme/zh-only.png" width="240" alt="仅译文模式下的网页"> |
-| 工具栏面板 | 显示当前网站和页面语言，切换目标语言和默认引擎。<br>母语页面、浏览器页面、需要刷新的页面各有安静的提示。 | <sub>示例图待补充</sub> |
+| 工具栏面板 | 显示当前网站和页面语言，切换目标语言和默认引擎。<br>母语页面、浏览器页面、需要刷新的页面各有安静的提示。页面已声明为你的语言时，仍保留「仍然翻译」和目标语言选择。 | <sub>示例图待补充</sub> |
 | 设置页 · 通用 | 目标语言、源语言、外观、带预览的译文样式、打开时显示、灵岛位置和划词小点。 | <img src="docs/assets/readme/zh-options-general.png" width="240" alt="设置页通用页"> |
 | 设置页 · 翻译服务 | 默认引擎、密钥与模型、最多 10 个自定义 OpenAI 兼容服务（含本地模型）、测试连接，以及翻译缓存。 | <img src="docs/assets/readme/zh-options-services.png" width="240" alt="设置页翻译服务页"> |
 | 界面语言 | 跟随浏览器语言：English、简体中文和繁体中文，默认英文。中文按简体或繁体分别用对应的字形显示。 | <sub>示例图待补充</sub> |
-| 隐私与密钥 | 密钥只保存在本机，页面只能看到末 4 位。<br>没有账户，也没有统计或追踪代码。网页文字只会发给你选择的翻译引擎。 | |
+| 隐私与密钥 | 密钥只保存在本机，页面只能看到末 4 位。<br>没有账户，也没有统计或追踪代码。网页文字只会发给你选择的翻译引擎。<br>译文缓存保存在本机，超过 7 天的条目每天清理。 | |
 
 <!-- 示例图：后续可在「示例」列补充截图或 GIF，放在 docs/assets/readme/ -->
 
@@ -178,7 +178,7 @@ npm run dev
 - 校验已安装依赖包的仓库签名。
 - CodeQL 安全扫描，使用 `security-extended` 规则集（`.github/workflows/codeql.yml`），在 PR、推送到 `main` 时运行，每周也会运行一次。
 - 把通过检查的构建产物作为 artifact 上传，保留 7 天。
-- `e2e` job：用 Chrome for Testing 对这份构建产物跑冒烟 e2e（`npm run test:e2e`）。用例覆盖整页翻译、显示模式、重试、缓存、划词、设置页、面板、403 引擎错误、重启与布局。靠重试才通过的用例会在运行页留下警告注解；失败或重试过的用例上传 `test-results/e2e/`。暂不阻断合并，等不靠重试稳定全绿后再设为必过。
+- `e2e` job：用 Chrome for Testing 对这份构建产物跑冒烟 e2e（`npm run test:e2e`）。用例覆盖整页翻译、显示模式、重试、缓存、划词、设置页、面板、403 引擎错误、加载圆点、扩展重载、重启与布局。靠重试才通过的用例会在运行页留下警告注解；失败或重试过的用例上传 `test-results/e2e/`。暂不阻断合并，等不靠重试稳定全绿后再设为必过。
 
 依赖更新由 Dependabot（`.github/dependabot.yml`）每周检查 npm 和 GitHub Actions，小版本与补丁更新分组提 PR。
 
@@ -194,7 +194,7 @@ npm run dev
 3. 点「添加服务」，选一个预设（例如 Ollama），填写模型后添加：浏览器弹出授权请求；允许后新服务出现在「自定义」分组并自动测试一次；拒绝时标为「待授权」，可在详情里重新授权。
 4. 删除一个设为默认的自定义服务，默认引擎自动改回 Google。
 5. 在「通用」页用下拉切换目标语言和源语言，用键盘（方向键、回车、Esc、首字母）操作下拉；切换外观为深色。
-6. 在普通网页打开工具栏面板，确认显示网站和页面语言，能切换目标语言和默认引擎；在中文页面、`chrome://extensions` 和安装前已打开的网页上，分别显示对应提示。
+6. 在普通网页打开工具栏面板，确认显示网站和页面语言，能切换目标语言和默认引擎；在中文页面、`chrome://extensions` 和安装前已打开的网页上，分别显示对应提示；中文页面上的「仍然翻译」仍可开始翻译。
 7. 清空翻译缓存后，条数归零。
 8. 在 `chrome://serviceworker-internals` 停止 Service Worker 后再修改设置或测试连接，确认仍能正常工作。
 9. 整页翻译的完整验收清单（含 4 倍 CPU 降速下的动效检查）见 [`docs/plans/m2-page-translation.md`](docs/plans/m2-page-translation.md) 第 10 节。
@@ -304,7 +304,7 @@ node scripts/screenshots/shoot.mjs --ui zh_CN --article en
 │   └── lib/                     # 脚本共用工具，如 find-chrome.mjs
 ├── tests/
 │   ├── e2e/                     # 冒烟 e2e（真实 Chrome，翻译请求用 mock）
-│   └── fixtures/                # 测试页：translation-only-layout.html（手动）、e2e-article.html（e2e）
+│   └── fixtures/                # 测试页：translation-only-layout.html（手动）、e2e-article.html 与 e2e-native.html（e2e）
 ├── .npmrc                       # 固定使用 npm 官方源
 ├── .nvmrc                       # Node.js 版本（24）
 ├── biome.json                   # Biome 配置
@@ -372,7 +372,7 @@ node scripts/screenshots/shoot.mjs --ui zh_CN --article en
 
 ## 🔒 隐私与安全
 
-密钥只保存在本机，不导出也不同步。发现安全问题时，请不要公开提 issue，在仓库 Security 页点「Report a vulnerability」私下报告，详见 [SECURITY.md](SECURITY.md)。
+密钥只保存在本机，不导出也不同步。译文缓存同样只在本机，超过 7 天的条目每天清理。发现安全问题时，请不要公开提 issue，在仓库 Security 页点「Report a vulnerability」私下报告，详见 [SECURITY.md](SECURITY.md)。
 
 ## 📄 许可
 
