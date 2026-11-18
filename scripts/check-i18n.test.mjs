@@ -447,6 +447,15 @@ describe('helpers', () => {
     expect(dollarProblems('$$5 and $1 and $9')).toEqual([]);
     expect(dollarProblems('$0')).toHaveLength(1);
   });
+
+  it('rejects a placeholder followed by "$": Chrome reads "$1$" as a $name$ placeholder', () => {
+    // A zh_CN value "$1$2" made Chrome refuse to load the whole extension.
+    expect(dollarProblems('$1$2')).toEqual([
+      '"$1$…" reads as a $name$ placeholder in Chrome; put text between',
+    ]);
+    expect(dollarProblems('$1$$')).toHaveLength(1);
+    expect(dollarProblems('$1 $2')).toEqual([]);
+  });
 });
 
 describe('the unit-test getMessage', () => {

@@ -295,6 +295,10 @@ function placeholders(message) {
 /** Problems with `$` in one text: Chrome reads `$…$` as a named placeholder. */
 export function dollarProblems(text) {
   if (text.includes('$$$')) return ['"$$$" is ambiguous; reword around the placeholder'];
+  // Chrome reads "$1$…" as a named placeholder ($name$) and refuses to load the extension
+  // ("Variable $1$ used but not defined"): a placeholder may not be followed by "$".
+  if (/\$[1-9]\$/.test(text))
+    return ['"$1$…" reads as a $name$ placeholder in Chrome; put text between'];
   const bad = text.replace(/\$\$|\$[1-9]/g, '').includes('$');
   return bad ? ['a literal "$" must be written "$$"; placeholders are $1–$9'] : [];
 }
