@@ -54,6 +54,10 @@ errors:
   action:
     panelReadFailed: 读取设置失败，请重新打开面板。
     openSettingsFailed: 无法打开设置页，请重试。
+    addFailed: 添加失败，请重试。
+    clearFailed: 清空失败，请重试。
+    deleteFailed: 删除失败，请重试。
+    connectFailed: 连接失败，请重试。
 
 # 引擎名称与就绪状态（src/lib/engine-view.ts、src/lib/translate/engine-options.ts）。
 engine:
@@ -132,3 +136,157 @@ popup:
     n: $1 段没有译出
   displayMode: 显示方式
   defaultEngine: 默认引擎
+
+# 设置页（src/entrypoints/options）。
+options:
+  title: Easy Translate · 设置
+  nav:
+    label: 设置分区
+    general: 通用
+    generalSub: 语言、外观与译文样式，改动会立即生效。
+    services: 翻译服务
+    servicesSub: Google 免费可用；AI 引擎和自定义服务需要你自己的密钥。
+    loading: 正在加载设置…
+  notice:
+    saved: 已保存
+  general:
+    targetLanguage: 目标语言
+    targetLanguageHint: 网页会被翻译成这种语言
+    sourceLanguage: 源语言
+    sourceLanguageHint: 自动检测适合大多数网页；检测不准时再手动指定
+    recommended: 推荐
+    appearance: 外观
+    appearanceHint: 设置页和工具栏面板的主题
+    themeSystem: 跟随系统
+    themeLight: 浅色
+    themeDark: 深色
+    styleNone: 无装饰
+    styleFaded: 淡化
+    styleUnderline: 下划线
+    styleHighlight: 高亮
+    dockRight: 右侧
+    dockLeft: 左侧
+    dockBottom: 底部
+    dotOn: 开
+    dotOff: 关
+    hostLight: 浅色网页
+    hostDark: 深色网页
+    translationTitle: 译文
+    translationHint: 译文沿用网页自己的字体、字号和颜色，样式只决定怎样和原文区分
+    style: 样式
+    previewHost: 预览底色
+    defaultBadge: 默认
+    openShows: 打开时显示
+    openShowsHint: 每次开始翻译时的显示方式，翻译中可以随时切换
+    dock: 灵岛位置
+    dockHint: 翻译时贴在网页边缘的控制条，正在翻译的页面立即生效
+    dot: 划词小点
+    dotHint: 选中外文后在末尾显示翻译小点
+  services:
+    engines: 引擎
+    enginesHint: 圆点选中的是默认引擎，点一行查看和修改配置
+    addService: 添加服务
+    addTooltip: 添加一个兼容 OpenAI 接口的服务
+    # $1：自定义服务的数量上限。
+    limitReached: 最多添加 $1 个自定义服务
+    customGroup: 自定义 · OpenAI 兼容
+    madeDefault: 已设为默认
+    deleted: 已删除
+    # $1：Google 引擎的名称（engine.googleName）。
+    deletedFallback: 已删除，默认改用 $1
+    added: 已添加
+    addedPending: 已添加，等待授权
+  engine:
+    # $1：引擎名。
+    makeDefaultAria: 设为默认引擎：$1
+    defaultBadge: 默认
+    # $1：Google 引擎的名称（engine.googleName）。
+    googleNote: 免费，无需配置。网页文字会发送到 $1。遇到限流时会自动放慢；如果持续受限，会建议你换一个引擎。
+    name: 名称
+    baseUrl: Base URL
+    baseUrlInvalid: 请填写 https 开头的地址，本地模型可用 http://localhost
+    apiKey: API Key
+    keyShow: 显示
+    keyHide: 隐藏
+    keyClear: 清除
+    keyLocalOnly: 只保存在这台电脑上，不会导出或同步
+    getKey: 获取 API Key ↗
+    getKeyAndModels: 密钥与模型列表 ↗
+    # $1：密钥末 4 位。
+    keyPlaceholderSavedLast4: 已保存 ••••$1，粘贴新密钥可替换
+    keyPlaceholderSaved: 已保存，粘贴新密钥可替换
+    keyPlaceholderBuiltin: 粘贴密钥，离开输入框时自动保存
+    keyPlaceholderOptional: 没有可以不填
+    model: 模型
+    modelPlaceholder: 填写模型 ID
+    modelPlaceholderGemini: 填写模型 ID，例如官方列表中的 flash 型号
+    access: 访问权限
+    # $1：接口地址的主机名（代码里拆成前后两段，中间放主机名节点）。
+    grantNeeded: 需要允许扩展访问 $1
+    grantButton: 授权访问
+    isDefaultHint: 这是当前的默认引擎
+    makeDefault: 设为默认引擎
+    deleteService: 删除此服务
+    # $1：Google 引擎的名称（engine.googleName）。
+    deleteNoteDefault: 删除后默认改用 $1
+    deleteNote: 删除后无法恢复
+    cancel: 取消
+    delete: 删除
+    keySaved: 已保存密钥
+    keyCleared: 已清除密钥
+    granted: 已授权
+    subFree: 免费 · 无需配置
+    subNoModel: 未填写模型
+    subNeedsModelId: 需要填写模型 ID
+  add:
+    title: 添加服务
+    sub: 任何兼容 OpenAI 接口的服务都可以添加，包括本机运行的模型。
+    close: 关闭
+    presets: 常用服务
+    presetOllama: Ollama（本地）
+    presetLmstudio: LM Studio（本地）
+    presetOpenrouter: OpenRouter
+    presetSiliconflow: 硅基流动
+    presetOther: 其他
+    name: 名称
+    namePlaceholder: 留空则使用域名
+    baseUrl: Base URL
+    baseUrlInvalid: 请填写 https 开头的地址，本地模型可用 http://localhost
+    apiKey: API Key
+    keyPlaceholderLocal: 本地服务通常不需要
+    keyPlaceholderOptional: 没有可以不填
+    model: 模型
+    modelPlaceholder: 填写模型 ID
+    accessHint: 添加时浏览器会询问是否允许访问这个地址
+    cancel: 取消
+    submit: 添加
+    adding: 添加中…
+    keyNotSaved: 服务已添加，但密钥没有保存，请在详情里重新粘贴。
+  cache:
+    title: 翻译缓存
+    counting: 正在统计…
+    empty: 暂无缓存 · 译文保留 7 天
+    # $1：缓存的段数（按界面语言格式化），$2：占用大小。
+    summary:
+      1: $1 段译文 · $2 · 保留 7 天
+      n: $1 段译文 · $2 · 保留 7 天
+    clearHint: 清空后，翻译过的网页需要重新请求
+    cancel: 取消
+    clear: 清空
+    cleared: 已清空缓存
+  test:
+    run: 测试连接
+    running: 测试中
+    again: 再测一次
+    prompt: 用这句话试一次
+    requesting: 正在请求…
+    failed: 没有连通
+    collapse: 收起
+    details: 详情
+    # 连接测试不能运行的原因（providers.ts 的 TEST_BLOCKED_TEXT）。
+    blocked:
+      badUrl: 先填写正确的地址
+      checkingGrant: 正在检查授权…
+      needsGrant: 授权后可以测试
+      needsKey: 填写 API Key 后可以测试
+      needsModel: 填写模型后可以测试

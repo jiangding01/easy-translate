@@ -33,6 +33,10 @@
   --et-color-field: oklch(1 0 75);
   --et-color-border: oklch(0.9 0.008 75);
   --et-color-border-strong: oklch(0.84 0.01 75);
+  /* Segmented controls: the selected thumb and its ring. White on the surface reads in light;
+     dark needs its own lift (elevated is only 1% lighter than the surface there). */
+  --et-color-segment-thumb: oklch(1 0 75);
+  --et-color-segment-ring: oklch(0.9 0.008 75);
   --et-color-text: oklch(0.22 0.012 70);
   --et-color-muted: oklch(0.47 0.012 70);
   --et-color-faint: oklch(0.54 0.01 70);
@@ -154,6 +158,8 @@
   --et-color-field: oklch(0.18 0.006 70);
   --et-color-border: oklch(0.29 0.01 70);
   --et-color-border-strong: oklch(0.38 0.012 70);
+  --et-color-segment-thumb: oklch(0.3 0.008 70);
+  --et-color-segment-ring: oklch(0.38 0.012 70);
   --et-color-text: oklch(0.94 0.008 80);
   --et-color-muted: oklch(0.72 0.012 75);
   --et-color-faint: oklch(0.64 0.01 75);
@@ -183,6 +189,8 @@
     --et-color-field: oklch(0.18 0.006 70);
     --et-color-border: oklch(0.29 0.01 70);
     --et-color-border-strong: oklch(0.38 0.012 70);
+    --et-color-segment-thumb: oklch(0.3 0.008 70);
+    --et-color-segment-ring: oklch(0.38 0.012 70);
     --et-color-text: oklch(0.94 0.008 80);
     --et-color-muted: oklch(0.72 0.012 75);
     --et-color-faint: oklch(0.64 0.01 75);

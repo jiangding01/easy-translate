@@ -1,4 +1,5 @@
 import { createElement, useEffect, useState } from 'react';
+import { i18n } from '#i18n';
 import { Select, type SelectOption } from '@/components/Select';
 import { injectStyles, removeStyles } from '@/content/styles';
 import {
@@ -25,26 +26,41 @@ const TARGET_OPTIONS: SelectOption<LanguageCode>[] = LANGUAGES.map((language) =>
   lang: language.code,
 }));
 
-const SOURCE_OPTIONS: SelectOption<LanguageCode | 'auto'>[] = [
-  { value: 'auto', label: '自动检测', sub: '推荐' },
+// Option tables hold copy keys only: the text is looked up at render, never at module load.
+const sourceOptions = (): SelectOption<LanguageCode | 'auto'>[] => [
+  { value: 'auto', label: i18n.t('common.autoDetect'), sub: i18n.t('options.general.recommended') },
   ...TARGET_OPTIONS,
 ];
 
-const THEME_LABELS: Record<Theme, string> = { system: '跟随系统', light: '浅色', dark: '深色' };
-const STYLE_LABELS: Record<PageStyle, string> = {
-  plain: '无装饰',
-  faded: '淡化',
-  underline: '下划线',
-  highlight: '高亮',
-};
-const MODE_LABELS: Record<PageMode, string> = { bilingual: '双语', translation: '仅译文' };
-const DOCK_LABELS: Record<IsleDock, string> = { right: '右侧', left: '左侧', bottom: '底部' };
+const THEME_LABELS = {
+  system: 'options.general.themeSystem',
+  light: 'options.general.themeLight',
+  dark: 'options.general.themeDark',
+} as const satisfies Record<Theme, string>;
+const STYLE_LABELS = {
+  plain: 'options.general.styleNone',
+  faded: 'options.general.styleFaded',
+  underline: 'options.general.styleUnderline',
+  highlight: 'options.general.styleHighlight',
+} as const satisfies Record<PageStyle, string>;
+const MODE_LABELS = {
+  bilingual: 'common.modeBilingual',
+  translation: 'common.modeTranslation',
+} as const satisfies Record<PageMode, string>;
+const DOCK_LABELS = {
+  right: 'options.general.dockRight',
+  left: 'options.general.dockLeft',
+  bottom: 'options.general.dockBottom',
+} as const satisfies Record<IsleDock, string>;
 const DOT_OPTIONS = [
-  { value: true, label: '开' },
-  { value: false, label: '关' },
+  { value: true, label: 'options.general.dotOn' },
+  { value: false, label: 'options.general.dotOff' },
 ] as const;
 const HOSTS = ['light', 'dark'] as const;
-const HOST_LABELS: Record<(typeof HOSTS)[number], string> = { light: '浅色网页', dark: '深色网页' };
+const HOST_LABELS = {
+  light: 'options.general.hostLight',
+  dark: 'options.general.hostDark',
+} as const satisfies Record<(typeof HOSTS)[number], string>;
 
 /** The real `<et-tr>` with the page stylesheet, so the preview cannot drift from the page. */
 function Translation({
@@ -83,7 +99,7 @@ export function GeneralPage({ config }: { config: ConfigV1 }) {
   const themeIndex = THEMES.indexOf(config.ui.theme);
   return (
     <>
-      <section aria-label="通用" className={styles.card}>
+      <section aria-label={i18n.t('options.nav.general')} className={styles.card}>
         <div className={styles.settingRow}>
           <div className={styles.settingText}>
             <label
@@ -91,9 +107,11 @@ export function GeneralPage({ config }: { config: ConfigV1 }) {
               htmlFor="target-language"
               className={styles.settingName}
             >
-              目标语言
+              {i18n.t('options.general.targetLanguage')}
             </label>
-            <span className={styles.settingHint}>网页会被翻译成这种语言</span>
+            <span className={styles.settingHint}>
+              {i18n.t('options.general.targetLanguageHint')}
+            </span>
           </div>
           <Select
             id="target-language"
@@ -113,9 +131,11 @@ export function GeneralPage({ config }: { config: ConfigV1 }) {
               htmlFor="source-language"
               className={styles.settingName}
             >
-              源语言
+              {i18n.t('options.general.sourceLanguage')}
             </label>
-            <span className={styles.settingHint}>自动检测适合大多数网页；检测不准时再手动指定</span>
+            <span className={styles.settingHint}>
+              {i18n.t('options.general.sourceLanguageHint')}
+            </span>
           </div>
           <Select
             id="source-language"
@@ -123,7 +143,7 @@ export function GeneralPage({ config }: { config: ConfigV1 }) {
             align="end"
             minWidth={200}
             value={config.language.source}
-            options={SOURCE_OPTIONS}
+            options={sourceOptions()}
             onChange={(value) => void change({ path: 'language.source', value })}
           />
         </div>
@@ -131,9 +151,9 @@ export function GeneralPage({ config }: { config: ConfigV1 }) {
         <div className={styles.settingRow}>
           <div className={styles.settingText}>
             <span id="theme-label" className={styles.settingName}>
-              外观
+              {i18n.t('options.general.appearance')}
             </span>
-            <span className={styles.settingHint}>设置页和工具栏面板的主题</span>
+            <span className={styles.settingHint}>{i18n.t('options.general.appearanceHint')}</span>
           </div>
           <fieldset
             aria-labelledby="theme-label"
@@ -150,7 +170,7 @@ export function GeneralPage({ config }: { config: ConfigV1 }) {
                   checked={config.ui.theme === theme}
                   onChange={() => void change({ path: 'ui.theme', value: theme })}
                 />
-                {THEME_LABELS[theme]}
+                {i18n.t(THEME_LABELS[theme])}
               </label>
             ))}
           </fieldset>
@@ -183,23 +203,21 @@ function TranslationSection({
       <div className={styles.sectionHead}>
         <div className={styles.sectionTitleRow}>
           <h2 id="translation-title" className={styles.sectionTitle}>
-            译文
+            {i18n.t('options.general.translationTitle')}
           </h2>
-          <span className={styles.headHint}>
-            译文沿用网页自己的字体、字号和颜色，样式只决定怎样和原文区分
-          </span>
+          <span className={styles.headHint}>{i18n.t('options.general.translationHint')}</span>
         </div>
       </div>
       <div className={styles.card}>
         <div className={styles.styleBlock}>
           <div className={styles.styleHead}>
             <span id="style-label" className={styles.settingName}>
-              样式
+              {i18n.t('options.general.style')}
             </span>
             <fieldset
-              aria-label="预览底色"
+              aria-label={i18n.t('options.general.previewHost')}
               className={styles.segmented}
-              style={{ '--index': HOSTS.indexOf(host), '--seg-w': '84px' } as React.CSSProperties}
+              style={{ '--index': HOSTS.indexOf(host), '--seg-min': '84px' } as React.CSSProperties}
             >
               <span aria-hidden="true" className={styles.segmentThumb} />
               {HOSTS.map((item) => (
@@ -211,7 +229,7 @@ function TranslationSection({
                     checked={host === item}
                     onChange={() => setHost(item)}
                   />
-                  {HOST_LABELS[item]}
+                  {i18n.t(HOST_LABELS[item])}
                 </label>
               ))}
             </fieldset>
@@ -227,8 +245,12 @@ function TranslationSection({
                   onChange={() => void change({ path: 'page.style', value: item })}
                 />
                 <span className={styles.styleName}>
-                  {STYLE_LABELS[item]}
-                  {item === 'faded' && <span className={styles.defaultTag}>默认</span>}
+                  {i18n.t(STYLE_LABELS[item])}
+                  {item === 'faded' && (
+                    <span className={styles.defaultTag}>
+                      {i18n.t('options.general.defaultBadge')}
+                    </span>
+                  )}
                 </span>
                 <span className={styles.sample} data-host={host}>
                   Less, but better.
@@ -252,9 +274,9 @@ function TranslationSection({
         <div className={styles.settingRow}>
           <div className={styles.settingText}>
             <span id="mode-label" className={styles.settingName}>
-              打开时显示
+              {i18n.t('options.general.openShows')}
             </span>
-            <span className={styles.settingHint}>每次开始翻译时的显示方式，翻译中可以随时切换</span>
+            <span className={styles.settingHint}>{i18n.t('options.general.openShowsHint')}</span>
           </div>
           <fieldset
             aria-labelledby="mode-label"
@@ -271,7 +293,7 @@ function TranslationSection({
                   checked={mode === item}
                   onChange={() => void change({ path: 'page.mode', value: item })}
                 />
-                {MODE_LABELS[item]}
+                {i18n.t(MODE_LABELS[item])}
               </label>
             ))}
           </fieldset>
@@ -279,11 +301,9 @@ function TranslationSection({
         <div className={styles.settingRow}>
           <div className={styles.settingText}>
             <span id="dock-label" className={styles.settingName}>
-              灵岛位置
+              {i18n.t('options.general.dock')}
             </span>
-            <span className={styles.settingHint}>
-              翻译时贴在网页边缘的控制条，正在翻译的页面立即生效
-            </span>
+            <span className={styles.settingHint}>{i18n.t('options.general.dockHint')}</span>
           </div>
           <fieldset
             aria-labelledby="dock-label"
@@ -300,7 +320,7 @@ function TranslationSection({
                   checked={isleDock === item}
                   onChange={() => void change({ path: 'page.isleDock', value: item })}
                 />
-                {DOCK_LABELS[item]}
+                {i18n.t(DOCK_LABELS[item])}
               </label>
             ))}
           </fieldset>
@@ -308,9 +328,9 @@ function TranslationSection({
         <div className={styles.settingRow}>
           <div className={styles.settingText}>
             <span id="dot-label" className={styles.settingName}>
-              划词小点
+              {i18n.t('options.general.dot')}
             </span>
-            <span className={styles.settingHint}>选中外文后在末尾显示翻译小点</span>
+            <span className={styles.settingHint}>{i18n.t('options.general.dotHint')}</span>
           </div>
           <fieldset
             aria-labelledby="dot-label"
@@ -327,7 +347,7 @@ function TranslationSection({
                   checked={showDot === item.value}
                   onChange={() => void change({ path: 'selection.showDot', value: item.value })}
                 />
-                {item.label}
+                {i18n.t(item.label)}
               </label>
             ))}
           </fieldset>

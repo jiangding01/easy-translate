@@ -59,6 +59,10 @@ errors:
   action:
     panelReadFailed: Couldn't load settings. Reopen the panel.
     openSettingsFailed: Couldn't open Settings. Try again.
+    addFailed: Couldn't add the service. Try again.
+    clearFailed: Couldn't clear the cache. Try again.
+    deleteFailed: Couldn't delete the service. Try again.
+    connectFailed: Couldn't connect. Try again.
 
 # Engine names and readiness (src/lib/engine-view.ts, src/lib/translate/engine-options.ts).
 engine:
@@ -138,3 +142,157 @@ popup:
     n: $1 paragraphs not translated
   displayMode: Display mode
   defaultEngine: Default engine
+
+# The settings page (src/entrypoints/options).
+options:
+  title: Easy Translate · Settings
+  nav:
+    label: Settings sections
+    general: General
+    generalSub: Language, appearance and translation style. Changes apply immediately.
+    services: Translation services
+    servicesSub: Google is free. AI engines and custom services need your own API key.
+    loading: Loading settings…
+  notice:
+    saved: Saved
+  general:
+    targetLanguage: Target language
+    targetLanguageHint: Pages are translated into this language
+    sourceLanguage: Source language
+    sourceLanguageHint: Auto-detect works for most pages. Choose a language yourself only if detection is wrong
+    recommended: Recommended
+    appearance: Appearance
+    appearanceHint: Theme for Settings and the toolbar panel
+    themeSystem: System
+    themeLight: Light
+    themeDark: Dark
+    styleNone: Plain
+    styleFaded: Faded
+    styleUnderline: Underline
+    styleHighlight: Highlight
+    dockRight: Right
+    dockLeft: Left
+    dockBottom: Bottom
+    dotOn: "On"
+    dotOff: "Off"
+    hostLight: Light pages
+    hostDark: Dark pages
+    translationTitle: Translation
+    translationHint: Translations keep the page's own font, size and color. The style only sets how they stand out from the original
+    style: Style
+    previewHost: Preview background
+    defaultBadge: Default
+    openShows: Show on start
+    openShowsHint: How a page is shown when translation starts. You can switch at any time while translating
+    dock: Control bar position
+    dockHint: The bar docked to the page edge while translating. Pages being translated update immediately
+    dot: Selection dot
+    dotHint: Show a translate dot after text you select in a foreign language
+  services:
+    engines: Engines
+    enginesHint: The selected dot marks the default engine. Click a row to view and edit its settings
+    addService: Add service
+    addTooltip: Add a service that works with the OpenAI API
+    # $1: the limit on custom services.
+    limitReached: You can add up to $1 custom services
+    customGroup: Custom · OpenAI compatible
+    madeDefault: Set as default
+    deleted: Deleted
+    # $1: the Google engine's name (engine.googleName).
+    deletedFallback: Deleted. The default is now $1
+    added: Added
+    addedPending: Added. Access not granted yet
+  engine:
+    # $1: the engine's name.
+    makeDefaultAria: "Set as default engine: $1"
+    defaultBadge: Default
+    # $1: the Google engine's name (engine.googleName).
+    googleNote: Free, no setup needed. Page text is sent to $1. Requests slow down automatically when rate limited, and you'll be advised to switch engines if limits persist.
+    name: Name
+    baseUrl: API URL
+    baseUrlInvalid: Use an https address, or http://localhost for a local model.
+    apiKey: API key
+    keyShow: Show
+    keyHide: Hide
+    keyClear: Clear
+    keyLocalOnly: Stored only on this computer. Never exported or synced
+    getKey: Get an API key ↗
+    getKeyAndModels: API keys and model list ↗
+    # $1: the key's last 4 characters.
+    keyPlaceholderSavedLast4: Saved ••••$1. Paste a new key to replace it
+    keyPlaceholderSaved: Saved. Paste a new key to replace it
+    keyPlaceholderBuiltin: Paste a key. It saves when you leave the field
+    keyPlaceholderOptional: Leave empty if none
+    model: Model
+    modelPlaceholder: Enter a model ID
+    modelPlaceholderGemini: Enter a model ID, such as a flash model from the official list
+    access: Access
+    # $1: the API URL's host name (the code splits the text around it and puts the host node between).
+    grantNeeded: The extension needs access to $1
+    grantButton: Grant access
+    isDefaultHint: This is the current default engine
+    makeDefault: Set as default engine
+    deleteService: Delete this service
+    # $1: the Google engine's name (engine.googleName).
+    deleteNoteDefault: After deleting, $1 becomes the default
+    deleteNote: This can't be undone
+    cancel: Cancel
+    delete: Delete
+    keySaved: Key saved
+    keyCleared: Key cleared
+    granted: Access granted
+    subFree: Free · no setup needed
+    subNoModel: No model set
+    subNeedsModelId: Enter a model ID
+  add:
+    title: Add service
+    sub: Any service compatible with the OpenAI API works, including models running on this computer.
+    close: Close
+    presets: Popular services
+    presetOllama: Ollama (local)
+    presetLmstudio: LM Studio (local)
+    presetOpenrouter: OpenRouter
+    presetSiliconflow: SiliconFlow
+    presetOther: Other
+    name: Name
+    namePlaceholder: Leave empty to use the domain
+    baseUrl: API URL
+    baseUrlInvalid: Use an https address, or http://localhost for a local model.
+    apiKey: API key
+    keyPlaceholderLocal: Usually not needed for local services
+    keyPlaceholderOptional: Leave empty if none
+    model: Model
+    modelPlaceholder: Enter a model ID
+    accessHint: Your browser will ask for access to this address when you add it
+    cancel: Cancel
+    submit: Add
+    adding: Adding…
+    keyNotSaved: Service added, but the API key wasn't saved. Paste it again in the service's details.
+  cache:
+    title: Translation cache
+    counting: Counting…
+    empty: No cache yet · translations are kept 7 days
+    # $1: the number of cached translations (formatted for the UI language), $2: their size.
+    summary:
+      1: $1 cached translation · $2 · kept 7 days
+      n: $1 cached translations · $2 · kept 7 days
+    clearHint: After clearing, translated pages have to be requested again
+    cancel: Cancel
+    clear: Clear
+    cleared: Cache cleared
+  test:
+    run: Test connection
+    running: Testing
+    again: Test again
+    prompt: Try it with this sentence
+    requesting: Requesting…
+    failed: Couldn't connect
+    collapse: Hide
+    details: Details
+    # Why the connection test can't run (TEST_BLOCKED_TEXT in providers.ts).
+    blocked:
+      badUrl: Enter a valid API URL first
+      checkingGrant: Checking access…
+      needsGrant: Test after granting access
+      needsKey: Enter an API key to test
+      needsModel: Enter a model to test

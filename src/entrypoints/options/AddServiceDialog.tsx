@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { i18n } from '#i18n';
 import {
   CUSTOM_PROVIDER_LIMITS,
   type CustomProviderId,
@@ -97,7 +98,7 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
       return;
     }
     if (existingIds.length >= MAX_CUSTOM_PROVIDERS) {
-      setError(`最多添加 ${MAX_CUSTOM_PROVIDERS} 个自定义服务`);
+      setError(i18n.t('options.services.limitReached', [String(MAX_CUSTOM_PROVIDERS)]));
       return;
     }
     setBusy(true);
@@ -111,7 +112,7 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
     ]);
     if (!added.ok) {
       setBusy(false);
-      setError(describeError(added.error, '添加失败，请重试。'));
+      setError(describeError(added.error, i18n.t('errors.action.addFailed')));
       return;
     }
     const key = draft.key.trim();
@@ -121,7 +122,7 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
         // The provider exists; the key can be pasted again in its details.
         setBusy(false);
         onAdded(id, granted);
-        notice.failed(saved.error, '服务已添加，但密钥没有保存，请在详情里重新粘贴。');
+        notice.failed(saved.error, i18n.t('options.add.keyNotSaved'));
         return;
       }
     }
@@ -149,16 +150,14 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
         <header className={styles.dialogHeader}>
           <div>
             <h2 id={titleId} className={styles.dialogTitle}>
-              添加服务
+              {i18n.t('options.add.title')}
             </h2>
-            <p className={styles.dialogSub}>
-              任何兼容 OpenAI 接口的服务都可以添加，包括本机运行的模型。
-            </p>
+            <p className={styles.dialogSub}>{i18n.t('options.add.sub')}</p>
           </div>
           <button
             type="button"
             className={styles.iconButton}
-            aria-label="关闭"
+            aria-label={i18n.t('options.add.close')}
             onClick={onClose}
             disabled={busy}
           >
@@ -178,7 +177,7 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
 
         <div className={styles.dialogBody}>
           <fieldset className={styles.chips}>
-            <legend className={styles.visuallyHidden}>常用服务</legend>
+            <legend className={styles.visuallyHidden}>{i18n.t('options.add.presets')}</legend>
             {PRESETS.map((item) => (
               <label key={item.id} className={styles.chip}>
                 <input
@@ -192,24 +191,26 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
                     setError(undefined);
                   }}
                 />
-                {item.label}
+                {i18n.t(item.label)}
               </label>
             ))}
           </fieldset>
 
           <label className={styles.dialogField}>
-            <span className={styles.label}>名称</span>
+            <span className={styles.label}>{i18n.t('options.add.name')}</span>
             <input
               className={styles.input}
               maxLength={CUSTOM_PROVIDER_LIMITS.name}
               value={draft.name}
               onChange={set('name')}
-              placeholder={defaultProviderName(preset, draft.baseURL) || '留空则使用域名'}
+              placeholder={
+                defaultProviderName(preset, draft.baseURL) || i18n.t('options.add.namePlaceholder')
+              }
             />
           </label>
           <div className={styles.dialogField}>
             <label className={styles.label} htmlFor={`${titleId}-base`}>
-              Base URL
+              {i18n.t('options.add.baseUrl')}
             </label>
             <div className={styles.fieldStack}>
               <input
@@ -226,13 +227,13 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
               />
               {baseInvalid && (
                 <span className={`${styles.appear} ${styles.fieldError}`}>
-                  请填写 https 开头的地址，本地模型可用 http://localhost
+                  {i18n.t('options.add.baseUrlInvalid')}
                 </span>
               )}
             </div>
           </div>
           <label className={styles.dialogField}>
-            <span className={styles.label}>API Key</span>
+            <span className={styles.label}>{i18n.t('options.add.apiKey')}</span>
             <input
               className={`${styles.input} ${styles.mono}`}
               type="password"
@@ -240,11 +241,15 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
               spellCheck={false}
               value={draft.key}
               onChange={set('key')}
-              placeholder={preset?.local ? '本地服务通常不需要' : '没有可以不填'}
+              placeholder={
+                preset?.local
+                  ? i18n.t('options.add.keyPlaceholderLocal')
+                  : i18n.t('options.add.keyPlaceholderOptional')
+              }
             />
           </label>
           <label className={styles.dialogField}>
-            <span className={styles.label}>模型</span>
+            <span className={styles.label}>{i18n.t('options.add.model')}</span>
             <input
               className={`${styles.input} ${styles.mono}`}
               spellCheck={false}
@@ -252,7 +257,7 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
               ref={modelInput}
               value={draft.model}
               onChange={set('model')}
-              placeholder="填写模型 ID"
+              placeholder={i18n.t('options.add.modelPlaceholder')}
               required
             />
           </label>
@@ -264,15 +269,13 @@ export function AddServiceDialog({ open, origin, existingIds, onClose, onAdded }
             role={error ? 'alert' : undefined}
           >
             {error ??
-              (endpoint.ok && endpoint.data === null
-                ? ''
-                : '添加时浏览器会询问是否允许访问这个地址')}
+              (endpoint.ok && endpoint.data === null ? '' : i18n.t('options.add.accessHint'))}
           </span>
           <button type="button" className={styles.ghost} onClick={onClose} disabled={busy}>
-            取消
+            {i18n.t('options.add.cancel')}
           </button>
           <button type="submit" className={styles.primary} disabled={!ready}>
-            {busy ? '添加中…' : '添加'}
+            {busy ? i18n.t('options.add.adding') : i18n.t('options.add.submit')}
           </button>
         </footer>
       </form>

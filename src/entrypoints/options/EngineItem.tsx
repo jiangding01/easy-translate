@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { i18n } from '#i18n';
 import { ProviderIcon } from '@/components/ProviderIcon';
 import { DEFAULT_OPENAI_BASE_URL } from '@/lib/config/defaults';
 import {
@@ -16,6 +17,7 @@ import {
 import { useConfig } from '@/lib/config/use-config';
 import { normalizeBaseURL, requiredHostPermission } from '@/lib/endpoint';
 import {
+  builtinName,
   customShort,
   type EngineEntry,
   engineReadiness,
@@ -48,6 +50,15 @@ interface Props {
 }
 
 type TextField = 'name' | 'baseURL' | 'model';
+
+/** A private-use character stands in for the node that goes mid-sentence (the host name). */
+export const SPLIT_MARK = '\uE000';
+
+/** Splits copy that was given `SPLIT_MARK` as its one substitution into the text before and after it. */
+export function splitAround(text: string): [string, string] {
+  const at = text.indexOf(SPLIT_MARK);
+  return at < 0 ? [text, ''] : [text.slice(0, at), text.slice(at + SPLIT_MARK.length)];
+}
 
 export function EngineItem(props: Props) {
   const { entry, config, isDefault, expanded, fresh, secret } = props;
@@ -87,7 +98,7 @@ export function EngineItem(props: Props) {
   const granted = useHostPermission(pattern);
   const readiness = engineReadiness({ engine, ...saved, secret, granted });
 
-  async function apply(change: ConfigChange, text = '已保存') {
+  async function apply(change: ConfigChange, text = i18n.t('options.notice.saved')) {
     const result = await patch([change]);
     if (result.ok) notice.saved(text);
     else notice.failed(result.error);
@@ -128,7 +139,7 @@ export function EngineItem(props: Props) {
       setKeyDraft('');
       setShowKey(false);
       props.onSecretsChanged();
-      notice.saved('已保存密钥');
+      notice.saved(i18n.t('options.engine.keySaved'));
     } else {
       notice.failed(result.error);
     }
@@ -139,7 +150,7 @@ export function EngineItem(props: Props) {
     const result = await admin.setSecret(engine, null);
     if (result.ok) {
       props.onSecretsChanged();
-      notice.saved('已清除密钥');
+      notice.saved(i18n.t('options.engine.keyCleared'));
     } else {
       notice.failed(result.error);
     }
@@ -148,7 +159,7 @@ export function EngineItem(props: Props) {
   async function grant() {
     if (!pattern) return;
     const ok = await requestHostPermission(pattern);
-    if (ok) notice.saved('已授权');
+    if (ok) notice.saved(i18n.t('options.engine.granted'));
     else
       notice.failed(appError('config', 'config/permission-missing', 'Permission was not granted'));
   }
@@ -165,11 +176,14 @@ export function EngineItem(props: Props) {
     granted: draftPattern === pattern ? granted : true,
     keyDraft: keyDraft.trim() !== '',
   });
-  const blocked = testReadiness.reason ? TEST_BLOCKED_TEXT[testReadiness.reason] : undefined;
+  const blocked = testReadiness.reason
+    ? i18n.t(TEST_BLOCKED_TEXT[testReadiness.reason])
+    : undefined;
   // Key saves are not part of it: a key saved mid-test must not discard that result.
   const testedWith = `${draft.baseURL.trim()}\n${draft.model.trim()}`;
 
   const sub = rowSubtitle(engine, saved);
+  const [grantBefore, grantAfter] = splitAround(i18n.t('options.engine.grantNeeded', [SPLIT_MARK]));
   const link = builtin ? KEY_LINKS[engine] : undefined;
   const field = (name: TextField) => ({
     value: draft[name],
@@ -196,7 +210,7 @@ export function EngineItem(props: Props) {
           type="button"
           className={styles.radio}
           aria-pressed={isDefault}
-          aria-label={`设为默认引擎：${entry.name}`}
+          aria-label={i18n.t('options.engine.makeDefaultAria', [entry.name])}
           onClick={props.onMakeDefault}
         >
           <span aria-hidden="true" className={styles.radioMark} />
@@ -216,7 +230,9 @@ export function EngineItem(props: Props) {
           <span className={styles.rowText}>
             <span className={styles.rowTitle}>
               <span className={styles.rowName}>{entry.name}</span>
-              {isDefault && <span className={styles.defaultTag}>默认</span>}
+              {isDefault && (
+                <span className={styles.defaultTag}>{i18n.t('options.engine.defaultBadge')}</span>
+              )}
             </span>
             <span className={styles.rowSub}>{sub}</span>
           </span>
@@ -244,14 +260,13 @@ export function EngineItem(props: Props) {
           <div className={styles.panelInner}>
             {engine === 'google' && (
               <p className={styles.note}>
-                免费，无需配置。网页文字会发送到 Google
-                翻译。遇到限流时会自动放慢；如果持续受限，会建议你换一个引擎。
+                {i18n.t('options.engine.googleNote', [builtinName('google')])}
               </p>
             )}
 
             {!builtin && (
               <label className={styles.field}>
-                <span className={styles.label}>名称</span>
+                <span className={styles.label}>{i18n.t('options.engine.name')}</span>
                 <input
                   className={styles.input}
                   maxLength={CUSTOM_PROVIDER_LIMITS.name}
@@ -264,7 +279,7 @@ export function EngineItem(props: Props) {
             {hasBase && (
               <div className={styles.field}>
                 <label className={styles.label} htmlFor={`${panelId}-base`}>
-                  Base URL
+                  {i18n.t('options.engine.baseUrl')}
                 </label>
                 <div className={styles.fieldStack}>
                   <input
@@ -280,7 +295,7 @@ export function EngineItem(props: Props) {
                   />
                   {baseError && (
                     <span className={`${styles.appear} ${styles.fieldError}`}>
-                      请填写 https 开头的地址，本地模型可用 http://localhost
+                      {i18n.t('options.engine.baseUrlInvalid')}
                     </span>
                   )}
                 </div>
@@ -290,7 +305,7 @@ export function EngineItem(props: Props) {
             {takesKey && (
               <div className={styles.field}>
                 <label className={styles.label} htmlFor={`${panelId}-key`}>
-                  API Key
+                  {i18n.t('options.engine.apiKey')}
                 </label>
                 <div className={styles.fieldStack}>
                   <div className={styles.inline}>
@@ -304,7 +319,7 @@ export function EngineItem(props: Props) {
                       placeholder={keyPlaceholder(builtin, secret)}
                       onChange={(event) => setKeyDraft(event.target.value)}
                       onBlur={(event) => {
-                        // "显示" keeps the draft: it only reveals what is being typed.
+                        // "Show" keeps the draft: it only reveals what is being typed.
                         if (
                           event.relatedTarget instanceof HTMLElement &&
                           event.relatedTarget.dataset.keepKey
@@ -323,7 +338,9 @@ export function EngineItem(props: Props) {
                         data-keep-key="true"
                         onClick={() => setShowKey(!showKey)}
                       >
-                        {showKey ? '隐藏' : '显示'}
+                        {showKey
+                          ? i18n.t('options.engine.keyHide')
+                          : i18n.t('options.engine.keyShow')}
                       </button>
                     )}
                     {keyed && keyDraft === '' && (
@@ -332,7 +349,7 @@ export function EngineItem(props: Props) {
                         className={styles.ghost}
                         onClick={() => void clearKey()}
                       >
-                        清除
+                        {i18n.t('options.engine.keyClear')}
                       </button>
                     )}
                   </div>
@@ -349,10 +366,10 @@ export function EngineItem(props: Props) {
                       <rect x="2.5" y="5.2" width="7" height="5" rx="1.2" />
                       <path d="M4 5.2V3.8a2 2 0 0 1 4 0v1.4" />
                     </svg>
-                    只保存在这台电脑上，不会导出或同步
+                    {i18n.t('options.engine.keyLocalOnly')}
                     {link && (
                       <a className={styles.link} href={link.href} target="_blank" rel="noreferrer">
-                        {link.label}
+                        {i18n.t(link.label)}
                       </a>
                     )}
                   </span>
@@ -362,13 +379,15 @@ export function EngineItem(props: Props) {
 
             {takesKey && (
               <label className={styles.field}>
-                <span className={styles.label}>模型</span>
+                <span className={styles.label}>{i18n.t('options.engine.model')}</span>
                 <input
                   className={`${styles.input} ${styles.mono}`}
                   spellCheck={false}
                   maxLength={CUSTOM_PROVIDER_LIMITS.model}
                   placeholder={
-                    engine === 'gemini' ? '填写模型 ID，例如官方列表中的 flash 型号' : '填写模型 ID'
+                    engine === 'gemini'
+                      ? i18n.t('options.engine.modelPlaceholderGemini')
+                      : i18n.t('options.engine.modelPlaceholder')
                   }
                   {...field('model')}
                 />
@@ -377,13 +396,15 @@ export function EngineItem(props: Props) {
 
             {pattern && granted === false && (
               <div className={styles.field}>
-                <span className={styles.label}>访问权限</span>
+                <span className={styles.label}>{i18n.t('options.engine.access')}</span>
                 <div className={styles.inline}>
                   <span className={styles.grantText}>
-                    需要允许扩展访问 <span className={styles.mono}>{hostOf(saved.baseURL)}</span>
+                    {grantBefore}
+                    <span className={styles.mono}>{hostOf(saved.baseURL)}</span>
+                    {grantAfter}
                   </span>
                   <button type="button" className={styles.ghostStrong} onClick={() => void grant()}>
-                    授权访问
+                    {i18n.t('options.engine.grantButton')}
                   </button>
                 </div>
               </div>
@@ -407,10 +428,10 @@ export function EngineItem(props: Props) {
 
             <div className={styles.itemFooter}>
               {isDefault ? (
-                <span className={styles.hint}>这是当前的默认引擎</span>
+                <span className={styles.hint}>{i18n.t('options.engine.isDefaultHint')}</span>
               ) : (
                 <button type="button" className={styles.textButton} onClick={props.onMakeDefault}>
-                  设为默认引擎
+                  {i18n.t('options.engine.makeDefault')}
                 </button>
               )}
               <span className={styles.spacer} />
@@ -420,27 +441,29 @@ export function EngineItem(props: Props) {
                   className={styles.dangerText}
                   onClick={() => setConfirmDelete(true)}
                 >
-                  删除此服务
+                  {i18n.t('options.engine.deleteService')}
                 </button>
               )}
               {!builtin && confirmDelete && (
                 <span className={`${styles.appear} ${styles.inline}`}>
                   <span className={styles.hint}>
-                    {isDefault ? '删除后默认改用 Google 翻译' : '删除后无法恢复'}
+                    {isDefault
+                      ? i18n.t('options.engine.deleteNoteDefault', [builtinName('google')])
+                      : i18n.t('options.engine.deleteNote')}
                   </span>
                   <button
                     type="button"
                     className={styles.ghostSmall}
                     onClick={() => setConfirmDelete(false)}
                   >
-                    取消
+                    {i18n.t('options.engine.cancel')}
                   </button>
                   <button
                     type="button"
                     className={styles.danger}
                     onClick={() => void props.onDelete()}
                   >
-                    删除
+                    {i18n.t('options.engine.delete')}
                   </button>
                 </span>
               )}
@@ -455,26 +478,28 @@ export function EngineItem(props: Props) {
 function keyPlaceholder(builtin: boolean, secret: SecretStatusInfo | undefined): string {
   if (secret?.configured) {
     return secret.last4
-      ? `已保存 ••••${secret.last4}，粘贴新密钥可替换`
-      : '已保存，粘贴新密钥可替换';
+      ? i18n.t('options.engine.keyPlaceholderSavedLast4', [secret.last4])
+      : i18n.t('options.engine.keyPlaceholderSaved');
   }
-  return builtin ? '粘贴密钥，离开输入框时自动保存' : '没有可以不填';
+  return builtin
+    ? i18n.t('options.engine.keyPlaceholderBuiltin')
+    : i18n.t('options.engine.keyPlaceholderOptional');
 }
 
 function rowSubtitle(engine: EngineEntry['id'], saved: Record<TextField, string>): string {
   switch (engine) {
     case 'google':
-      return '免费 · 无需配置';
+      return i18n.t('options.engine.subFree');
     case 'openai': {
       const host = hostOf(saved.baseURL);
-      const model = saved.model || '未填写模型';
+      const model = saved.model || i18n.t('options.engine.subNoModel');
       return host && host !== 'api.openai.com' ? `${host} · ${model}` : model;
     }
     case 'deepseek':
-      return saved.model || '未填写模型';
+      return saved.model || i18n.t('options.engine.subNoModel');
     case 'gemini':
-      return saved.model || '需要填写模型 ID';
+      return saved.model || i18n.t('options.engine.subNeedsModelId');
     default:
-      return `${hostOf(saved.baseURL)} · ${saved.model || '未填写模型'}`;
+      return `${hostOf(saved.baseURL)} · ${saved.model || i18n.t('options.engine.subNoModel')}`;
   }
 }
