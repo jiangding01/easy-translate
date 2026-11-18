@@ -156,16 +156,13 @@ export function engineReadiness(input: ReadinessInput): EngineReadiness {
   return { status: keyStatus, mono, attention: false };
 }
 
-/** Shown for a custom provider without a name. */
-const UNNAMED_CUSTOM_SHORT = '自';
-
 /**
  * A custom provider's short label: the first two characters of its name, by grapheme so
  * an emoji or accent is never cut in half; a generic one when it has no name.
  */
 export function customShort(name: string): string {
   const trimmed = name.trim();
-  if (!trimmed) return UNNAMED_CUSTOM_SHORT;
+  if (!trimmed) return i18n.t('engine.unnamedShort');
   const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
   return [...segmenter.segment(trimmed)]
     .slice(0, 2)

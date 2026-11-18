@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
+import { createGetMessage, loadLocales } from '../../scripts/i18n-messages.mjs';
 import { discoverUnits } from './discover';
 import { ISLE_TAG, OWN_ATTR, OWN_TAG, SELECTION_TAG, type StyleReader } from './dom-rules';
 import { createRenderer } from './render';
@@ -263,12 +265,28 @@ describe('renderer: failures and lifecycle', () => {
     const tr = document.querySelector('et-tr');
     expect(tr?.getAttribute('data-et-state')).toBe('error');
     expect(tr?.textContent).toBe('未译出 ·重试');
+    // The placeholder is plugin UI: the interface language, not the translation's.
+    expect(tr?.getAttribute('lang')).toBe('zh-CN');
     tr?.querySelector('button')?.click();
     expect(retry).toHaveBeenCalledTimes(1);
     expect(renderer.isFailed(unit)).toBe(true);
     await renderer.insert([{ unit, translation: '每一次打断都有代价。' }]);
     expect(renderer.isFailed(unit)).toBe(false);
     expect(document.querySelectorAll('et-tr')).toHaveLength(1);
+  });
+
+  it('words the failure placeholder in the interface language, English included', async () => {
+    const getMessage = createGetMessage(await loadLocales(), 'en');
+    fakeBrowser.i18n.getMessage = getMessage as typeof fakeBrowser.i18n.getMessage;
+    const { units } = await setup('<p>Every interruption costs attention.</p>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    // A Japanese target: the placeholder's lang must not follow it.
+    const renderer = createRenderer({ win: window, style: 'faded', target: 'ja', readStyle });
+    await renderer.fail(unit, vi.fn());
+    const tr = document.querySelector('et-tr');
+    expect(tr?.textContent).toBe('Not translated ·Retry');
+    expect(tr?.getAttribute('lang')).toBe('en');
   });
 
   it('notices translations a framework removed', async () => {

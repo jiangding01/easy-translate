@@ -36,6 +36,7 @@ export const ISLE_CSS = `
 .md{position:relative;display:flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--et-color-isle-dim);font-size:12.5px}
 .md:hover{color:var(--et-color-isle-text)}
 .md[aria-checked="true"]{color:var(--et-color-accent);font-weight:600}
+.md[aria-checked="true"] svg{stroke-width:2}
 .sep{flex-shrink:0;width:14px;height:1px;background:var(--et-color-isle-2)}
 .r[data-dock="bottom"] .sep{width:1px;height:14px}
 .ib{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:32px;height:32px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--et-color-isle-dim)}
@@ -63,7 +64,7 @@ export const ISLE_CSS = `
 .nt{flex-shrink:0;margin-left:auto;font-size:11.5px;font-weight:400;color:var(--et-color-isle-dim)}
 .lf{flex-shrink:0;padding:6px 10px 0;font-size:11px;line-height:16px;color:var(--et-color-isle-dim)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.tp{position:absolute;left:0;top:0;opacity:0;pointer-events:none;white-space:nowrap;padding:4px 8px;border-radius:6px;background:var(--et-color-isle);color:var(--et-color-isle-text);font-size:12px;line-height:16px;box-shadow:var(--et-shadow-isle)}
+.tp{position:absolute;left:0;top:0;opacity:0;pointer-events:none;white-space:normal;width:max-content;max-width:min(280px,calc(100vw - 32px));padding:4px 8px;border-radius:6px;background:var(--et-color-isle);color:var(--et-color-isle-text);font-size:12px;line-height:16px;box-shadow:var(--et-shadow-isle)}
 .tp:empty{display:none}
 .r[data-rm] .arc{animation:none}
 @media (prefers-reduced-motion:reduce){.arc{animation:none!important}}

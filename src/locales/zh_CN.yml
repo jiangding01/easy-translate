@@ -66,6 +66,8 @@ engine:
   unnamed: 未命名服务
   # 灵岛里无名自定义服务的名称（不回退到主机名）。
   customFallback: 自定义服务
+  # 无名自定义服务的简称（有名字时取名字前两个字符）。
+  unnamedShort: 自
   notReady:
     badUrl: 地址格式不正确
     needsGrant: 还没有授权访问这个地址
@@ -83,11 +85,14 @@ engine:
     noModel: 未填模型
     unsaved: 未保存
 
-# 面板与设置页共用、意思完全相同的词。
+# 面板、设置页与内容模块共用、意思完全相同的词。
 common:
   autoDetect: 自动检测
   modeBilingual: 双语
   modeTranslation: 仅译文
+  # $1：Google 引擎的名称（engine.googleName）。
+  useGoogleOnce: 这次先用 $1
+  retry: 重试
 
 # 工具栏面板（src/entrypoints/popup）。
 popup:
@@ -111,8 +116,6 @@ popup:
   alwaysOff: 只在你唤起时翻译
   settings: 设置
   goSettings: 去设置
-  # $1：Google 引擎的名称（engine.googleName）。
-  useGoogleOnce: 这次先用 $1
   translatePage: 翻译此页
   noShortcut: 还没有快捷键 ·
   setShortcut: 设置快捷键 ↗
@@ -126,7 +129,6 @@ popup:
     localRejected: 本地服务拒绝了请求
     permissionMissing: 还没有授权访问接口
     incomplete: 设置不完整
-  retry: 重试
   showOriginal: 显示原文
   stopShowOriginal: 停止并显示原文
   progress: 正在翻译眼前的段落，往下读时继续
@@ -290,3 +292,63 @@ options:
       needsGrant: 授权后可以测试
       needsKey: 填写 API Key 后可以测试
       needsModel: 填写模型后可以测试
+
+# 页面灵岛（src/content/isle）与译文失败占位（src/content/render.ts）。
+isle:
+  toolbar: 翻译控制
+  modes: 显示方式
+  modeBilingual: 双语对照
+  modeTranslation: 只看译文
+  modeOriginal: 显示原文（结束本次翻译）
+  # 单字模式按钮：界面语言是中文时显示这三个字，其他语言画图标。
+  glyphBilingual: 双
+  glyphTranslation: 译
+  glyphOriginal: 原
+  engines: 本页翻译引擎
+  listTitle: 这次用哪个引擎翻译
+  listNote: 只用于这一页，不改默认引擎
+  listFailed: 暂时取不到引擎列表
+  started: 开始翻译
+  finished: 翻译完成
+  # $1：未译出的段落数。
+  retryCount:
+    1: 重试 $1 段未译出的段落
+    n: 重试 $1 段未译出的段落
+  # $1：引擎名，$2：失败原因。
+  engineError: 本页引擎：$1（$2）
+  # $1：引擎名。
+  engineSwitch: 本页引擎：$1（点击切换）
+
+# 划词卡片（src/content/selection/card.ts）。
+card:
+  source: 原文
+  close: 关闭
+  listTitle: 这次用哪个引擎翻译
+  listNote: 只用于这一次，不改默认引擎
+  listFailed: 暂时取不到引擎列表
+  # $1：引擎名。
+  engineSwitch: 引擎：$1（点击切换）
+  # $1：下面的英式或美式，$2：音标。
+  sayPhonetic: $1发音 /$2/，点击朗读
+  accentUk: 英式
+  accentUs: 美式
+  # $1：字数上限（已格式化，2000）。
+  tooLong: 选中的文字太长（超过 $1 字），请缩小选区，或用整页翻译。
+  # $1：目标语言的自称。
+  alreadyIn: 这段文字已经是 $1，不需要翻译。
+  unchanged: 这段文字不需要翻译。
+  copy: 复制译文
+  copied: 已复制
+  speak: 朗读原文
+  speakStop: 停止朗读
+  noVoice: 这台设备没有可用的朗读语音
+  speechFailed: 朗读没有响应，请稍后再试
+  pin: 固定卡片
+  unpin: 取消固定
+  translating: 正在翻译
+  translated: 已翻译
+
+# 段落翻译失败时的占位（src/content/render.ts）。
+render:
+  failed: 未译出
+  retry: 重试

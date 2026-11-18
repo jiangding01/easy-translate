@@ -146,6 +146,12 @@ describe('customShort', () => {
     expect(customShort('')).toBe('自');
     expect(customShort('   ')).toBe('自');
   });
+
+  it('uses the English generic label for an empty name', async () => {
+    await useEnglish();
+    expect(customShort('')).toBe('C');
+    expect(customShort('My LLM')).toBe('My');
+  });
 });
 
 /** Switches the getMessage stub to the en copy (vitest.setup puts zh_CN back before each test). */

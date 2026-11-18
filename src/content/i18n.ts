@@ -77,6 +77,15 @@ function lookup(key: string, substitutions: readonly string[]): string {
 export const message: MessageFn = (key: string, ...substitutions: string[]) =>
   lookup(key, substitutions);
 
+/**
+ * The locale of the loaded locale file (`meta.locale`), for `lang` attributes and number
+ * formatting. Not `@@ui_locale`: a de browser gets en.yml, and that returns de while the
+ * interface is English.
+ */
+export function uiLocale(): string {
+  return message('meta.locale') || 'en';
+}
+
 /** The plural form of `key` for `count`. */
 export const pluralMessage: PluralFn = (key: string, count: number, ...substitutions: string[]) =>
   pickPlural(lookup(key, substitutions.length > 0 ? substitutions : [String(count)]), count);

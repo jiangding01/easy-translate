@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { createDefaultConfig } from '@/lib/config/defaults';
 import type { ConfigV1 } from '@/lib/config/types';
 import { withUserMessage } from '@/lib/error-messages';
@@ -12,6 +13,7 @@ import type {
   TranslateDone,
   TranslateRequest,
 } from '@/lib/messaging/protocol';
+import { createGetMessage, loadLocales } from '../../../scripts/i18n-messages.mjs';
 import type { SelectionRuntime, SelectionSnapshot } from '../runtime-contract';
 import { type CardEnv, createSelectionCard } from './card';
 import { extractText } from './extract';
@@ -1448,6 +1450,8 @@ describe('phonetic', () => {
     t.sent[0]?.chunk({ id: 's', phonetic: { uk: 'mæp', us: 'mæp' } });
     expect(shown(t)).toBe('UK/mæp/US/mæp/');
     expect(labels(t)).toEqual(['英式发音 /mæp/，点击朗读', '美式发音 /mæp/，点击朗读']);
+    // English phonetics, whatever the UI language the card host carries.
+    expect(t.$('.ph')?.getAttribute('lang')).toBe('en');
     expect(t.$('.st')?.textContent).toBe('map');
     // The word and the phonetic share one wrapping box; the word is still the expand button.
     expect(t.$('.sw')?.firstElementChild).toBe(t.$('.st'));
@@ -1635,5 +1639,84 @@ describe('phonetic', () => {
     expect(french.sent[0]?.payload.phonetic).toBeUndefined();
     french.card.dispose();
     document.documentElement.lang = '';
+  });
+});
+
+/** Switches the getMessage stub to the en copy (vitest.setup puts zh_CN back each test). */
+async function switchToEnglish() {
+  const getMessage = createGetMessage(await loadLocales(), 'en');
+  fakeBrowser.i18n.getMessage = getMessage as typeof fakeBrowser.i18n.getMessage;
+}
+
+describe('English copy and lang', () => {
+  it('says the 2000-character limit in both languages, written as 2000', async () => {
+    const long = 'word '.repeat(450).trim();
+    const zh = setup();
+    zh.card.open({ source: long });
+    expect(zh.$('.nc')?.textContent).toContain('2000');
+    zh.card.dispose();
+    await switchToEnglish();
+    const t = setup();
+    t.card.open({ source: long });
+    expect(t.$('.nc')?.textContent).toBe(
+      'The selected text is too long (over 2000 characters). Select less, or translate the whole page.',
+    );
+  });
+
+  it('labels the phonetic buttons and the engine button in English', async () => {
+    await switchToEnglish();
+    const { p } = page();
+    const t = setup();
+    await dot(t, snapshotOf(p, 8, 11));
+    t.click('.zn');
+    t.sent[0]?.chunk({ id: 's', phonetic: { uk: 'mæp', us: 'mæp' } });
+    const labels = [...(t.$('.ph')?.querySelectorAll('.pb') ?? [])].map((b) =>
+      b.getAttribute('aria-label'),
+    );
+    expect(labels).toEqual([
+      'British pronunciation /mæp/, click to play',
+      'American pronunciation /mæp/, click to play',
+    ]);
+    expect(t.$('[data-act="engine"]')?.getAttribute('aria-label')).toContain('click to switch');
+  });
+
+  it('keeps the host in the interface language, the translation in the target and the source in its own', async () => {
+    document.documentElement.setAttribute('lang', 'fr');
+    try {
+      await switchToEnglish();
+      const { p } = page();
+      const t = setup();
+      t.card.open({ source: SENTENCE, selection: snapshotOf(p) });
+      await t.advance(0);
+      t.sent[0]?.chunk({ id: 's', delta: '纸质地图' });
+      expect(t.host()?.getAttribute('lang')).toBe('en');
+      expect(t.$('.tw')?.getAttribute('lang')).toBe('zh-CN');
+      expect(t.$('.st')?.getAttribute('lang')).toBe('en');
+    } finally {
+      document.documentElement.removeAttribute('lang');
+    }
+  });
+
+  it('leaves the source lang empty when the detection is unsure', async () => {
+    const { p } = page();
+    const t = setup({ detection: { isReliable: false, languages: [] } });
+    t.card.open({ source: SENTENCE, selection: snapshotOf(p) });
+    await t.advance(0);
+    t.sent[0]?.chunk({ id: 's', delta: '纸质地图' });
+    expect(t.host()?.getAttribute('lang')).toBe('zh-CN');
+    expect(t.$('.st')?.getAttribute('lang')).toBe('');
+  });
+
+  it('words the error actions in English, naming Google by its English name', async () => {
+    await switchToEnglish();
+    const { p } = page();
+    const t = setup();
+    t.card.open({ source: SENTENCE, selection: snapshotOf(p) });
+    t.sent[0]?.chunk({
+      id: 's',
+      error: withUserMessage(appError('provider', 'provider/server-error', 'x')),
+    });
+    expect(t.$('[data-act="retry"]')?.textContent).toBe('Retry');
+    expect(t.$('[data-act="google"]')?.textContent).toBe('Use Google Translate this time');
   });
 });
