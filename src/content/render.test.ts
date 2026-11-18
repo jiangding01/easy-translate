@@ -4,6 +4,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { createGetMessage, loadLocales } from '../../scripts/i18n-messages.mjs';
 import { discoverUnits } from './discover';
 import { ISLE_TAG, OWN_ATTR, OWN_TAG, SELECTION_TAG, type StyleReader } from './dom-rules';
+import { uiLocale } from './i18n';
 import { createRenderer } from './render';
 
 const readStyle: StyleReader = (el) => {
@@ -434,6 +435,193 @@ describe('renderer: failures and lifecycle', () => {
   });
 });
 
+describe('renderer: loading dot', () => {
+  const dots = () => [...document.querySelectorAll('et-tr[data-et-state="loading"]')];
+
+  it('shows a silent dot that carries no translation markers, and removes it on hide', async () => {
+    const { units, renderer, before } = await setup('<p>Waiting for the translation.</p>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    await renderer.showLoading(unit);
+    const [dot] = dots();
+    expect(dots()).toHaveLength(1);
+    expect(dot?.getAttribute('aria-hidden')).toBe('true');
+    expect(dot?.getAttribute('translate')).toBe('no');
+    expect(dot?.getAttribute('lang')).toBe(uiLocale());
+    expect(dot?.textContent).toBe('');
+    expect(dot?.hasAttribute('data-et-s')).toBe(false);
+    expect(dot?.hasAttribute('data-et-inline')).toBe(false);
+    // Not a translation: the renderer does not know the unit as translated or failed.
+    expect(renderer.has(unit)).toBe(false);
+    expect(renderer.isFailed(unit)).toBe(false);
+    expect(renderer.detached()).toEqual([]);
+    // Same spot as a translation: last child of a block root.
+    expect(unit.root.lastChild).toBe(dot);
+    renderer.hideLoading(unit);
+    expect(document.body.innerHTML).toBe(before);
+  });
+
+  it('sits where the translation would: after a run, inside a flex row text', async () => {
+    const { units, renderer } = await setup(
+      '<div>Intro words here<p>A paragraph.</p></div>' +
+        '<div style="display:flex"><span>Mara Ellis</span><span>6 min read</span></div>',
+    );
+    const run = units.find((unit) => unit.kind === 'run');
+    const flex = units.find((unit) => (unit.root as HTMLElement).style?.display === 'flex');
+    if (!run || !flex) throw new Error('missing units');
+    await renderer.showLoading(run);
+    await renderer.showLoading(flex);
+    expect(document.querySelector('div')?.childNodes[1]).toBe(
+      document.querySelector('div > et-tr[data-et-state="loading"]'),
+    );
+    expect(document.querySelectorAll('span')[1]?.lastChild).toBe(dots()[1]);
+  });
+
+  it('is replaced by the translation in the same write, leaving one et-tr', async () => {
+    const { units, renderer } = await setup('<p>Quick enough paragraph.</p>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    await renderer.showLoading(unit);
+    const batches: MutationRecord[][] = [];
+    const observer = new MutationObserver((records) => batches.push(records));
+    observer.observe(unit.root, { childList: true });
+    await renderer.insert([{ unit, translation: '够快的段落。' }]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    observer.disconnect();
+    // One write: the dot's removal and the translation's insertion arrive in the same batch.
+    expect(batches).toHaveLength(1);
+    expect(batches[0]?.flatMap((record) => [...record.removedNodes])).toHaveLength(1);
+    expect(batches[0]?.flatMap((record) => [...record.addedNodes])).toHaveLength(1);
+    expect(dots()).toHaveLength(0);
+    expect(document.querySelectorAll('et-tr')).toHaveLength(1);
+    expect(document.querySelector('et-tr')?.textContent).toBe('够快的段落。');
+  });
+
+  it('is replaced by the failure notice', async () => {
+    const { units, renderer } = await setup('<p>Fails after waiting.</p>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    await renderer.showLoading(unit);
+    await renderer.fail(unit, vi.fn(), 'x');
+    expect(dots()).toHaveLength(0);
+    expect(document.querySelectorAll('et-tr')).toHaveLength(1);
+    expect(renderer.isFailed(unit)).toBe(true);
+  });
+
+  it('replaces a failure notice and leaves no record that detached() would misread', async () => {
+    const { units, renderer } = await setup('<p>Retried paragraph text.</p>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    await renderer.fail(unit, vi.fn(), 'x');
+    await renderer.showLoading(unit);
+    expect(document.querySelector('et-tr[data-et-state="error"]')).toBeNull();
+    expect(dots()).toHaveLength(1);
+    expect(renderer.has(unit)).toBe(false);
+    expect(renderer.isFailed(unit)).toBe(false);
+    expect(renderer.detached()).toEqual([]);
+  });
+
+  it('never appears when the translation arrived before its frame', async () => {
+    const { units, renderer } = await setup('<p>Result beat the dot here.</p>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    const added: string[] = [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) added.push((node as Element).outerHTML ?? '');
+      }
+    });
+    observer.observe(unit.root, { childList: true });
+    const loading = renderer.showLoading(unit);
+    await renderer.insert([{ unit, translation: '先到的译文。' }]);
+    await loading;
+    await Promise.resolve();
+    observer.disconnect();
+    expect(dots()).toHaveLength(0);
+    expect(document.querySelectorAll('et-tr')).toHaveLength(1);
+    expect(added.filter((html) => html.includes('data-et-state="loading"'))).toEqual([]);
+  });
+
+  it('never appears on a unit whose translation is written before the dot gets its frame', async () => {
+    const { units, renderer } = await setup('<p>Insert was already waiting.</p>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    // The insert read the page first; the dot is asked for after, but both wait for one frame.
+    const inserting = renderer.insert([{ unit, translation: '已经在等的译文。' }]);
+    const loading = renderer.showLoading(unit);
+    await Promise.all([inserting, loading]);
+    expect(dots()).toHaveLength(0);
+    expect(document.querySelectorAll('et-tr')).toHaveLength(1);
+    // Nor on a unit that is already translated.
+    await renderer.showLoading(unit);
+    expect(dots()).toHaveLength(0);
+  });
+
+  it('never appears when it was hidden or failed before its frame', async () => {
+    const { units, renderer } = await setup('<p>Hidden before the frame.</p>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    const first = renderer.showLoading(unit);
+    renderer.hideLoading(unit);
+    await first;
+    expect(dots()).toHaveLength(0);
+    const second = renderer.showLoading(unit);
+    await renderer.fail(unit, vi.fn(), 'x');
+    await second;
+    expect(dots()).toHaveLength(0);
+    expect(document.querySelectorAll('et-tr')).toHaveLength(1);
+  });
+
+  it('hideAllLoading removes every dot, also those no caller tracks any more', async () => {
+    const { units, renderer, before } = await setup('<p>One.</p><p>Two paragraphs here.</p>');
+    const [first, second] = units;
+    if (!first || !second) throw new Error('missing units');
+    await renderer.showLoading(first);
+    await renderer.showLoading(second);
+    expect(dots()).toHaveLength(2);
+    renderer.hideAllLoading();
+    expect(document.body.innerHTML).toBe(before);
+  });
+
+  it('fail on a disconnected root still clears the dot it had', async () => {
+    const { units, renderer } = await setup('<div><p>Leaving paragraph.</p></div>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    const parent = unit.root.parentElement as HTMLElement;
+    await renderer.showLoading(unit);
+    unit.root.remove();
+    await renderer.fail(unit, vi.fn(), 'x');
+    parent.append(unit.root);
+    expect(dots()).toHaveLength(0);
+  });
+
+  it('is cleared by drop and by restoreAll, and not written after a restore began', async () => {
+    const { units, renderer, before } = await setup('<p>One.</p><p>Two paragraphs here.</p>');
+    const [first, second] = units;
+    if (!first || !second) throw new Error('missing units');
+    await renderer.showLoading(first);
+    await renderer.showLoading(second);
+    renderer.drop(first);
+    expect(dots()).toHaveLength(1);
+    await renderer.restoreAll();
+    expect(document.body.innerHTML).toBe(before);
+    const late = renderer.showLoading(first);
+    await late;
+    expect(document.body.innerHTML).toBe(before);
+  });
+
+  it('is not hidden by translation-only and not counted for it', async () => {
+    const { units, renderer } = await setup('<p>Only mode paragraph.</p><p>Second one here.</p>');
+    const [first, second] = units;
+    if (!first || !second) throw new Error('missing units');
+    await renderer.insert([{ unit: first, translation: '译文' }]);
+    await renderer.showLoading(second);
+    await renderer.setMode('translation');
+    expect(second.root.hasAttribute('data-et-only')).toBe(false);
+    expect(dots()).toHaveLength(1);
+  });
+});
+
 describe('renderer: writes racing a restore', () => {
   it('drops an insert still waiting for its frame when the restore begins', async () => {
     const { units, renderer, before } = await setup('<p>The best tools disappear.</p>');
@@ -501,6 +689,16 @@ describe('renderer: DOM contract', () => {
     expect(trOf(run.root).hasAttribute('data-et-inline')).toBe(true);
     expect(trOf(flex.root).hasAttribute('data-et-inline')).toBe(true);
     expect(trOf(failed.root).getAttribute('data-et-state')).toBe('error');
+
+    // A loading dot is plugin UI too: a state, no translation markers, no text.
+    await renderer.showLoading(failed);
+    const dot = trOf(failed.root);
+    expect(dot.getAttribute('data-et-state')).toBe('loading');
+    expect(dot.getAttribute('aria-hidden')).toBe('true');
+    expect(dot.hasAttribute('data-et-s')).toBe(false);
+    expect(dot.hasAttribute('data-et-inline')).toBe(false);
+    expect(dot.textContent).toBe('');
+    await renderer.fail(failed, () => {}, 'x');
 
     await renderer.setMode('translation');
     // Only block units are hidden; runs, flex items and failures stay bilingual.

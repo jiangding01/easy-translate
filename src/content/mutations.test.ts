@@ -12,7 +12,13 @@ const isOwn = (node: Node) => {
 let stop: (() => void) | undefined;
 const wait = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function watch(options: { burstLimit?: number; now?: () => number } = {}) {
+function watch(
+  options: {
+    burstLimit?: number;
+    now?: () => number;
+    ignoreRemoved?: (node: Node) => boolean;
+  } = {},
+) {
   const onDirty = vi.fn<(elements: Element[]) => void>();
   stop = watchMutations({ root: document.body, isOwn, onDirty, debounceMs: 5, ...options });
   return onDirty;
@@ -44,6 +50,19 @@ describe('watchMutations', () => {
     tr.remove();
     await vi.waitFor(() => expect(onDirty).toHaveBeenCalledTimes(1));
     expect(onDirty.mock.calls[0]?.[0].map((el) => el.id)).toEqual(['p']);
+  });
+
+  it('does not count removals the caller marks as its own, but still counts the rest', async () => {
+    const dot = document.createElement('et-tr');
+    dot.setAttribute('data-et-state', 'loading');
+    const other = document.createElement('span');
+    document.getElementById('p')?.append(dot, other);
+    const onDirty = watch({ ignoreRemoved: (node) => node === dot });
+    dot.remove();
+    await wait();
+    expect(onDirty).not.toHaveBeenCalled();
+    other.remove();
+    await vi.waitFor(() => expect(onDirty).toHaveBeenCalledTimes(1));
   });
 
   it('coalesces nested changes into the outermost element', async () => {

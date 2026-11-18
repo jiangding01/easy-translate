@@ -60,6 +60,7 @@ PR2 增补（2026-11-18 用户同意，开工时随 PR2 方案一起审查）：
 21. 「仅看译文」下 Google 丢标记退回纯文本的段落，原文不再露出（与第 14 条合测）。
 22. 快速「停止 → 再开始」：最终处于翻译中且无错误。
 23. Google 200 但部分句子原样回显：自动重试并拿到译文。
+24. 段落加载态（随 `feat/paragraph-loading` 提前完成）：新增 `tests/e2e/loading.e2e.test.ts` 4 条（慢回包出现加载点后换成译文；失败后重试立即出现加载点；视口上方插入不移动视口内段落；圆点不改变一行段落高度）；`harness.ts` 的 Google mock 支持返回 Promise，用来延迟回包。e2e 现为 24 通过、2 跳过（macOS）。方案见 `docs/plans/paragraph-loading.md`。
 然后把 e2e job 设为必过。
 
 ## 留给单测或手工（不进 e2e）
