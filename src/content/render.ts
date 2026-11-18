@@ -206,12 +206,25 @@ export function createRenderer(options: RenderOptions): Renderer {
     record: Rendered;
     fontSize: string;
     lineHeight: string;
+    letterSpacing: string;
+    wordSpacing: string;
     pins: [string, string][];
   };
   // font-size:0 also zeroes the root's own em/ch lengths (`max-width: 80ch` would
   // stack the translation one character per line), so these are pinned in pixels.
   // getComputedStyle gives computed values here: em/ch resolved, keywords and % kept.
   const PINNED = [
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'flex-basis',
+    'text-indent',
+  ];
+  // getComputedStyle reports used pixels for these even when they are `auto` or a
+  // percentage; the Typed OM keeps the keyword and the percentage (so `margin: 0 auto`
+  // stays centred and `padding: 5%` follows the window), and resolves em to pixels.
+  const PINNED_TYPED = [
     'margin-top',
     'margin-right',
     'margin-bottom',
@@ -220,26 +233,37 @@ export function createRenderer(options: RenderOptions): Renderer {
     'padding-right',
     'padding-bottom',
     'padding-left',
-    'min-width',
-    'max-width',
-    'min-height',
-    'max-height',
-    'flex-basis',
-    'text-indent',
+    'width',
+    'height',
   ];
-  // getComputedStyle reports used pixels for these even when they are `auto`;
-  // the Typed OM keeps the keyword, so only a real length gets pinned.
-  const PINNED_TYPED = ['width', 'height'];
   const KEYWORD = /^[a-z-]+$/;
   function readOnly(record: Rendered): OnlyReading {
     const root = record.unit.root;
     const style = win.getComputedStyle(root);
     const typed = typeof root.computedStyleMap === 'function' ? root.computedStyleMap() : null;
     const pins: [string, string][] = PINNED.map((name) => [name, style.getPropertyValue(name)]);
+    // computedStyleMap is in every Chrome this extension supports (130+); the guard only
+    // keeps environments without it (tests) from pinning used pixels.
     for (const name of PINNED_TYPED) pins.push([name, String(typed?.get(name) ?? '')]);
-    return { record, fontSize: style.fontSize, lineHeight: style.lineHeight, pins };
+    return {
+      record,
+      fontSize: style.fontSize,
+      lineHeight: style.lineHeight,
+      // Inherited from the root as computed lengths: zeroed with its font-size, so the
+      // translation gets the values from before.
+      letterSpacing: style.getPropertyValue('letter-spacing'),
+      wordSpacing: style.getPropertyValue('word-spacing'),
+      pins,
+    };
   }
-  function applyOnly({ record, fontSize, lineHeight, pins }: OnlyReading) {
+  function applyOnly({
+    record,
+    fontSize,
+    lineHeight,
+    letterSpacing,
+    wordSpacing,
+    pins,
+  }: OnlyReading) {
     if (record.only) return;
     const root = record.unit.root as HTMLElement;
     record.only = { styleAttr: root.getAttribute('style') };
@@ -250,6 +274,8 @@ export function createRenderer(options: RenderOptions): Renderer {
     root.setAttribute('data-et-only', '');
     record.el.style.setProperty('--et-fs', fontSize);
     record.el.style.setProperty('--et-lh', lineHeight);
+    if (letterSpacing) record.el.style.setProperty('--et-ls', letterSpacing);
+    if (wordSpacing) record.el.style.setProperty('--et-ws', wordSpacing);
   }
   function removeOnly(record: Rendered) {
     if (!record.only) return;
@@ -259,6 +285,8 @@ export function createRenderer(options: RenderOptions): Renderer {
     else root.setAttribute('style', record.only.styleAttr);
     record.el.style.removeProperty('--et-fs');
     record.el.style.removeProperty('--et-lh');
+    record.el.style.removeProperty('--et-ls');
+    record.el.style.removeProperty('--et-ws');
     record.only = undefined;
   }
 

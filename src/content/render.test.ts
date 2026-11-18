@@ -159,6 +159,63 @@ describe('renderer: translation only', () => {
     }
   });
 
+  it('keeps auto margins and % padding responsive, and carries the root text spacing', async () => {
+    // A centred `margin: 0 auto; padding: 5%` paragraph froze at its pixel margins (no longer
+    // centred after a resize), and `letter-spacing: .2em` on the root reached the translation
+    // as 0 once the root's font-size was zeroed (docs/reviews/2026-11-17-translation-only-followups.md).
+    const { units, renderer } = await setup('<p>A centred paragraph of text.</p>');
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    const root = unit.root as HTMLElement;
+    await renderer.insert([{ unit, translation: '居中的一段文字。' }]);
+    // What Chrome reports: getComputedStyle gives used pixels for margin and padding, the
+    // Typed OM keeps `auto` and percentages and resolves em to pixels.
+    const computed: Record<string, string> = {
+      'margin-left': '242px',
+      'margin-right': '242px',
+      'padding-left': '50px',
+      'padding-top': '16px',
+      'letter-spacing': '3.2px',
+      'word-spacing': '16px',
+    };
+    const typed: Record<string, string> = {
+      'margin-left': 'auto',
+      'margin-right': 'auto',
+      'padding-left': '5%',
+      'padding-top': '16px',
+    };
+    const real = window.getComputedStyle.bind(window);
+    const spy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) =>
+      el === root
+        ? ({
+            fontSize: '16px',
+            lineHeight: '24px',
+            getPropertyValue: (name: string) => computed[name] ?? '0px',
+          } as unknown as CSSStyleDeclaration)
+        : real(el, pseudo),
+    );
+    Object.defineProperty(root, 'computedStyleMap', {
+      configurable: true,
+      value: () => ({ get: (name: string) => typed[name] ?? '0px' }),
+    });
+    try {
+      await renderer.setMode('translation');
+      expect(root.style.getPropertyValue('margin-left')).toBe('');
+      expect(root.style.getPropertyValue('margin-right')).toBe('');
+      expect(root.style.getPropertyValue('padding-left')).toBe('5%');
+      expect(root.style.getPropertyValue('padding-top')).toBe('16px');
+      const el = root.querySelector('et-tr') as HTMLElement;
+      expect(el.style.getPropertyValue('--et-ls')).toBe('3.2px');
+      expect(el.style.getPropertyValue('--et-ws')).toBe('16px');
+      await renderer.setMode('bilingual');
+      expect(root.hasAttribute('style')).toBe(false);
+      expect(el.style.getPropertyValue('--et-ls')).toBe('');
+      expect(el.style.getPropertyValue('--et-ws')).toBe('');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('hides the original of a link paragraph whose tags were dropped, but keeps runs bilingual', async () => {
     // claude.dev: Google returned the sentence with `<t0>…</t0>` gone, the paragraph
     // fell back to plain text and its English stayed visible in translation-only.
@@ -266,3 +323,4 @@ describe('renderer: writes racing a restore', () => {
     expect(document.body.innerHTML).toBe(before);
   });
 });
+
