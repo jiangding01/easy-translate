@@ -39,6 +39,20 @@ async function translateFirstScreen() {
   });
 }
 
+/** Switches to translation-only and waits until #intro shows its translation. */
+async function toTranslationOnly() {
+  expect(await setMode('translation')).toMatchObject({ data: { mode: 'translation' } });
+  await waitFor(
+    () =>
+      h.evaluate(`(() => {
+        const root = document.querySelector('#intro');
+        return root.hasAttribute('data-et-only') &&
+          root.querySelector('et-tr')?.textContent.includes('【MOCK】');
+      })()`),
+    { message: 'translation only, with the translation shown' },
+  );
+}
+
 async function restore() {
   await h.tell('page.toggle');
   await waitFor(
@@ -86,13 +100,11 @@ describe('display modes', () => {
     );
     expect(await h.evaluate(`document.querySelectorAll('et-tr').length`)).toBeGreaterThan(0);
 
-    // Show the original: nothing of ours is left in the document. Chrome keeps an empty
-    // `style=""` on the blocks that were switched to translation-only (see the known-issue
-    // case below), so only that is ignored here.
+    // Show the original: nothing of ours is left in the document.
     await restore();
     expect(await leftovers()).toEqual([]);
     const after = await snapshot();
-    expect(after.article.replaceAll(' style=""', '')).toBe(before.article);
+    expect(after.article).toBe(before.article);
     expect(after.root).toBe(before.root);
     h.assertNoErrors();
   });
@@ -108,38 +120,63 @@ describe('display modes', () => {
     h.assertNoErrors();
   });
 
-  // Known product issue: a block that was switched to translation-only keeps an empty
-  // style attribute after the restore, so the markup is not byte-identical. Flip this to a
-  // plain `it` when it is fixed (docs/plans/e2e-smoke.md).
-  it.fails('leaves no empty style attribute after translation-only', async () => {
-    // it.fails passes on any error, so the way there must not throw: a step that fails
-    // returns instead, and the case then fails as an unexpected pass.
-    const roundTrip = async () => {
-      await h.openPage('e2e-article.html');
-      const before = await snapshot();
-      await translateFirstScreen();
-      expect(await setMode('translation')).toMatchObject({ data: { mode: 'translation' } });
-      await waitFor(
-        () =>
-          h.evaluate(`(() => {
-            const root = document.querySelector('#intro');
-            return root.hasAttribute('data-et-only') &&
-              root.querySelector('et-tr')?.textContent.includes('【MOCK】');
-          })()`),
-        { message: 'translation only, with the translation shown' },
-      );
-      await restore();
-      expect(await leftovers()).toEqual([]);
-      const after = await snapshot();
-      // Nothing but the known leftover differs.
-      expect(after.article.replaceAll(' style=""', '')).toBe(before.article);
-      expect(after.root).toBe(before.root);
-      return { before, after };
-    };
-    const reached = await roundTrip().catch((error: unknown) => {
-      console.error('translation-only round trip failed:', error);
-    });
-    if (!reached) return;
-    expect(reached.after).toEqual(reached.before);
+  it('leaves no empty style attribute after translation-only', async () => {
+    await h.openPage('e2e-article.html');
+    const before = await snapshot();
+    await translateFirstScreen();
+    await toTranslationOnly();
+    await restore();
+    expect(await leftovers()).toEqual([]);
+    expect(await snapshot()).toEqual(before);
+    h.assertNoErrors();
+  });
+
+  it('keeps what the page changed in a block while translation-only was on', async () => {
+    await h.openPage('e2e-article.html');
+    await translateFirstScreen();
+    await toTranslationOnly();
+    // #title is pinned too (text-indent), so removing it leaves nothing of ours behind.
+    expect(await h.evaluate<string>(`document.querySelector('#title').style.textIndent`)).not.toBe(
+      '',
+    );
+    await h.evaluate(`(() => {
+      document.querySelector('#intro').style.setProperty('color', 'blue');
+      document.querySelector('#title').style.removeProperty('text-indent');
+    })()`);
+    await restore();
+    const styles = await h.evaluate<{ intro: string | null; title: boolean }>(`({
+      intro: document.querySelector('#intro').getAttribute('style'),
+      title: document.querySelector('#title').hasAttribute('style'),
+    })`);
+    expect(styles.intro?.replace(/\s+/g, ' ').trim()).toBe('color: blue;');
+    expect(styles.title).toBe(false);
+    expect(await leftovers()).toEqual([]);
+    h.assertNoErrors();
+  });
+
+  it('keeps a var() shorthand margin working after translation-only', async () => {
+    await h.openPage('e2e-article.html');
+    await translateFirstScreen();
+    await toTranslationOnly();
+    // The block must really be switched, or the case would pass without a restore.
+    await waitFor(
+      () => h.evaluate(`document.querySelector('#pinned').hasAttribute('data-et-only')`),
+      {
+        message: '#pinned to be translation-only',
+      },
+    );
+    await h.evaluate(`document.querySelector('#pinned').style.setProperty('color', 'blue')`);
+    await restore();
+    const after = await h.evaluate<{ style: string; margin: string; color: string }>(`(() => {
+      const el = document.querySelector('#pinned');
+      const cs = getComputedStyle(el);
+      return { style: el.getAttribute('style'), margin: cs.marginLeft, color: el.style.color };
+    })()`);
+    expect(after.margin).toBe('10px');
+    expect(after.style).toContain('var(--x)');
+    expect(after.style).toContain('--x');
+    expect(after.color).toBe('blue');
+    expect(await leftovers()).toEqual([]);
+    h.assertNoErrors();
   });
 });

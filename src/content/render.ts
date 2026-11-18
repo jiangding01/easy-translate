@@ -26,8 +26,8 @@ interface Rendered {
   el: HTMLElement;
   inline: boolean;
   failed: boolean;
-  /** Translation-only patch: the root's original style attribute. */
-  only?: { styleAttr: string | null };
+  /** Translation-only patch: the root's style attribute before, and right after, the pins. */
+  only?: { original: string | null; applied: string | null };
   unclamped?: Element;
   animation?: Animation;
 }
@@ -271,11 +271,14 @@ export function createRenderer(options: RenderOptions): Renderer {
   }: OnlyReading) {
     if (record.only) return;
     const root = record.unit.root as HTMLElement;
-    record.only = { styleAttr: root.getAttribute('style') };
+    const original = root.getAttribute('style');
     // Keywords (auto, none) are left to the host so its own rules keep applying.
     for (const [name, value] of pins) {
       if (value && !KEYWORD.test(value)) root.style.setProperty(name, value);
     }
+    // Reading the attribute also syncs it: Chrome syncs the style attribute lazily, and a
+    // later removeAttribute would leave a pending sync that writes back an empty `style=""`.
+    record.only = { original, applied: root.getAttribute('style') };
     // Contract: on the original, hides its direct children other than <et-tr>.
     root.setAttribute('data-et-only', '');
     record.el.style.setProperty('--et-fs', fontSize);
@@ -283,12 +286,47 @@ export function createRenderer(options: RenderOptions): Renderer {
     if (letterSpacing) record.el.style.setProperty('--et-ls', letterSpacing);
     if (wordSpacing) record.el.style.setProperty('--et-ws', wordSpacing);
   }
+  // Puts the style attribute back, keeping what the page changed meanwhile. Untouched: the
+  // original string verbatim. Otherwise the original is written back and the page's
+  // differences from the pinned string are replayed on it. Properties are compared as
+  // longhands: a shorthand with var() reads as '' in Chrome, so remembering per-property
+  // originals would lose it.
+  function restoreStyle(root: HTMLElement, { original, applied }: NonNullable<Rendered['only']>) {
+    const current = root.getAttribute('style');
+    if (current === applied) {
+      if (original === null) root.removeAttribute('style');
+      else root.setAttribute('style', original);
+      return;
+    }
+    // The page removed the attribute itself: keep it removed.
+    if (current === null) return;
+    const pinned = doc.createElement('div').style;
+    pinned.cssText = applied ?? '';
+    const now = root.style;
+    const names = new Set([...Array.from(pinned), ...Array.from(now)]);
+    const changes: [string, string, string][] = [];
+    for (const name of names) {
+      const value = now.getPropertyValue(name);
+      const priority = now.getPropertyPriority(name);
+      if (value !== pinned.getPropertyValue(name) || priority !== pinned.getPropertyPriority(name))
+        changes.push([name, value, priority]);
+    }
+    if (original === null) root.removeAttribute('style');
+    else root.setAttribute('style', original);
+    for (const [name, value, priority] of changes) {
+      if (value) root.style.setProperty(name, value, priority);
+      else root.style.removeProperty(name);
+    }
+    if (original === null && root.style.length === 0) {
+      root.getAttribute('style');
+      root.removeAttribute('style');
+    }
+  }
   function removeOnly(record: Rendered) {
     if (!record.only) return;
     const root = record.unit.root;
     root.removeAttribute('data-et-only');
-    if (record.only.styleAttr === null) root.removeAttribute('style');
-    else root.setAttribute('style', record.only.styleAttr);
+    restoreStyle(root as HTMLElement, record.only);
     record.el.style.removeProperty('--et-fs');
     record.el.style.removeProperty('--et-lh');
     record.el.style.removeProperty('--et-ls');

@@ -54,7 +54,7 @@ CI：新增 `e2e` job，`needs: check`，下载 check job 上传的构建产物�
 16. 面板真实链路：把 popup.html 当普通标签页打开，`Page.addScriptToEvaluateOnNewDocument` 把 `chrome.tabs.query` 换成返回测试页，验证面板按钮 → 内容脚本的真实链路（不改扩展源码）。
 PR2 增补（2026-11-18 用户同意，开工时随 PR2 方案一起审查）：
 17. 整页动态重扫：编辑区（contenteditable、textarea 附近的富文本编辑器）里的文字始终不出现在翻译请求里（Codex 评审第 1 条，P1 修复的回归用例）。已在 P1 修复 PR（`fix/rescan-protected-areas`）中提前完成。
-18. 网站在翻译期间主动修改的行内样式，退出「仅看译文」后保留（Codex 第 2 条）。
+18. 网站在翻译期间主动修改的行内样式，退出「仅看译文」后保留（Codex 第 2 条）。已在样式精确恢复修复 PR（`fix/translation-only-style-restore`）中提前完成。
 19. 初扫期间插入的内容也被翻译（Codex 第 4 条，随 M3d PR-B 修复后启用）。
 20. 灵岛：连续改变视口宽度时小点始终贴着窗口边缘（#36 的回归）。
 21. 「仅看译文」下 Google 丢标记退回纯文本的段落，原文不再露出（与第 14 条合测）。
@@ -105,8 +105,8 @@ revert 整个 PR；不改扩展源码，不涉及数据。
 - 面板读不到测试页（没有 activeTab），所以 PR1 只测渲染；真实链路留给 PR2 第 16 条。
 
 ### 已知问题
-- 进入「仅看译文」再切回显示原文后，各块根元素会残留空的 `style=""`。纯双语模式还原则与翻译前完全一致。
-- 用 `it.fails` 严格用例记录。修复归入 Codex 评审第 2 条（样式精确恢复）的修复 PR，修好后把 `it.fails` 改为普通 `it`。
+- 已修复：进入「仅看译文」再切回显示原文后，各块根元素会残留空的 `style=""`。纯双语模式还原则与翻译前完全一致。
+- 原先用 `it.fails` 严格用例记录；已在 Codex 评审第 2 条（样式精确恢复）的修复 PR 中改为普通 `it`，方案与根因见 `docs/plans/translation-only-style-restore.md`。
 
 ### CI 首跑需确认
 - `setup-chrome` 装的必须是 Chrome for Testing（158.0.8127.36），品牌版 Chrome 137 起忽略 `--load-extension`。
