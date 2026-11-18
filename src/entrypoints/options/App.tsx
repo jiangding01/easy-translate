@@ -41,8 +41,8 @@ export function App() {
       <div className={styles.shell}>
         <nav aria-label={i18n.t('options.nav.label')} className={styles.nav}>
           <div className={styles.brand}>
-            <span aria-hidden="true" className={styles.brandDot} />
-            <span lang="en">Easy Translate</span>
+            <img alt="" className={styles.brandIcon} src="/icon/48.png" />
+            <span>{i18n.t('manifest.name')}</span>
           </div>
           <div className={styles.navList} style={{ '--index': index } as React.CSSProperties}>
             <span aria-hidden="true" className={styles.navThumb} />

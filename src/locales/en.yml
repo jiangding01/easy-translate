@@ -9,9 +9,11 @@ meta:
   locale: en
 
 manifest:
-  name: Easy Translate
-  description: Web page translator. TypeScript rewrite, development build.
-  actionTitle: Easy Translate
+  name: Islet Translate
+  # Chrome's short_name, where space is tight (12 characters at most).
+  shortName: Islet
+  description: "Bilingual web reading: translate pages, selections and words."
+  actionTitle: Islet Translate
   commands:
     translatePage: Translate this page / Show original
     translateSelection: Translate selected text
@@ -147,7 +149,7 @@ popup:
 
 # The settings page (src/entrypoints/options).
 options:
-  title: Easy Translate · Settings
+  title: Islet Translate · Settings
   nav:
     label: Settings sections
     general: General

@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="public/icon/128.png" width="96" alt="Easy Translate">
+<img src="public/icon/128.png" width="96" alt="Islet Translate">
 
-<h1>Easy Translate</h1>
+<h1>Islet Translate</h1>
 
 <p>Bilingual web reading for Chrome: translate whole pages, selections and single words, quietly.</p>
 
@@ -44,7 +44,7 @@
 
 ## ✨ Features
 
-Easy Translate is at version `0.1.0`. M0 (foundation), M1 (translation core), M2 (page translation and control bar) and M3a (selection translation and phonetics) are done, along with a localized interface.
+Islet Translate is at version `0.1.0`. M0 (foundation), M1 (translation core), M2 (page translation and control bar) and M3a (selection translation and phonetics) are done, along with a localized interface.
 
 | Feature | What it does | Preview |
 | --- | --- | --- |
@@ -62,7 +62,7 @@ Easy Translate is at version `0.1.0`. M0 (foundation), M1 (translation core), M2
 
 ## 🚀 Install
 
-Easy Translate is not in a web store yet. There are two ways to install it.
+Islet Translate is not in a web store yet. There are two ways to install it.
 
 **From a CI build**
 
@@ -328,8 +328,8 @@ Unit tests sit next to the source they cover and are named `*.test.ts`.
 | ✅ Done | M3a selection translation and phonetics |
 | ✅ Done | Interface languages (English, Simplified Chinese) |
 | ✅ Done | Bilingual README |
+| ✅ Done | Rename to Islet Translate (译屿) |
 | 🔨 Next | Traditional Chinese interface (zh_TW) |
-| 🔨 Next | Rename to 译屿 / Islet Translate |
 | 🔨 Next | Smoke end-to-end tests |
 | 🔨 Next | v0.2.0 as a GitHub Release |
 | Later | M3d dynamic pages and site rules |
@@ -371,7 +371,7 @@ Keys are stored only on your computer and are never exported or synced. To repor
 
 ## 📄 License
 
-Easy Translate is released under the [MIT License](LICENSE).
+Islet Translate is released under the [MIT License](LICENSE).
 
 It includes third-party resources, each under its own license. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The extension package also carries a `THIRD_PARTY_NOTICES.txt`.
 

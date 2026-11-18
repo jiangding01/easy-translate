@@ -1,4 +1,4 @@
-# Easy Translate 文档中心
+# 译屿（Islet Translate）文档中心
 
 > 2026-11-13 起，权威方案改为 [最终技术方案](reviews/2026-11-13-final-plan.md) 和 [UI/UX 设计规范](reviews/2026-11-13-ui-ux-design.md)。`design/` 下的文档降级为功能细节参考；两者冲突时，以权威方案和[交接文档](../HANDOFF.md)为准。
 

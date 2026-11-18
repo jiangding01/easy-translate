@@ -1,6 +1,6 @@
 # Third-party notices
 
-Easy Translate is licensed under the MIT License (see `LICENSE`). It includes the
+Islet Translate is licensed under the MIT License (see `LICENSE`). It includes the
 following third-party material. Each keeps its own license, reproduced or referenced
 below.
 

@@ -27,13 +27,11 @@
   font-weight: var(--et-fw-semibold);
   letter-spacing: -0.01em;
 }
-/* The brand mark is the same amber dot that grows into the island on pages. */
-.brandDot {
-  width: 10px;
-  height: 10px;
-  border-radius: var(--et-radius-full);
-  background: var(--et-color-accent);
-  box-shadow: 0 0 0 4px color-mix(in oklch, var(--et-color-accent) 22%, transparent);
+/* The extension icon, drawn at 48px on its own pixel grid and shown at 24px (2x). */
+.brandIcon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
 }
 .navList {
   position: relative;
