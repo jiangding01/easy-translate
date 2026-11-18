@@ -104,8 +104,8 @@ assert.deepEqual(
 // Each file registers its factory under its own key. Keep in sync with
 // src/content/runtime-contract.ts.
 const RUNTIME_KEYS = {
-  'page-runtime.js': 'easy-translate.page-runtime',
-  'selection-runtime.js': 'easy-translate.selection-runtime',
+  'page-runtime.js': 'islet-translate.page-runtime',
+  'selection-runtime.js': 'islet-translate.selection-runtime',
 };
 // The one allowed read of the extension ID: wxt/browser picking `browser` or `chrome`.
 // If WXT rewrites this shim the check fails loudly; inspect the new form before exempting it.

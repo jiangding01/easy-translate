@@ -1,4 +1,4 @@
-name: Easy Translate CodeQL config
+name: Islet Translate CodeQL config
 
 # Unit tests use fake hosts and loose matching on purpose (e.g. `includes('granted.example.com')`);
 # they never ship, so security queries on them only produce noise.

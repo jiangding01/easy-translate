@@ -204,7 +204,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
     const recent = (reinserts.get(text) ?? []).filter((time) => at - time < LOOP_WINDOW_MS);
     if (recent.length >= LOOP_LIMIT) {
       abandoned.add(text);
-      console.warn('[easy-translate] a page keeps removing a translation; leaving it alone');
+      console.warn('[islet-translate] a page keeps removing a translation; leaving it alone');
       return false;
     }
     recent.push(at);

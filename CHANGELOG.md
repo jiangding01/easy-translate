@@ -25,8 +25,8 @@
 - 划词：首次读取设置期间若修改了设置（如关掉划词小点），不再被读到的旧值覆盖；读取失败后会重新读取。
 
 ### 变更
-- 仓库改名为 [jiangding01/islet-translate](https://github.com/jiangding01/islet-translate)（旧地址由 GitHub 自动跳转）：`package.json` 包名改为 `islet-translate`，仓库、主页、issues、安全公告与版本对比链接同步更新；CI 上传的构建产物改名为 `islet-translate-chrome-<提交号>`。
-- 改名为「译屿 / Islet Translate」：扩展名称、工具栏按钮提示、设置页标题跟随界面语言（中文「译屿」、英文「Islet Translate」），新增短名称（Islet / 译屿），扩展描述改为「双语网页阅读：整页、划词、单词翻译。」。图标微调为「暗岛微光 · 倒影」：琥珀胶囊（页面上的灵岛）下方多了一到两道淡琥珀倒影；新增无边距的 SVG 主图 `docs/assets/icon/icon.svg`。设置页左上角的琥珀圆点换成扩展图标。两份 README、第三方声明与 README 截图同步更新。仓库名、`package.json` 包名、翻译缓存的数据库名等内部标识不变，已有缓存不受影响。
+- 仓库改名为 [jiangding01/islet-translate](https://github.com/jiangding01/islet-translate)（旧地址由 GitHub 自动跳转）：`package.json` 包名改为 `islet-translate`，仓库、主页、issues、安全公告与版本对比链接同步更新；CI 上传的构建产物改名为 `islet-translate-chrome-<提交号>`。内部标识也改为新名字：翻译缓存的 IndexedDB 库改名为 `islet-translate`，升级后原有缓存不再使用（已翻过的段落会重新请求一次翻译，旧库 `easy-translate` 不会自动删除）；按需模块的全局键与控制台日志前缀改为 `islet-translate`。
+- 改名为「译屿 / Islet Translate」：扩展名称、工具栏按钮提示、设置页标题跟随界面语言（中文「译屿」、英文「Islet Translate」），新增短名称（Islet / 译屿），扩展描述改为「双语网页阅读：整页、划词、单词翻译。」。图标微调为「暗岛微光 · 倒影」：琥珀胶囊（页面上的灵岛）下方多了一到两道淡琥珀倒影；新增无边距的 SVG 主图 `docs/assets/icon/icon.svg`。设置页左上角的琥珀圆点换成扩展图标。两份 README、第三方声明与 README 截图同步更新。内部标识随后也一并改名（见下一条）。
 - 文档：新增[页面 DOM 约定](docs/dom-contract.md)，把 `et-tr`、`lang`、`data-et-inline`、`data-et-only`、`data-et-state` 定为对外约定，供网页导出等工具读取译文（如把双语页面导出为 Markdown），并用测试锁定。
 - 界面多语言（i18n）第 1 批：基础设施。界面语言跟随浏览器（Chrome 自动选择），默认英文，浏览器为中文时显示中文。本批只本地化了扩展名称、描述、工具栏按钮提示和两条快捷键说明（`chrome://extensions/shortcuts` 中可见），其余界面文案在后续批次迁移，迁移完成前不发版。文案写在 `src/locales/*.yml`，由 `@wxt-dev/i18n` 生成 `_locales`；新增 `npm run check:i18n`（语言文件一致性、禁止新增中文硬编码），check-build 校验 `_locales` 与 manifest 文案引用；更换浏览器语言并重启后，右键菜单也会重建。方案见 `docs/plans/i18n.md`。
 - 界面多语言（i18n）第 5 批：双语 README。`README.md` 改为英文（GitHub 默认显示），新增简体中文 `README.zh-CN.md`，两份顶部互相链接；内容重写为设计理念、功能表（附截图）、安装、快捷键、引擎、开发（命令、体积预算、CI、本地验收）、tree 形式的项目结构、路线图和文档索引，界面名词与扩展的英文文案一致。截图按读者的方向拍：英文 README 是中文文章译成英文、英文界面，中文 README 是英文文章译成中文、中文界面，均为 2 倍图。新增手动截图工具 `scripts/screenshots/`（`shoot.mjs` 与中英两篇自写演示文章），改名、换图标或界面改动后可一条命令重拍。

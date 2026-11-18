@@ -142,7 +142,7 @@
 
 ### 4.2 按需模块与引导层
 
-1. **第二个按需模块** `selection-runtime.js`：WXT unlisted script，WAR 加动态 URL，单文件零 import，模块求值时只注册工厂 `globalThis[Symbol.for('easy-translate.selection-runtime')]`。PR1 的约束全部适用。
+1. **第二个按需模块** `selection-runtime.js`：WXT unlisted script，WAR 加动态 URL，单文件零 import，模块求值时只注册工厂 `globalThis[Symbol.for('islet-translate.selection-runtime')]`。PR1 的约束全部适用。
 2. **加载器通用化**：`loadRuntime({ path, key, getURL, importModule })`，两个模块共用；引导层为每个模块各缓存一个 Promise，失败时清掉。
 3. **引导层新增的常驻部分**：
    - 选区观察：`pointerup` 后 100ms、`keyup` 后 50ms，或 `selectionchange` 稳定后，检查一次。鼠标按住期间不出小点；选区超过 2000 字时，直接放弃，不做多余的 `toString()`。
