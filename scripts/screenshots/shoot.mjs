@@ -136,8 +136,11 @@ async function connect(url) {
   const waiting = new Map();
   ws.onmessage = (event) => {
     const message = JSON.parse(event.data);
-    waiting.get(message.id)?.(message);
+    // Replies carry the numeric id we sent; events have none.
+    if (typeof message.id !== 'number') return;
+    const done = waiting.get(message.id);
     waiting.delete(message.id);
+    if (typeof done === 'function') done(message);
   };
   return {
     send: (method, params = {}) =>
