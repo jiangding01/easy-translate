@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { type Harness, launch, trackTests, type UiLocale, waitFor } from './harness';
-import { prepare } from './support';
+import { type Ok, type PageState, prepare } from './support';
 
 // P0-7 (settings page) and P0-8 (action panel): rendered in the real extension, in the
 // interface language the build was forced to.
@@ -102,19 +102,54 @@ describe('action panel', () => {
       await harness.openPage('e2e-article.html');
       await harness.sw('chrome.action.openPopup()');
       const popup = await harness.waitForExtPage('popup.html');
-      // Rendered: the React root has content, in the interface language.
-      await waitFor(
-        () => popup.evaluate<boolean>(`document.querySelector('#root')?.textContent.length > 0`),
-        {
-          message: 'the panel to render',
-        },
-      );
       // The panel has no activeTab here (the popup is opened by the worker, not a click), so
       // it reports a page it cannot read; that state and its Settings button are stable.
-      const body = await popup.evaluate<string>('document.body.innerText');
-      expect(body).toContain(copy.blocked);
+      // Wait for that state itself: on the way the panel shows text too ("loading", then
+      // "reading the page"), so "the root has content" can be read too early.
+      const body = await waitFor(
+        async () => {
+          const text = await popup.evaluate<string>('document.body.innerText');
+          if (!text.includes(copy.blocked)) throw new Error(`panel text ${JSON.stringify(text)}`);
+          return text;
+        },
+        { message: 'the panel to report a page it cannot read' },
+      );
       expect(body).toContain(copy.panel);
       harness.assertNoErrors();
     },
   );
+
+  it('shows the page it was opened for and translates it from the button', async () => {
+    const harness = await start('en');
+    await harness.openPage('e2e-article.html');
+    const { origin, host } = await harness.evaluate<{ origin: string; host: string }>(
+      '({ origin: location.origin, host: location.host })',
+    );
+    // As a plain tab the panel has no "active tab" of its own: both extension API objects
+    // answer tabs.query with the test page (wxt picks whichever one exists).
+    const tab = { id: harness.tabId, url: `${origin}/e2e-article.html`, active: true, windowId: 1 };
+    const preload = `for (const api of [globalThis.browser, globalThis.chrome]) {
+      if (api?.tabs) api.tabs.query = async () => [${JSON.stringify(tab)}];
+    }`;
+    const popup = await harness.extPage('popup.html', { preload });
+    try {
+      const button = `[...document.querySelectorAll('button')].find((b) => b.textContent.includes('Translate this page'))`;
+      await waitFor(
+        async () =>
+          (await popup.evaluate<string>('document.body.innerText')).includes(host) &&
+          (await popup.evaluate<boolean>(`!!(${button})`)),
+        { message: 'the panel to show the test page and its translate button' },
+      );
+      await popup.evaluate(`(${button}).click()`);
+      await waitFor(
+        async () => (await harness.tell<Ok<PageState>>('page.getState')).data.translated >= 8,
+        { message: 'the test page to be translated from the panel' },
+      );
+      expect(harness.google.count).toBeGreaterThan(0);
+      harness.assertNoErrors();
+    } finally {
+      // The panel closes itself once translation starts.
+      await popup.close();
+    }
+  });
 });

@@ -178,7 +178,7 @@ Open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**, an
 - Verification of the registry signatures of installed packages.
 - CodeQL with the `security-extended` query suite (`.github/workflows/codeql.yml`), on pull requests, pushes to `main` and weekly.
 - Upload of the verified build as an artifact, kept for 7 days.
-- An `e2e` job that runs the smoke end-to-end tests (`npm run test:e2e`) against that build in Chrome for Testing. It does not block merging yet; failures upload `test-results/e2e/`.
+- An `e2e` job that runs the smoke end-to-end tests (`npm run test:e2e`) against that build in Chrome for Testing. It covers page translation, display modes, retries, caching, selection, the settings page, the action panel, the 403 engine error, restarts and layout. A test that only passed on retry leaves a warning annotation on the run. Failed or retried tests upload `test-results/e2e/`. It does not block merging yet; it will be made required once it stays green without retries.
 
 Dependabot (`.github/dependabot.yml`) checks npm and GitHub Actions weekly, and groups minor and patch updates into one pull request per group.
 
@@ -337,7 +337,7 @@ Unit tests sit next to the source they cover and are named `*.test.ts`.
 | ✅ Done | Interface languages (English, Simplified Chinese, Traditional Chinese) |
 | ✅ Done | Bilingual README |
 | ✅ Done | Rename to Islet Translate (译屿) |
-| 🔨 In progress | Smoke end-to-end tests (PR 1 done, PR 2 to do) |
+| 🔨 In progress | Smoke end-to-end tests (PR 1 merged, PR 2 awaiting merge) |
 | 🔨 Next | v0.2.0 as a GitHub Release |
 | Later | M3d dynamic pages and site rules |
 | Later | M3b paragraph-level interaction |

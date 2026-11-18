@@ -12,7 +12,7 @@
 
 ## 选型：零依赖 CDP 驱动 + 现有 Vitest
 - 理由：SW 拦截已实测；不新增依赖、不管理浏览器下载；仓库检查脚本一贯零依赖；Vitest 已有断言、重试、报告。
-- **退出条件**：harness 超过约 400 行，或偶发失败压不住，就改用 `playwright-core` 作为库（Vitest 不变）。
+- **退出条件**：出现压不住的偶发失败（含重试后才通过），就改用 `playwright-core` 作为库（Vitest 不变）。
   - 实施结果（2026-11-18）：harness 621 行，超出部分主要是 SW 重启处理（重启后同一 session 会再次停在等待调试器、需在新执行上下文上重开拦截并恢复运行）、网络错误过滤和接口注释；复杂度未失控，`--retry=0` 连跑稳定，主会话判断暂不触发退出条件。
 - `vitest.e2e.config.ts`：node 环境，`tests/e2e/**/*.e2e.test.ts`，文件串行、每个文件一个浏览器，`retry: 1`，被重试过的用例在报告里显式列出；用例与钩子超时 60 秒，高于启动浏览器自身约 35 秒的等待上限，避免超时后仍在启动的浏览器无人关闭；单测 `npm test` 的 include 不变。
 - `npm run test:e2e`，不进 `npm run check`。
@@ -44,6 +44,7 @@ CI：新增 `e2e` job，`needs: check`，下载 check job 上传的构建产物�
 文档：`docs/plans/e2e-smoke.md`（本方案与实施记录）、README 双语（命令表、CI 说明、本地验收引用 e2e）、CHANGELOG、HANDOFF。
 
 ## PR2：P1 + 面板桩 + 设为阻断
+实施记录（2026-11-18，分支 `feat/e2e-smoke-pr2`，待合并）：修掉面板用例的偶发失败（等待条件弱于断言，等到 blocked 文案即可）；新增 10 条用例（第 9 到 14、16、21、22、23 条），e2e 现为 10 个文件、33 通过、2 跳过，约 37 秒；CI 能标出重试过的用例（`::warning::` 注解、首次失败的错误、重试产物另存）。harness 680 行，不再以行数为退出条件。第 15 条另开小 PR，第 19 条随 M3d PR-B，第 20 条单测已覆盖、不做。「设为必过」待 CI 上积累未经重试的全绿记录后由用户操作。细节见 [`docs/plans/e2e-smoke-pr2.md`](e2e-smoke-pr2.md)。
 9. 「仅看译文」布局：沿用 `tests/fixtures/translation-only-layout.html` 各用例，切换前后译文根元素宽度与左边界不塌陷、不偏移，切回双语后原文布局复原（`getBoundingClientRect`，容差 0.5px）。
 10. 动态内容：翻译后插入新段落，新段落被翻译。
 11. 总是翻译此站：从 options 页发 `site.setAlways` 后重新加载页面，自动开始翻译。
@@ -112,6 +113,6 @@ revert 整个 PR；不改扩展源码，不涉及数据。
 ### CI 首跑需确认
 - `setup-chrome` 装的必须是 Chrome for Testing（158.0.8127.36），品牌版 Chrome 137 起忽略 `--load-extension`。
 - 首跑还要确认 Linux 下 `--no-sandbox` 与两条 `--lang` 回退用例能跑通。两条 `--lang` 用例同时设置了 `LANGUAGE` 环境变量（Linux 版 Chrome 可能按环境变量而不是 `--lang` 取界面语言），本机 macOS 跳过这两条，未实测。
-- 连续约 10 次全绿后，在 PR2 把 `e2e` job 设为必过。
+- 设为必过的条件：偶发失败修复后，e2e 连续约 10 次未经重试全绿（以 CI 的 `::warning::` 注解为准），由用户在 `main` 规则集的 required status checks 中加入 `e2e`。
 
 相关评审核实见 [`docs/reviews/2026-11-18-codex-review-verification.md`](../reviews/2026-11-18-codex-review-verification.md)。

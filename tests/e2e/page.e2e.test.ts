@@ -91,6 +91,15 @@ describe('page translation', () => {
     await waitFor(() => h.google.texts.some((text) => text.includes('Marmot control paragraph')), {
       message: 'the control paragraph to be sent',
     });
+    // The control was not just sent: it is rendered with its translation.
+    await waitFor(
+      () =>
+        h.evaluate<boolean>(`[...document.querySelectorAll('p')]
+          .find((p) => p.textContent.includes('Marmot control'))
+          ?.querySelector(':scope > et-tr')
+          ?.textContent.includes('【MOCK】') ?? false`),
+      { message: 'the control paragraph to be translated' },
+    );
     expect(h.google.texts.filter((text) => /Zephyr|Quokka/.test(text))).toEqual([]);
     h.assertNoErrors();
   });

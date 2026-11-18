@@ -18,6 +18,8 @@ export interface PageState {
   mode: string;
   translated: number;
   failed: number;
+  /** Set while the session is paused on an engine-level error. */
+  engineError?: { code: string };
 }
 
 /** What a page message resolves to when it worked. */
