@@ -131,12 +131,14 @@ export const OWN_ATTR = 'data-et';
 /** Nodes other translators insert. */
 const FOREIGN_CLASSES = ['immersive-translate-target-wrapper', 'fluent-read-bilingual-content'];
 
-/** Skipped together with its whole subtree (cheap attribute checks only, no layout). */
-export function isSkipped(el: Element): boolean {
+/**
+ * Content that is never ours to translate or touch, whatever the layout: every skip
+ * rule except the temporary-hiding ones (`hidden`, `inert`, `aria-hidden`), which only
+ * say the page is not showing something for now (see `isSkipped`).
+ */
+export function isProtected(el: Element): boolean {
   if (SKIP_TAGS.has(el.tagName) || el.tagName === OWN_TAG || el.tagName === 'NAV') return true;
   if (el.hasAttribute(OWN_ATTR)) return true;
-  if (el.hasAttribute('hidden') || el.hasAttribute('inert')) return true;
-  if (el.getAttribute('aria-hidden') === 'true') return true;
   const translate = el.getAttribute('translate');
   if (translate === 'no' || translate === 'false') return true;
   if (el.classList.contains('notranslate')) return true;
@@ -146,6 +148,26 @@ export function isSkipped(el: Element): boolean {
   const role = el.getAttribute('role');
   if (role && SKIP_ROLES.has(role)) return true;
   return false;
+}
+
+/** Skipped together with its whole subtree (cheap attribute checks only, no layout). */
+export function isSkipped(el: Element): boolean {
+  if (isProtected(el)) return true;
+  if (el.hasAttribute('hidden') || el.hasAttribute('inert')) return true;
+  return el.getAttribute('aria-hidden') === 'true';
+}
+
+/**
+ * The first protected element from `el` itself up to, but not including, `stop`
+ * (normally the body), or null. Temporary hiding does not count.
+ */
+export function protectedAncestor(el: Element, stop: Element): Element | null {
+  let node: Element | null = el;
+  while (node && node !== stop) {
+    if (isProtected(node)) return node;
+    node = node.parentElement;
+  }
+  return null;
 }
 
 export interface LayoutStyle {
