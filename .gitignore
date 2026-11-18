@@ -2,6 +2,7 @@
 node_modules/
 /.wxt/
 /.output/
+test-results/
 *.tsbuildinfo
 
 # Local reverse-engineering evidence

@@ -67,3 +67,50 @@ jobs:
           path: .output/chrome-mv3
           if-no-files-found: error
           retention-days: 7
+
+  # Smoke e2e: the built extension in a real Chrome for Testing (docs/plans/e2e-smoke.md).
+  # First release is observation only: the job reports red or green as usual, but it is not a
+  # required check yet. Make it required after about 10 consecutive green runs.
+  e2e:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # The build the check job verified, so the tests run against exactly that output.
+      - name: Download the built extension
+        uses: actions/download-artifact@v8
+        with:
+          name: islet-translate-chrome-${{ github.sha }}
+          path: .output/chrome-mv3
+      # Pinned to the v2.2.0 commit. An exact version makes the action install Chrome for Testing
+      # (branded Chrome 137+ ignores --load-extension). Upgrade the version by hand.
+      - name: Install Chrome for Testing
+        id: chrome
+        uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
+        with:
+          chrome-version: 158.0.8127.36
+          # Installs the system libraries Chrome needs on the runner image.
+          install-dependencies: true
+      - name: Run smoke e2e
+        run: npm run test:e2e
+        env:
+          CI: true
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Upload e2e failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-results-${{ github.sha }}
+          path: test-results/e2e/
+          if-no-files-found: ignore
+          retention-days: 7

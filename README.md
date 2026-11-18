@@ -143,6 +143,7 @@ Open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**, an
 | `npm run format` | Biome format with safe fixes applied |
 | `npm test` | Vitest unit tests |
 | `npm run test:watch` | Vitest in watch mode |
+| `npm run test:e2e` | Smoke end-to-end tests in a real Chrome for Testing. Run `npm run build` first. Chrome is found via the `CHROME` environment variable, then the newest build in the Playwright cache (see `scripts/lib/find-chrome.mjs`). Not part of `npm run check` |
 | `npm run check:build` | Checks the manifest, the entry files it references, and `_locales` against the `__MSG_*__` strings in the manifest |
 | `npm run check:size` | Gzip size budget per entry (table below) |
 | `npm run check:contrast` | Contrast of the color tokens: text at least 4.5:1, controls and focus rings at least 3:1, in light and dark |
@@ -177,6 +178,7 @@ Open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**, an
 - Verification of the registry signatures of installed packages.
 - CodeQL with the `security-extended` query suite (`.github/workflows/codeql.yml`), on pull requests, pushes to `main` and weekly.
 - Upload of the verified build as an artifact, kept for 7 days.
+- An `e2e` job that runs the smoke end-to-end tests (`npm run test:e2e`) against that build in Chrome for Testing. It does not block merging yet; failures upload `test-results/e2e/`.
 
 Dependabot (`.github/dependabot.yml`) checks npm and GitHub Actions weekly, and groups minor and patch updates into one pull request per group.
 
@@ -184,6 +186,8 @@ Dependabot (`.github/dependabot.yml`) checks npm and GitHub Actions weekly, and 
 
 <details>
 <summary>Local acceptance checklist</summary>
+
+Run `npm run test:e2e` first. The items it covers automatically are listed in [`docs/plans/e2e-smoke.md`](docs/plans/e2e-smoke.md).
 
 1. Load the extension and open **Translation services** in Settings. The default engine is Google. Click **Test connection** and check that a translation and its latency appear.
 2. Enter your own key for OpenAI, DeepSeek or Gemini (Gemini also needs a model). **Test connection** should succeed, and a wrong key should report an invalid key.
@@ -296,14 +300,18 @@ It finds the newest Playwright Chrome for Testing, or takes a path from `CHROME`
 │   │   └── translate/           # Translation core (background only): providers, scheduler, cache, secrets
 │   ├── locales/                 # en.yml (default), zh_CN.yml and zh_TW.yml, turned into _locales and types
 │   └── styles/                  # Design tokens, base styles, theme switching
+├── scripts/
+│   └── lib/                     # Shared script helpers, such as find-chrome.mjs
 ├── tests/
-│   └── fixtures/                # Pages for manual checks, such as translation-only-layout.html
+│   ├── e2e/                     # Smoke end-to-end tests (real Chrome, mocked translation)
+│   └── fixtures/                # Test pages: translation-only-layout.html (manual), e2e-article.html (e2e)
 ├── .npmrc                       # Pins the official npm registry
 ├── .nvmrc                       # Node.js version (24)
 ├── biome.json                   # Biome config
 ├── package.json                 # Scripts and dependencies
 ├── tsconfig.json                # TypeScript config (extends the one WXT generates)
 ├── vitest.config.ts             # Vitest config
+├── vitest.e2e.config.ts         # Vitest config for the end-to-end tests
 ├── vitest.setup.ts              # Test setup: fake browser and locale copy for getMessage
 ├── wxt.config.ts                # WXT and Manifest V3 config
 ├── CHANGELOG.md                 # Change log
@@ -329,7 +337,7 @@ Unit tests sit next to the source they cover and are named `*.test.ts`.
 | ✅ Done | Interface languages (English, Simplified Chinese, Traditional Chinese) |
 | ✅ Done | Bilingual README |
 | ✅ Done | Rename to Islet Translate (译屿) |
-| 🔨 Next | Smoke end-to-end tests |
+| 🔨 In progress | Smoke end-to-end tests (PR 1 done, PR 2 to do) |
 | 🔨 Next | v0.2.0 as a GitHub Release |
 | Later | M3d dynamic pages and site rules |
 | Later | M3b paragraph-level interaction |

@@ -31,10 +31,11 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createServer } from 'node:http';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { findChrome } from '../lib/find-chrome.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
@@ -67,29 +68,12 @@ function fail(message) {
   throw Object.assign(new Error(message), { expected: true });
 }
 
-function findChrome() {
-  if (process.env.CHROME) {
-    if (!existsSync(process.env.CHROME)) fail(`no browser at CHROME=${process.env.CHROME}`);
-    return process.env.CHROME;
+function chromePath() {
+  try {
+    return findChrome();
+  } catch (error) {
+    fail(error.message);
   }
-  const cache = join(homedir(), 'Library/Caches/ms-playwright');
-  const builds = existsSync(cache)
-    ? readdirSync(cache)
-        .filter((d) => /^chromium-\d+$/.test(d))
-        .sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]))
-    : [];
-  for (const build of builds) {
-    for (const arch of ['chrome-mac-arm64', 'chrome-mac']) {
-      const app = join(
-        cache,
-        build,
-        arch,
-        'Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
-      );
-      if (existsSync(app)) return app;
-    }
-  }
-  fail('no Chrome for Testing found; set CHROME=/path/to/chrome');
 }
 
 /** A copy of the build that only knows the --ui locale. */
@@ -167,7 +151,7 @@ async function evaluate(target, expression) {
 async function main() {
   for (const name of shots) if (!SHOTS.has(name)) fail(`unknown shot "${name}"`);
   if (!existsSync(articleFile)) fail(`no article at ${articleFile}`);
-  const chromePath = findChrome();
+  const browser = chromePath();
   mkdirSync(outDir, { recursive: true });
   const extDir = prepareExtension();
   const server = await serveArticles();
@@ -175,7 +159,7 @@ async function main() {
   const port = 9300 + Math.floor(Math.random() * 500);
   const profileDir = mkdtempSync(join(tmpdir(), 'et-shots-profile-'));
   const chrome = spawn(
-    chromePath,
+    browser,
     [
       `--user-data-dir=${profileDir}`,
       `--remote-debugging-port=${port}`,
