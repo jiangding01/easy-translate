@@ -28,7 +28,7 @@
 - **先红后绿留证**：先只加 harness 与用例，本地跑一次确认 A、B、C 全红并把失败日志摘要写进实施记录，再加修复转绿；变异验证「去掉 `lookup` 的捕获 → A、B、C 全红」。
 
 ### 4. 失联即 halt（用户 2026-11-18 选择一并做）
-修复报错后，静态页重载后灵岛仍会一直留着：标签为空、引擎列表取不到、重试无效。在按需加载的 page-runtime（`src/entrypoints/page-runtime.ts`）里，会话通知或灵岛操作时检查 `browser.runtime?.id === undefined`，发现失联就 halt，灵岛随之卸载（只能放在 page-runtime，常驻 content 只剩 0.01 KB）。用户可见变化：失联后点灵岛，灵岛直接消失，页面上已有的译文保留。C 用例的断言为「点击后灵岛消失、已有译文保留、无错误」。
+修复报错后，静态页重载后灵岛仍会一直留着：标签为空、引擎列表取不到、重试无效。在按需加载的 page-runtime（`src/entrypoints/page-runtime.ts`）里，会话通知或灵岛操作时调用 `browser.i18n.getUILanguage()`（失联后同步抛错或 `browser.i18n` 为 undefined，落入 catch 即失联），发现失联就 halt，灵岛随之卸载（只能放在 page-runtime，常驻 content 只剩 0.01 KB）。用户可见变化：失联后点灵岛，灵岛直接消失，页面上已有的译文保留。C 用例的断言为「点击后灵岛消失、已有译文保留、无错误」。
 
 ## 不做
 - 失联后给旧页面任何提示（例如「扩展已更新，请刷新页面」）：需要新增文案与界面，另议。
@@ -51,7 +51,8 @@ revert 本 PR；只改内容脚本取文案的容错、page-runtime 的失联检
 
 ## 实施记录（2026-11-18）
 - **产品修复**：`src/content/i18n.ts` 的 `lookup()` 把取 `browser.i18n.getMessage` 与调用都放进 try，失联时返回空串（失联时 `browser.i18n` 可能整个是 `undefined`）。灵岛、加载点、划词卡片取文案都经它，三处未处理的「Extension context invalidated」一并修复。
-- **失联即 halt**（用户选择一并做）：`session.ts` 的 `SessionDeps` 新增可选 `alive()`，`notify()` 开头若失联则 halt，灵岛随之卸载，已有译文保留；`page-runtime.ts` 传入 `alive: () => browser.runtime?.id !== undefined`。常驻 content 不变。
+- **失联即 halt**（用户选择一并做）：`session.ts` 的 `SessionDeps` 新增可选 `alive()`，`notify()` 开头若失联则 halt，灵岛随之卸载，已有译文保留；`page-runtime.ts` 传入 `alive`（try 调用 `browser.i18n.getUILanguage()`，抛错即返回 false；不读 `runtime.id`，因按需模块禁止读扩展 ID）。常驻 content 不变。
+- **踩坑**：最初用 `runtime.id` 判断，被 `check:build` 的防探测规则拦下（CI 失败），改为调用 `i18n.getUILanguage` 判断；本地漏跑 `check:build`，之后提交前一律跑完整的 `npm run check`。
 - **方案外两处**：`halt()` 里 `stopWatchingConfig` 的退订需要 `storage.onChanged`，失联时会抛错，已包 try；`begin()` 在 register 后 notify 并检查 epoch，扫描期间失联立即 halt，不再建监听。
 - **harness**：新增 `reloadExtension()`（约 37 行，`harness.ts` 现 717 行）。首次打开 `chrome://extensions`，用 `chrome.developerPrivate.updateProfileConfiguration` 开开发者模式（不开则重载后扩展被禁用）；在 SW 里 `setTimeout` 后 `chrome.runtime.reload()`，等旧 session 移除、新 SW 挂上并 arm。约定：重载前关扩展页，重载后不对旧页面 tell。
 - **新用例**：`tests/e2e/reload.e2e.test.ts` 4 条，每条开头清缓存。A 翻译进行中重载（加载点与灵岛消失，原文完整）；B 翻译完成后页面变动；C 重载后点灵岛（灵岛消失，译文保留）；收尾：重载后新页面能翻译。
