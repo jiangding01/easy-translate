@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
+import { i18n } from '#i18n';
 import type { Engine, PageMode } from '@/lib/config/types';
 import { type AppError, appError, fail, type Result } from '@/lib/errors';
 import { call } from '@/lib/messaging/handle';
 import { type PageState, sendMessage } from '@/lib/messaging/protocol';
 import { readSiteMemory, SITE_MEMORY_KEY, siteEntry } from '@/lib/site-memory';
+import { uiLocale } from '@/lib/ui-locale';
 
 // The panel's view of the page-translation session in the active tab, plus the
-// two things around it: the shortcut and "总是翻译此站".
+// two things around it: the shortcut and "always translate this site".
 
 const POLL_MS = 500;
 
@@ -15,16 +17,21 @@ const POLL_MS = 500;
 export function pausedReason(error: AppError): string {
   switch (error.code) {
     case 'provider/unauthorized':
-      return '密钥无效';
+      return i18n.t('popup.pausedReason.unauthorized');
     case 'provider/quota-exceeded':
-      return '额度已用完';
+      return i18n.t('popup.pausedReason.quotaExceeded');
     case 'provider/local-origin-rejected':
-      return '本地服务拒绝了请求';
+      return i18n.t('popup.pausedReason.localRejected');
     case 'config/permission-missing':
-      return '还没有授权访问接口';
+      return i18n.t('popup.pausedReason.permissionMissing');
     default:
-      return '设置不完整';
+      return i18n.t('popup.pausedReason.incomplete');
   }
+}
+
+/** "N paragraphs not translated", the count formatted for the UI language. */
+export function failedText(count: number): string {
+  return i18n.t('popup.failedCount', count, [count.toLocaleString(uiLocale())]);
 }
 
 export interface PageSessionControls {

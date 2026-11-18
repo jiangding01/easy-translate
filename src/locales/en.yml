@@ -56,6 +56,9 @@ errors:
   rateLimit:
     tooManyRequests: The service is rate limiting requests. Wait a moment and try again.
     portBusy: Too many translations are running on this page. Wait a moment and try again.
+  action:
+    panelReadFailed: Couldn't load settings. Reopen the panel.
+    openSettingsFailed: Couldn't open Settings. Try again.
 
 # Engine names and readiness (src/lib/engine-view.ts, src/lib/translate/engine-options.ts).
 engine:
@@ -81,3 +84,57 @@ engine:
     notConfigured: Not set up
     noModel: No model
     unsaved: Not saved
+
+# Words the panel and the settings page share, with the same meaning in both.
+common:
+  autoDetect: Auto-detect
+  modeBilingual: Bilingual
+  modeTranslation: Translation only
+
+# The toolbar panel (src/entrypoints/popup).
+popup:
+  loading: Loading…
+  browserPage: Browser page
+  # $1: the page language's own name (never translated).
+  detected: "Detected: $1"
+  noLanguage: No language declared
+  translateTo: Translate to
+  # $1: the page language's own name.
+  nativeTitle: This page is already in $1
+  nativeHint: No translation needed.
+  reloadTitle: Reload this page
+  reloadHint: Pages opened before the extension was installed or updated need a reload before they can be translated.
+  blockedTitle: This page can't be translated
+  blockedHint: Browsers don't let extensions read their own pages or the Web Store. Try a regular web page.
+  readingPage: Reading the page…
+  alwaysSite: Always translate this site
+  # $1: the site's host name.
+  alwaysOn: Translates automatically on $1
+  alwaysOff: Translates only when you ask
+  settings: Settings
+  goSettings: Open Settings
+  # $1: the Google engine's name (engine.googleName).
+  useGoogleOnce: Use $1 this time
+  translatePage: Translate this page
+  noShortcut: No shortcut yet ·
+  setShortcut: Set a shortcut ↗
+  # $1: the default engine's name, $2: why it cannot translate yet (engine.notReady.*).
+  engineNotReady: "$1: $2"
+  # $1: the engine's name, $2: why it paused (popup.pausedReason.*).
+  pausedNotice: "$1: $2. Translation paused."
+  pausedReason:
+    unauthorized: invalid API key
+    quotaExceeded: quota used up
+    localRejected: the local service refused the request
+    permissionMissing: access to the API URL not granted
+    incomplete: setup incomplete
+  retry: Retry
+  showOriginal: Show original
+  stopShowOriginal: Stop and show original
+  progress: Translating what's on screen; more as you scroll
+  # $1: the number of paragraphs not translated.
+  failedCount:
+    1: $1 paragraph not translated
+    n: $1 paragraphs not translated
+  displayMode: Display mode
+  defaultEngine: Default engine

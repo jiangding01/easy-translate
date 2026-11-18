@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
+import { i18n } from '#i18n';
 import { ProviderIcon } from '@/components/ProviderIcon';
 import { Select, type SelectOption } from '@/components/Select';
 import { engineFields, hasEditableBaseURL } from '@/lib/config/engine-fields';
 import type { ConfigV1, Engine, PageMode } from '@/lib/config/types';
 import { useConfig } from '@/lib/config/use-config';
 import {
+  builtinName,
   customShort,
   type EngineReadiness,
   engineEntries,
@@ -26,7 +28,13 @@ import {
 import { providerIconFor } from '@/lib/provider-icons';
 import { useTheme } from '@/styles/theme';
 import { type ActivePage, inspectActivePage } from './inspect-page';
-import { pausedReason, usePageSession, useShortcut, useSiteAlways } from './page-session';
+import {
+  failedText,
+  pausedReason,
+  usePageSession,
+  useShortcut,
+  useSiteAlways,
+} from './page-session';
 import { panelState } from './panel-state';
 import styles from './popup.module.css';
 
@@ -67,8 +75,8 @@ export function App() {
       <main className={styles.panel}>
         <p className={styles.quiet} role="status">
           {state.status === 'loading'
-            ? '正在加载…'
-            : describeError(state.error, '读取设置失败，请重新打开面板。')}
+            ? i18n.t('popup.loading')
+            : describeError(state.error, i18n.t('errors.action.panelReadFailed'))}
         </p>
       </main>
     );
@@ -80,11 +88,15 @@ export function App() {
 
   async function save(change: Parameters<typeof patch>[0][number]) {
     const result = await patch([change]);
-    setError(result.ok ? undefined : describeError(result.error, '保存失败，请重试。'));
+    setError(
+      result.ok ? undefined : describeError(result.error, i18n.t('errors.config.writeFailed')),
+    );
   }
 
   const openSettings = () => {
-    void browser.runtime.openOptionsPage().catch(() => setError('无法打开设置页，请重试。'));
+    void browser.runtime
+      .openOptionsPage()
+      .catch(() => setError(i18n.t('errors.action.openSettingsFailed')));
   };
 
   const report = (result: { ok: boolean; error?: Parameters<typeof describeError>[0] }) => {
@@ -102,12 +114,16 @@ export function App() {
     <main className={styles.panel}>
       <div className={styles.head}>
         <span className={styles.host}>
-          {view.kind === 'blocked' && '浏览器页面'}
+          {view.kind === 'blocked' && i18n.t('popup.browserPage')}
           {view.kind !== 'blocked' && view.kind !== 'loading' && (
             <>
               {view.host}
               {view.kind !== 'unreachable' &&
-                ` · ${view.language ? `检测到 ${languageName(view.language)}` : '未声明语言'}`}
+                ` · ${
+                  view.language
+                    ? i18n.t('popup.detected', [languageName(view.language)])
+                    : i18n.t('popup.noLanguage')
+                }`}
             </>
           )}
           {view.kind === 'loading' && ' '}
@@ -115,7 +131,9 @@ export function App() {
         {(view.kind === 'foreign' || view.kind === 'loading') && (
           <div className={styles.pair}>
             <span>
-              {view.kind === 'foreign' && view.language ? languageName(view.language) : '自动检测'}
+              {view.kind === 'foreign' && view.language
+                ? languageName(view.language)
+                : i18n.t('common.autoDetect')}
             </span>
             <svg
               aria-hidden="true"
@@ -131,7 +149,7 @@ export function App() {
             </svg>
             <Select
               variant="inline"
-              label="翻译成"
+              label={i18n.t('popup.translateTo')}
               minWidth={180}
               value={target}
               options={TARGET_OPTIONS}
@@ -167,23 +185,25 @@ export function App() {
         )}
         {!active && view.kind === 'native' && (
           <div className={styles.message}>
-            <strong>这一页已经是{languageName(view.language)}</strong>
-            <span>不需要翻译。</span>
+            <strong>{i18n.t('popup.nativeTitle', [languageName(view.language)])}</strong>
+            <span>{i18n.t('popup.nativeHint')}</span>
           </div>
         )}
         {view.kind === 'unreachable' && (
           <div className={styles.message}>
-            <strong>需要刷新这个网页</strong>
-            <span>扩展安装或更新之后，已经打开的网页要刷新一次才能翻译。</span>
+            <strong>{i18n.t('popup.reloadTitle')}</strong>
+            <span>{i18n.t('popup.reloadHint')}</span>
           </div>
         )}
         {view.kind === 'blocked' && (
           <div className={styles.message}>
-            <strong>这个页面不能翻译</strong>
-            <span>浏览器不允许扩展读取它自己的页面和应用商店页面。换到普通网页再试。</span>
+            <strong>{i18n.t('popup.blockedTitle')}</strong>
+            <span>{i18n.t('popup.blockedHint')}</span>
           </div>
         )}
-        {view.kind === 'loading' && <span className={styles.quiet}>正在读取页面…</span>}
+        {view.kind === 'loading' && (
+          <span className={styles.quiet}>{i18n.t('popup.readingPage')}</span>
+        )}
         {canAlways && (
           <button
             type="button"
@@ -194,9 +214,11 @@ export function App() {
             onClick={() => void site.toggle().then((result) => result && report(result))}
           >
             <span className={styles.switchText}>
-              <span>总是翻译此站</span>
+              <span>{i18n.t('popup.alwaysSite')}</span>
               <span className={styles.switchHint}>
-                {site.always ? `打开 ${page?.host} 时自动翻译` : '只在你唤起时翻译'}
+                {site.always
+                  ? i18n.t('popup.alwaysOn', [page?.host ?? ''])
+                  : i18n.t('popup.alwaysOff')}
               </span>
             </span>
             <span aria-hidden="true" className={styles.switchTrack}>
@@ -234,7 +256,7 @@ export function App() {
             <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37 1 .608 2.296.07 2.572-1.065z" />
             <circle cx="12" cy="12" r="3" />
           </svg>
-          设置
+          {i18n.t('popup.settings')}
         </button>
       </footer>
     </main>
@@ -285,33 +307,37 @@ function IdleActions({
         <div className={styles.notice}>
           <span aria-hidden="true" className={styles.warnDot} />
           <span className={styles.noticeText}>
-            {engineName(config, config.translation.engine)}
-            {readiness.problem}
+            {i18n.t('popup.engineNotReady', [
+              engineName(config, config.translation.engine),
+              readiness.problem ?? '',
+            ])}
           </span>
           <button type="button" className={styles.textButton} onClick={onOpenSettings}>
-            去设置
+            {i18n.t('popup.goSettings')}
           </button>
         </div>
       )}
       {blocked ? (
         <button type="button" className={styles.primary} onClick={() => onStart('google')}>
-          <span className={styles.grow}>这次先用 Google 翻译</span>
+          <span className={styles.grow}>
+            {i18n.t('popup.useGoogleOnce', [builtinName('google')])}
+          </span>
         </button>
       ) : (
         <button type="button" className={styles.primary} onClick={() => onStart()}>
-          <span className={styles.grow}>翻译此页</span>
+          <span className={styles.grow}>{i18n.t('popup.translatePage')}</span>
           <Kbd shortcut={shortcut} />
         </button>
       )}
       {shortcut === '' && (
         <span className={styles.quiet}>
-          还没有快捷键 ·{' '}
+          {i18n.t('popup.noShortcut')}{' '}
           <button
             type="button"
             className={styles.textButton}
             onClick={() => void browser.tabs.create({ url: 'chrome://extensions/shortcuts' })}
           >
-            设置快捷键 ↗
+            {i18n.t('popup.setShortcut')}
           </button>
         </span>
       )}
@@ -319,10 +345,11 @@ function IdleActions({
   );
 }
 
-const MODES: { value: PageMode; label: string }[] = [
-  { value: 'bilingual', label: '双语' },
-  { value: 'translation', label: '仅译文' },
-];
+// Key table only: the copy is looked up at render (tests switch the UI language per case).
+const MODES = [
+  { value: 'bilingual', label: 'common.modeBilingual' },
+  { value: 'translation', label: 'common.modeTranslation' },
+] as const satisfies { value: PageMode; label: string }[];
 
 /** A session is on: progress, mode, failures, and the way back to the original. */
 function SessionActions({
@@ -356,23 +383,28 @@ function SessionActions({
         <div className={styles.notice} title={describeError(state.engineError)}>
           <span aria-hidden="true" className={styles.warnDot} />
           <span className={styles.noticeText}>
-            {engineName(config, engine)} {pausedReason(state.engineError)}，翻译已暂停
+            {i18n.t('popup.pausedNotice', [
+              engineName(config, engine),
+              pausedReason(state.engineError),
+            ])}
           </span>
           <button type="button" className={styles.textButton} onClick={onOpenSettings}>
-            去设置
+            {i18n.t('popup.goSettings')}
           </button>
         </div>
         {engine === 'google' ? (
           <button type="button" className={styles.primary} onClick={onRetry}>
-            <span className={styles.grow}>重试</span>
+            <span className={styles.grow}>{i18n.t('popup.retry')}</span>
           </button>
         ) : (
           <button type="button" className={styles.primary} onClick={onGoogle}>
-            <span className={styles.grow}>这次先用 Google 翻译</span>
+            <span className={styles.grow}>
+              {i18n.t('popup.useGoogleOnce', [builtinName('google')])}
+            </span>
           </button>
         )}
         <button type="button" className={styles.secondary} onClick={onStop}>
-          <span className={styles.grow}>显示原文</span>
+          <span className={styles.grow}>{i18n.t('popup.showOriginal')}</span>
           <Kbd shortcut={shortcut} />
         </button>
       </div>
@@ -384,7 +416,7 @@ function SessionActions({
     <div className={styles.stage}>
       {running && (
         <div className={styles.progress} role="status">
-          <span>正在翻译眼前的段落，往下读时继续</span>
+          <span>{i18n.t('popup.progress')}</span>
           <span aria-hidden="true" className={styles.track}>
             <span className={styles.sweep} />
           </span>
@@ -393,15 +425,15 @@ function SessionActions({
       {state.failed > 0 && (
         <div className={styles.failRow}>
           <span aria-hidden="true" className={styles.warnDot} />
-          <span className={styles.grow}>{state.failed} 段没有译出</span>
+          <span className={styles.grow}>{failedText(state.failed)}</span>
           <button type="button" className={styles.textButton} onClick={onRetry}>
-            重试
+            {i18n.t('popup.retry')}
           </button>
         </div>
       )}
       {state.translated > 0 && (
         <fieldset
-          aria-label="显示方式"
+          aria-label={i18n.t('popup.displayMode')}
           className={styles.segmented}
           style={{ '--index': index } as React.CSSProperties}
         >
@@ -418,13 +450,15 @@ function SessionActions({
                   onMode(item.value);
                 }}
               />
-              {item.label}
+              {i18n.t(item.label)}
             </label>
           ))}
         </fieldset>
       )}
       <button type="button" className={styles.secondary} onClick={onStop}>
-        <span className={styles.grow}>{running ? '停止并显示原文' : '显示原文'}</span>
+        <span className={styles.grow}>
+          {running ? i18n.t('popup.stopShowOriginal') : i18n.t('popup.showOriginal')}
+        </span>
         <Kbd shortcut={shortcut} />
       </button>
     </div>
@@ -477,7 +511,7 @@ function EngineSelect({
   return (
     <Select
       variant="quiet"
-      label="默认引擎"
+      label={i18n.t('popup.defaultEngine')}
       minWidth={236}
       value={current}
       options={options}
