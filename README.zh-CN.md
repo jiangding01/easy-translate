@@ -143,6 +143,7 @@ npm run dev
 | `npm run format` | Biome 自动格式化并应用安全修复 |
 | `npm test` | 运行 Vitest 单元测试 |
 | `npm run test:watch` | Vitest 监听模式 |
+| `npm run test:e2e` | 在真实的 Chrome for Testing 中跑冒烟 e2e。需要先 `npm run build`；浏览器按 `CHROME` 环境变量、再按 Playwright 缓存里最新的版本查找（见 `scripts/lib/find-chrome.mjs`）。不属于 `npm run check` |
 | `npm run check:build` | 校验 manifest 及其引用的入口资源，以及 `_locales` 与 manifest 中的 `__MSG_*__` 文案 |
 | `npm run check:size` | 按入口检查 gzip 体积预算（见下表） |
 | `npm run check:contrast` | 校验颜色 token 的对比度：文字 ≥ 4.5:1，控件与焦点环 ≥ 3:1，亮暗各一套 |
@@ -177,6 +178,7 @@ npm run dev
 - 校验已安装依赖包的仓库签名。
 - CodeQL 安全扫描，使用 `security-extended` 规则集（`.github/workflows/codeql.yml`），在 PR、推送到 `main` 时运行，每周也会运行一次。
 - 把通过检查的构建产物作为 artifact 上传，保留 7 天。
+- `e2e` job：用 Chrome for Testing 对这份构建产物跑冒烟 e2e（`npm run test:e2e`）。暂不阻断合并；失败时上传 `test-results/e2e/`。
 
 依赖更新由 Dependabot（`.github/dependabot.yml`）每周检查 npm 和 GitHub Actions，小版本与补丁更新分组提 PR。
 
@@ -184,6 +186,8 @@ npm run dev
 
 <details>
 <summary>本地验收清单</summary>
+
+先跑 `npm run test:e2e`，自动化覆盖的项目见 [`docs/plans/e2e-smoke.md`](docs/plans/e2e-smoke.md)。
 
 1. 加载扩展，打开设置页的「翻译服务」，默认引擎为 Google，点「测试连接」应显示译文和延迟。
 2. 为 OpenAI、DeepSeek 或 Gemini 填写自己的密钥（Gemini 还要填写模型），测试连接成功；填错密钥时提示「密钥无效」类错误。
@@ -296,14 +300,18 @@ node scripts/screenshots/shoot.mjs --ui zh_CN --article en
 │   │   └── translate/           # 翻译核心（只在后台使用）：provider、调度器、缓存、密钥
 │   ├── locales/                 # en.yml（默认）、zh_CN.yml 与 zh_TW.yml，构建时生成 _locales 与类型
 │   └── styles/                  # 设计 token、基础样式、主题切换
+├── scripts/
+│   └── lib/                     # 脚本共用工具，如 find-chrome.mjs
 ├── tests/
-│   └── fixtures/                # 手动验收用的页面，如 translation-only-layout.html
+│   ├── e2e/                     # 冒烟 e2e（真实 Chrome，翻译请求用 mock）
+│   └── fixtures/                # 测试页：translation-only-layout.html（手动）、e2e-article.html（e2e）
 ├── .npmrc                       # 固定使用 npm 官方源
 ├── .nvmrc                       # Node.js 版本（24）
 ├── biome.json                   # Biome 配置
 ├── package.json                 # 脚本与依赖
 ├── tsconfig.json                # TypeScript 配置（继承 WXT 生成的配置）
 ├── vitest.config.ts             # Vitest 配置
+├── vitest.e2e.config.ts         # e2e 的 Vitest 配置
 ├── vitest.setup.ts              # 测试初始化：模拟浏览器，并为 getMessage 加载语言文件
 ├── wxt.config.ts                # WXT 与 Manifest V3 配置
 ├── CHANGELOG.md                 # 更新日志
@@ -329,7 +337,7 @@ node scripts/screenshots/shoot.mjs --ui zh_CN --article en
 | ✅ 已完成 | 界面多语言（en / zh_CN / zh_TW） |
 | ✅ 已完成 | 双语 README |
 | ✅ 已完成 | 改名「译屿 / Islet Translate」 |
-| 🔨 下一步 | 冒烟 e2e |
+| 🔨 进行中 | 冒烟 e2e（PR1 已完成，PR2 待做） |
 | 🔨 下一步 | v0.2.0（GitHub Release） |
 | 之后 | M3d 动态页与站点规则 |
 | 之后 | M3b 段落级交互 |

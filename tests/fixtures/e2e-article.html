@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>E2E article fixture</title>
+    <!--
+      Smoke e2e fixture (tests/e2e). #article fits a 1280x800 viewport; #far sits well past the
+      content script's 1000px viewport margin, so it is only translated after scrolling.
+      #extras holds counter-examples for selection tests: a text field and Chinese text.
+    -->
+    <style>
+      body {
+        margin: 0;
+        padding: 16px 32px;
+        font: 15px/1.45 system-ui, -apple-system, sans-serif;
+        color: #222;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 24px;
+      }
+      p,
+      ul,
+      blockquote {
+        margin: 0 0 8px;
+      }
+      blockquote {
+        padding-left: 12px;
+        border-left: 3px solid #ccc;
+        color: #555;
+      }
+      #spacer {
+        height: 3200px;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="article">
+      <h1 id="title">Notes from a quiet harbour town</h1>
+      <p id="intro">
+        Every morning the fishing boats leave before sunrise, and the harbour stays silent until
+        the first bakery opens its shutters.
+      </p>
+      <p id="linked">
+        The old lighthouse keeper still writes a short weather report, which you can read on the
+        <a id="link" href="https://example.com/harbour-weather">town notice board</a> every
+        afternoon.
+      </p>
+      <p id="coded">
+        Visitors who rent a bicycle are asked to type <code>harbour-pass</code> into the
+        station terminal before riding along the coast.
+      </p>
+      <ul id="list">
+        <li>Walk the stone pier at low tide.</li>
+        <li>Try the smoked fish served near the market square.</li>
+        <li>Watch the ferry turn slowly in the narrow channel.</li>
+      </ul>
+      <blockquote id="quote">
+        A small town teaches you to notice the weather, the tide and the people who wave back.
+      </blockquote>
+    </main>
+    <aside id="extras">
+      <label>Search the guide <input id="field" value="quiet evening walks" /></label>
+      <div id="editable" contenteditable="true">A draft note about the quiet harbour.</div>
+      <p id="word">Meeting him was pure serendipity.</p>
+      <p id="chinese" lang="zh-CN">港口的清晨很安静，渔船在日出之前就已经出海了。</p>
+    </aside>
+    <div id="spacer"></div>
+    <section id="far">
+      <p id="far-1">
+        Further down the coast, a narrow path climbs past the cliffs toward an abandoned signal
+        station.
+      </p>
+      <p id="far-2">
+        Hikers who reach the top in the evening often stay to watch the lights of the harbour come
+        on one by one.
+      </p>
+    </section>
+  </body>
+</html>

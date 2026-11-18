@@ -25,6 +25,7 @@
     "format": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "check:build": "node scripts/check-build.mjs",
     "check:size": "node scripts/check-size.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
