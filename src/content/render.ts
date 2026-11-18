@@ -42,7 +42,16 @@ export interface Renderer {
   insert(results: readonly Result[]): Promise<Unit[]>;
   /** Shows "Not translated · Retry" where the translation would go. */
   fail(unit: Unit, onRetry: () => void, detail?: string): Promise<void>;
-  /** Removes one unit's translation at once (source changed, retry). */
+  /**
+   * Puts a small loading dot where the translation will go. Written on the next frame, and
+   * only if nothing else (a translation, a failure, hideLoading) claimed the unit meanwhile.
+   */
+  showLoading(unit: Unit): Promise<void>;
+  /** Removes the unit's loading dot, or cancels one not written yet. */
+  hideLoading(unit: Unit): void;
+  /** Removes every loading dot, whoever asked for it. */
+  hideAllLoading(): void;
+  /** Removes one unit's translation and loading dot at once (source changed). */
   drop(unit: Unit): void;
   setMode(mode: PageMode): Promise<void>;
   /** Restyles every translation in place (the setting changed while translating). */
@@ -101,7 +110,7 @@ function findClamp(root: Element, win: Window): Element | undefined {
   return undefined;
 }
 
-function inViewport(el: Element, win: Window): boolean {
+export function inViewport(el: Element, win: Window): boolean {
   const rect = el.getBoundingClientRect();
   return (
     rect.bottom > 0 && rect.top < win.innerHeight && rect.right > 0 && rect.left < win.innerWidth
@@ -129,6 +138,13 @@ export function createRenderer(options: RenderOptions): Renderer {
   const { win, readStyle } = options;
   const doc = win.document;
   const rendered = new Map<Unit, Rendered>();
+  /**
+   * Loading dots live apart from `rendered`: they are not translations, so has / canBeOnly /
+   * detached / setMode never see them. `token` is the registration of the latest showLoading;
+   * 0 means cancelled (a dot already in the page then waits to be replaced or removed).
+   */
+  const loadings = new Map<Unit, { el?: HTMLElement; token: number }>();
+  let loadingToken = 0;
   const hostDark = new WeakMap<Element, boolean>();
   let mode: PageMode = 'bilingual';
   let style = options.style;
@@ -163,6 +179,19 @@ export function createRenderer(options: RenderOptions): Renderer {
     if (dark) el.setAttribute('data-et-host', 'dark');
     if (inline) el.setAttribute('data-et-inline', '');
     return el;
+  }
+
+  /** Cancels a pending showLoading; a dot already written stays until the write phase removes it. */
+  function cancelLoading(unit: Unit) {
+    const entry = loadings.get(unit);
+    if (!entry) return;
+    if (entry.el) entry.token = 0;
+    else loadings.delete(unit);
+  }
+
+  function clearLoading(unit: Unit) {
+    loadings.get(unit)?.el?.remove();
+    loadings.delete(unit);
   }
 
   function appear(record: Rendered, delay: number) {
@@ -352,12 +381,14 @@ export function createRenderer(options: RenderOptions): Renderer {
     return segment(nodes).digest === unit.seg.digest;
   }
 
+  const has = (unit: Unit) => rendered.has(unit) && !rendered.get(unit)?.failed;
+
   return {
     get mode() {
       return mode;
     },
 
-    has: (unit) => rendered.has(unit) && !rendered.get(unit)?.failed,
+    has,
     isFailed: (unit) => rendered.get(unit)?.failed === true,
     isCurrent: (unit) => stillSame(unit),
 
@@ -380,6 +411,7 @@ export function createRenderer(options: RenderOptions): Renderer {
           stale.push(unit);
           continue;
         }
+        cancelLoading(unit);
         const flexRoot = unit.kind === 'block' && isFlexOrGrid(unit.root, readStyle);
         plans.push({
           result,
@@ -401,6 +433,7 @@ export function createRenderer(options: RenderOptions): Renderer {
         const { unit, translation } = result;
         const previous = rendered.get(unit);
         if (previous) detach(previous);
+        clearLoading(unit);
         const inline = unit.kind === 'run' || flexRoot;
         const rebuilt = restoreTranslation(translation, unit.seg, doc);
         const content = rebuilt ?? plainTranslation(translation, unit.seg, doc);
@@ -431,7 +464,11 @@ export function createRenderer(options: RenderOptions): Renderer {
     },
 
     async fail(unit, onRetry, detail) {
-      if (!unit.root.isConnected) return;
+      cancelLoading(unit);
+      if (!unit.root.isConnected) {
+        clearLoading(unit);
+        return;
+      }
       const dark = isDark(unit.root);
       const flexRoot = unit.kind === 'block' && isFlexOrGrid(unit.root, readStyle);
       if (disposed) return;
@@ -439,6 +476,7 @@ export function createRenderer(options: RenderOptions): Renderer {
       if (disposed) return;
       const previous = rendered.get(unit);
       if (previous) detach(previous);
+      clearLoading(unit);
       const inline = unit.kind === 'run' || flexRoot;
       const record: Rendered = {
         unit,
@@ -472,7 +510,54 @@ export function createRenderer(options: RenderOptions): Renderer {
       for (const record of rendered.values()) record.el.setAttribute('data-et-s', next);
     },
 
+    async showLoading(unit) {
+      if (disposed || !unit.root.isConnected) return;
+      const existing = loadings.get(unit);
+      if (existing?.el && existing.token !== 0) return;
+      loadingToken += 1;
+      const token = loadingToken;
+      if (existing) existing.token = token;
+      else loadings.set(unit, { token });
+      const dark = isDark(unit.root);
+      const flexRoot = unit.kind === 'block' && isFlexOrGrid(unit.root, readStyle);
+      await frame();
+      const entry = loadings.get(unit);
+      if (!entry || entry.token !== token || has(unit) || disposed) return;
+      if (!unit.root.isConnected) {
+        if (!entry.el) loadings.delete(unit);
+        return;
+      }
+      // A failure placeholder is replaced; removing only its element would leave a record
+      // that detached() takes for a translation the page threw away.
+      const previous = rendered.get(unit);
+      if (previous) {
+        detach(previous);
+        rendered.delete(unit);
+      }
+      entry.el?.remove();
+      // Contract: a state, no data-et-s (no translation styles), no text: the page's reader
+      // gets nothing to read. Plugin UI, so the interface language.
+      const el = doc.createElement('et-tr');
+      el.setAttribute('data-et-state', 'loading');
+      el.setAttribute('aria-hidden', 'true');
+      el.setAttribute('translate', 'no');
+      el.setAttribute('lang', uiLocale());
+      if (dark) el.setAttribute('data-et-host', 'dark');
+      entry.el = el;
+      place({ unit, el, inline: true, failed: false }, flexRoot);
+    },
+
+    hideLoading(unit) {
+      clearLoading(unit);
+    },
+
+    hideAllLoading() {
+      for (const entry of loadings.values()) entry.el?.remove();
+      loadings.clear();
+    },
+
     drop(unit) {
+      clearLoading(unit);
       const record = rendered.get(unit);
       if (!record) return;
       detach(record);
@@ -526,6 +611,8 @@ export function createRenderer(options: RenderOptions): Renderer {
       disposed = true;
       const records = [...rendered.values()];
       const anchor = captureAnchor(win);
+      for (const entry of loadings.values()) entry.el?.remove();
+      loadings.clear();
       const animated = typeof doc.body.animate === 'function';
       if (animated) {
         const soft = reduced();

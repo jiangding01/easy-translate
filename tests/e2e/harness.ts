@@ -50,8 +50,12 @@ export interface LaunchOptions {
   raw?: boolean;
 }
 
-/** Per text: a translation, an HTTP status for the whole request, or undefined for the default. */
-export type GoogleHandler = (text: string) => string | number | undefined;
+/**
+ * Per text: a translation, an HTTP status for the whole request, or undefined for the default.
+ * May return a promise: the request then waits (a slow service) until it settles.
+ */
+type GoogleReply = string | number | undefined;
+export type GoogleHandler = (text: string) => GoogleReply | Promise<GoogleReply>;
 type Point = { x: number; y: number };
 // biome-ignore lint/suspicious/noExplicitAny: CDP payloads are untyped JSON
 type Json = Record<string, any>;
@@ -316,14 +320,16 @@ async function start(
     return reply.result?.value as T;
   };
 
-  const fulfillGoogle = (requestId: string, request: Json, sessionId: string) => {
+  const fulfillGoogle = async (requestId: string, request: Json, sessionId: string) => {
     const url = new URL(request.url);
     const single = url.pathname.endsWith('/single');
     const query = single ? url.searchParams : new URLSearchParams(request.postData ?? '');
     const texts = query.getAll('q');
     google.count += 1;
     google.texts.push(...texts);
-    const replies = texts.map((text) => handler?.(text) ?? mockTranslate(text));
+    const replies = await Promise.all(
+      texts.map(async (text) => (await handler?.(text)) ?? mockTranslate(text)),
+    );
     const status = replies.find((reply) => typeof reply === 'number');
     const body = status ? '' : JSON.stringify(single ? [[[replies[0], 'en']]] : replies);
     const headers = [{ name: 'content-type', value: 'application/json; charset=utf-8' }];

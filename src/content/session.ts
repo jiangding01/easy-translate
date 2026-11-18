@@ -19,7 +19,7 @@ import {
 } from './dom-rules';
 import { errorText } from './error-text';
 import { watchMutations } from './mutations';
-import { createRenderer, type Renderer } from './render';
+import { createRenderer, inViewport, type Renderer } from './render';
 import { injectStyles, removeStyles } from './styles';
 
 // One page-translation session: discovery → viewport queue → Port requests →
@@ -50,6 +50,12 @@ export interface SessionDeps {
    * through it, so a burst of changes pushes once per frame. Defaults to rAF.
    */
   scheduleFrame?(callback: () => void): () => void;
+  /** Tests only: how long a paragraph waits before its loading dot shows (default 600 ms). */
+  loadingDelayMs?: number;
+  /** Tests only: the loading dots' scan interval (default 300 ms). */
+  loadingScanMs?: number;
+  /** Tests only: whether the element touches the real viewport (default: its rect). */
+  inViewport?(el: Element): boolean;
 }
 
 export interface PageSession {
@@ -76,6 +82,8 @@ const RETRY_DELAYS_MS = [500, 1000, 2000];
 const LOOP_WINDOW_MS = 10_000;
 const LOOP_LIMIT = 3;
 const VIEWPORT_CHUNK = 500;
+const LOADING_DELAY_MS = 600;
+const LOADING_SCAN_MS = 300;
 
 /** Engine-level problems: shown once, the session pauses instead of failing every paragraph. */
 export function isEngineLevel(error: AppError): boolean {
@@ -91,6 +99,10 @@ export function createPageSession(deps: SessionDeps): PageSession {
   const { win, port } = deps;
   const doc = win.document;
   const now = () => Date.now();
+  const loadingDelay = deps.loadingDelayMs ?? LOADING_DELAY_MS;
+  const loadingScan = deps.loadingScanMs ?? LOADING_SCAN_MS;
+  /** The real viewport, not the 1000px prefetch margin the observer reports. */
+  const inView = deps.inViewport ?? ((el: Element) => inViewport(el, win));
   const watch = deps.createMutationWatch ?? watchMutations;
   const scheduleFrame =
     deps.scheduleFrame ??
@@ -136,6 +148,14 @@ export function createPageSession(deps: SessionDeps): PageSession {
   /** Roots the viewport observer last reported inside the 1000px margin. */
   const visibleRoots = new Set<Element>();
   const queued = new Set<Unit>();
+  /**
+   * When each unfinished unit (pending, sent or waiting) was first wanted. Kept across a
+   * pause and a retry, so a paragraph that has waited long shows its dot at once on resume.
+   */
+  const wantedAt = new Map<Unit, number>();
+  /** Units whose loading dot was asked for; a translation or failure replaces it on its own. */
+  const shown = new Set<Unit>();
+  let scanTimer: ReturnType<typeof setTimeout> | undefined;
   const toRender: { unit: Unit; translation: string }[] = [];
 
   const listeners = new Set<(state: PageState) => void>();
@@ -174,6 +194,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
 
   function report() {
     notify();
+    ensureScan();
     if (phase === 'idle' || halted) return;
     phase = pending.size > 0 || inFlight > 0 || waiting.size > 0 ? 'running' : 'done';
     deps.reportStatus(status());
@@ -219,6 +240,63 @@ export function createPageSession(deps: SessionDeps): PageSession {
     return true;
   }
 
+  const unfinished = (unit: Unit) => pending.has(unit) || sent.has(unit) || waiting.has(unit);
+
+  /** A unit is done waiting and its dot is not wanted any more (the dot goes with it). */
+  function release(unit: Unit) {
+    wantedAt.delete(unit);
+    shown.delete(unit);
+    renderer?.hideLoading(unit);
+  }
+
+  /** The reply is in: the renderer swaps the dot for the translation or failure itself. */
+  function answered(unit: Unit) {
+    wantedAt.delete(unit);
+    shown.delete(unit);
+  }
+
+  function hideAllLoading() {
+    renderer?.hideAllLoading();
+    shown.clear();
+    if (scanTimer !== undefined) clearTimeout(scanTimer);
+    scanTimer = undefined;
+  }
+
+  function hasUnfinishedWanted(): boolean {
+    for (const unit of wantedAt.keys()) if (unfinished(unit)) return true;
+    return false;
+  }
+
+  /** Fixed-interval scan: runs only while something is unfinished and the session can progress. */
+  function ensureScan() {
+    if (scanTimer !== undefined || !renderer) return;
+    if (phase === 'idle' || halted || engineError) return;
+    if (!hasUnfinishedWanted()) return;
+    const current = epoch;
+    scanTimer = setTimeout(() => {
+      scanTimer = undefined;
+      if (current !== epoch) return;
+      scanLoading();
+      ensureScan();
+    }, loadingScan);
+  }
+
+  function scanLoading() {
+    if (!renderer || phase === 'idle' || halted || engineError) return;
+    const at = now();
+    for (const [unit, since] of wantedAt) {
+      if (shown.has(unit) || at - since < loadingDelay) continue;
+      if (!unfinished(unit) || !visibleRoots.has(unit.root) || !inView(unit.root)) continue;
+      shown.add(unit);
+      void renderer.showLoading(unit);
+    }
+    for (const unit of [...shown]) {
+      if (unfinished(unit) && inView(unit.root)) continue;
+      shown.delete(unit);
+      renderer.hideLoading(unit);
+    }
+  }
+
   function queueRender(unit: Unit, translation: string) {
     queued.add(unit);
     toRender.push({ unit, translation });
@@ -244,6 +322,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
     }
     if (pending.has(unit)) return false;
     pending.add(unit);
+    if (!wantedAt.has(unit)) wantedAt.set(unit, now());
+    ensureScan();
     return true;
   }
 
@@ -298,7 +378,12 @@ export function createPageSession(deps: SessionDeps): PageSession {
       if (inRange) visibleRoots.add(target);
       else visibleRoots.delete(target);
       for (const unit of unitsByRoot.get(target) ?? []) {
-        if (inRange ? want(unit) : pending.delete(unit)) changed = true;
+        if (inRange) {
+          if (want(unit)) changed = true;
+        } else if (pending.delete(unit)) {
+          changed = true;
+          release(unit);
+        }
       }
     });
     if (changed) scheduleFlush();
@@ -392,10 +477,12 @@ export function createPageSession(deps: SessionDeps): PageSession {
         }
         if (chunk.disposition !== 'translated') {
           settled.add(unit);
+          release(unit);
           return;
         }
         translations.set(unit.seg.text, chunk.text);
         failed.delete(unit);
+        answered(unit);
         queueRender(unit, chunk.text);
       },
     );
@@ -407,6 +494,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
       // Units the request never answered for (request-level failure or cancel).
       const unanswered = batch.filter((unit) => sent.has(unit));
       for (const unit of unanswered) sent.delete(unit);
+      // A done request that left units unanswered: nothing is coming for them any more.
+      if (outcome.status === 'done') for (const unit of unanswered) release(unit);
       if (outcome.status === 'error') onRequestError(outcome.error, unanswered, attempt, used);
       else if (outcome.status === 'cancelled') for (const unit of unanswered) pending.add(unit);
       // Halted just now: nothing more to send or report.
@@ -451,7 +540,10 @@ export function createPageSession(deps: SessionDeps): PageSession {
       if (engineError) {
         // Paused meanwhile: back to the queue for the resume, if still in range; the rest
         // queue again when the viewport reports them. Retries count from 0 again.
-        for (const unit of alive) if (visibleRoots.has(unit.root)) pending.add(unit);
+        for (const unit of alive) {
+          if (visibleRoots.has(unit.root)) pending.add(unit);
+          else release(unit);
+        }
       } else send(alive, attempt + 1);
       report();
     }, delay);
@@ -459,6 +551,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
 
   function markFailed(unit: Unit, error: AppError) {
     failed.add(unit);
+    answered(unit);
     void renderer?.fail(unit, () => retry([unit]), errorText(error));
     report();
   }
@@ -479,15 +572,24 @@ export function createPageSession(deps: SessionDeps): PageSession {
   function pause(error: AppError, units: Unit[]) {
     if (!engineError) engineError = error;
     for (const unit of units) pending.add(unit);
+    // No reply is coming and the island shows the error: no dots until the pause is lifted.
+    hideAllLoading();
     report();
   }
 
   function retry(units: Unit[]) {
+    if (halted) return;
     for (const unit of units) {
       failed.delete(unit);
-      renderer?.drop(unit);
       pending.add(unit);
+      if (!wantedAt.has(unit)) wantedAt.set(unit, now());
+      // The reader just pressed the button: feedback at once, the failure note swaps for the dot.
+      if (renderer && !engineError && !shown.has(unit)) {
+        shown.add(unit);
+        void renderer.showLoading(unit);
+      }
     }
+    ensureScan();
     scheduleFlush(true);
   }
 
@@ -562,6 +664,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
     settled.delete(unit);
     failed.delete(unit);
     queued.delete(unit);
+    wantedAt.delete(unit);
+    shown.delete(unit);
     renderer?.drop(unit);
     // Long-lived pages: nothing may keep a gone unit (and its detached DOM) alive.
     const id = ids.get(unit);
@@ -587,10 +691,16 @@ export function createPageSession(deps: SessionDeps): PageSession {
     return false;
   };
 
+  const isLoadingDot = (node: Node): boolean =>
+    node.nodeType === Node.ELEMENT_NODE &&
+    (node as Element).nodeName === OWN_TAG &&
+    (node as Element).getAttribute('data-et-state') === 'loading';
+
   /** Context invalidated (extension updated): stop quietly, keep what is on the page. */
   function halt() {
     halted = true;
     epoch += 1;
+    hideAllLoading();
     notify();
     viewport?.disconnect();
     stopWatching?.();
@@ -602,6 +712,10 @@ export function createPageSession(deps: SessionDeps): PageSession {
     for (const timer of [flushTimer, renderTimer]) if (timer !== undefined) clearTimeout(timer);
     flushTimer = undefined;
     renderTimer = undefined;
+    if (scanTimer !== undefined) clearTimeout(scanTimer);
+    scanTimer = undefined;
+    wantedAt.clear();
+    shown.clear();
     unitsByRoot.clear();
     ids.clear();
     byId.clear();
@@ -676,6 +790,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
       stopWatching = watch({
         root: doc.body,
         isOwn,
+        ignoreRemoved: isLoadingDot,
         onDirty: (elements) => {
           // Fresh computed styles for each round: cached ones go stale on live pages.
           readStyle = deps.createReadStyle();

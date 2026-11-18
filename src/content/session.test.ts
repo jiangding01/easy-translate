@@ -12,7 +12,7 @@ import type {
 import type { StyleReader } from './dom-rules';
 import { watchMutations } from './mutations';
 import { IDLE_PAGE_STATE } from './runtime-contract';
-import { createPageSession, isEngineLevel } from './session';
+import { createPageSession, isEngineLevel, type SessionDeps } from './session';
 
 const readStyle: StyleReader = (el) => {
   const own = (el as HTMLElement).style?.display;
@@ -64,7 +64,11 @@ function fakePort() {
   return port;
 }
 
-function setup(markup: string, getConfig = async () => createDefaultConfig('zh-CN')) {
+function setup(
+  markup: string,
+  getConfig = async () => createDefaultConfig('zh-CN'),
+  extra: Partial<SessionDeps> = {},
+) {
   const configListeners: ((config: ReturnType<typeof createDefaultConfig>) => void)[] = [];
   document.body.innerHTML = markup;
   const before = document.body.innerHTML;
@@ -114,6 +118,7 @@ function setup(markup: string, getConfig = async () => createDefaultConfig('zh-C
           options.onDirty(elements);
         },
       }),
+    ...extra,
     scheduleFrame: (callback) => {
       frameId += 1;
       const id = frameId;
@@ -721,6 +726,343 @@ describe('page session: paragraphs waiting to retry', () => {
     port.calls[1]?.answer();
     await vi.waitFor(() => expect(session.state().phase).toBe('done'));
     expect(statuses.at(-1)).toBe('done');
+  });
+});
+
+describe('page session: loading dots', () => {
+  /** Short delay and scan interval; `near` is what counts as inside the real viewport. */
+  function loadingSetup(markup: string, loadingDelayMs = 80) {
+    const near = new Set<Element>();
+    const t = setup(markup, undefined, {
+      loadingDelayMs,
+      loadingScanMs: 20,
+      inViewport: (el) => near.has(el),
+    });
+    return { ...t, near };
+  }
+  const dots = () => document.querySelectorAll('et-tr[data-et-state="loading"]').length;
+  const para = (id: string) => document.getElementById(id) as HTMLElement;
+  const idOf = (call: Call, index: number) => call.payload.items[index]?.id ?? '';
+  const answerItem = (call: Call, index: number, text: string) =>
+    call.onChunk?.({ id: idOf(call, index), text, disposition: 'translated', cached: false });
+  /** Records every loading dot the page gets added or loses, for "never appeared" checks. */
+  function watchDots() {
+    const added: Node[] = [];
+    const removed: Node[] = [];
+    const isDot = (node: Node) => (node as Element).getAttribute?.('data-et-state') === 'loading';
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) if (isDot(node)) added.push(node);
+        for (const node of record.removedNodes) if (isDot(node)) removed.push(node);
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return { added, removed, stop: () => observer.disconnect() };
+  }
+
+  it('shows a dot for a waiting paragraph in the viewport, then swaps it for the translation; one only in the prefetch margin gets none', async () => {
+    const t = loadingSetup('<p id="a">Inside the viewport.</p><p id="b">Only in the margin.</p>');
+    await t.session.start();
+    t.near.add(para('a'));
+    t.show();
+    const seen = watchDots();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    await vi.waitFor(() => expect(dots()).toBe(1));
+    expect(para('a').querySelector('et-tr[data-et-state="loading"]')).not.toBeNull();
+    await wait(150);
+    seen.stop();
+    // Never added, not merely absent at the end.
+    expect(seen.added.some((node) => para('b').contains(node))).toBe(false);
+    expect(para('b').querySelector('et-tr')).toBeNull();
+    t.port.calls[0]?.answer();
+    await vi.waitFor(() => expect(translations()).toHaveLength(2));
+    expect(dots()).toBe(0);
+    expect(para('a').querySelectorAll('et-tr')).toHaveLength(1);
+  });
+
+  it('never shows a dot when the reply comes before the delay', async () => {
+    const t = loadingSetup('<p id="a">Fast reply paragraph.</p>');
+    await t.session.start();
+    t.near.add(para('a'));
+    const seen = watchDots();
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    t.port.calls[0]?.answer();
+    await vi.waitFor(() => expect(translations()).toHaveLength(1));
+    await wait(200);
+    seen.stop();
+    expect(seen.added).toEqual([]);
+    expect(dots()).toBe(0);
+  });
+
+  it('takes the dot away when a paragraph is given up on, fails, or is forgotten', async () => {
+    const t = loadingSetup(
+      '<p id="a">Skipped paragraph one.</p><p id="b">Failing paragraph two.</p><p id="c">Edited paragraph three.</p>',
+    );
+    await t.session.start();
+    for (const id of ['a', 'b', 'c']) t.near.add(para(id));
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    await vi.waitFor(() => expect(dots()).toBe(3));
+    const call = t.port.calls[0] as Call;
+    const seen = watchDots();
+    // Not translated (the text is already in the target language): the dot just goes.
+    call.onChunk?.({ id: idOf(call, 0), text: 'x', disposition: 'same-language', cached: false });
+    await vi.waitFor(() => expect(dots()).toBe(2));
+    expect(para('a').querySelector('et-tr')).toBeNull();
+    // Failed: the retry note takes its place.
+    call.onChunk?.({
+      id: idOf(call, 1),
+      error: appError('provider', 'provider/bad-response', 'bad'),
+    });
+    await vi.waitFor(() =>
+      expect(para('b').querySelector('et-tr[data-et-state="error"]')).not.toBeNull(),
+    );
+    expect(para('b').querySelector('et-tr[data-et-state="loading"]')).toBeNull();
+    // Forgotten: the page changed the text, the old unit and its dot go.
+    const dotOfC = para('c').querySelector('et-tr[data-et-state="loading"]');
+    (para('c').firstChild as Text).nodeValue = 'Edited paragraph three, again.';
+    await vi.waitFor(() => expect(seen.removed).toContain(dotOfC));
+    seen.stop();
+  });
+
+  it('takes the dot away when the paragraph leaves the viewport or the session stops', async () => {
+    const t = loadingSetup('<p id="a">Scrolled away paragraph.</p>');
+    await t.session.start();
+    t.near.add(para('a'));
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    await vi.waitFor(() => expect(dots()).toBe(1));
+    t.near.delete(para('a'));
+    await vi.waitFor(() => expect(dots()).toBe(0));
+    t.near.add(para('a'));
+    await vi.waitFor(() => expect(dots()).toBe(1));
+    const seen = watchDots();
+    await t.session.stop();
+    await wait(120);
+    seen.stop();
+    expect(seen.added).toEqual([]);
+    expect(dots()).toBe(0);
+    expect(document.body.innerHTML).toBe(t.before);
+  });
+
+  it('takes the dot away when a waiting paragraph is moved out of the queue by the viewport', async () => {
+    const t = loadingSetup('<p id="a">Queued then scrolled past.</p>', 40);
+    await t.session.start();
+    t.near.add(para('a'));
+    // A scroll in progress keeps paragraphs queued instead of sending them.
+    window.dispatchEvent(new Event('scroll'));
+    t.show();
+    await vi.waitFor(() => expect(dots()).toBe(1));
+    expect(t.port.calls).toHaveLength(0);
+    t.hide([para('a')]);
+    await vi.waitFor(() => expect(dots()).toBe(0));
+  });
+
+  it('hides every dot on an engine error, shows none while paused, and brings them back on resume', async () => {
+    const t = loadingSetup(
+      '<p id="a">Paused paragraph one.</p><p id="b">Paused paragraph two.</p>',
+    );
+    await t.session.start();
+    t.near.add(para('a'));
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    await vi.waitFor(() => expect(dots()).toBe(1));
+    const call = t.port.calls[0] as Call;
+    call.onChunk?.({ id: idOf(call, 0), error: engineError('provider/unauthorized') });
+    await vi.waitFor(() => expect(t.session.state().engineError).toBeDefined());
+    expect(dots()).toBe(0);
+    const seen = watchDots();
+    await wait(200);
+    seen.stop();
+    expect(seen.added).toEqual([]);
+    // Resume: the paragraphs have waited long already, so the dot is back at once.
+    await t.session.start({ engine: 'google' });
+    await vi.waitFor(() => expect(dots()).toBe(1));
+    expect(t.port.calls).toHaveLength(2);
+    t.port.calls[1]?.answer();
+    await vi.waitFor(() => expect(translations()).toEqual(['译:Paused paragraph one.']));
+    expect(dots()).toBe(0);
+  });
+
+  it('swapping a dot for the translation is not a page change; a page removal still is', async () => {
+    const t = loadingSetup('<p id="a">Swapped paragraph text.</p>', 40);
+    await t.session.start();
+    t.near.add(para('a'));
+    t.show();
+    await vi.waitFor(() => expect(dots()).toBe(1));
+    answerItem(t.port.calls[0] as Call, 0, '译:换');
+    await vi.waitFor(() => expect(translations()).toEqual(['译:换']));
+    await wait(100);
+    expect(dots()).toBe(0);
+    expect(t.dirtyRounds).toEqual([]);
+    para('a').append(document.createElement('span'));
+    para('a').lastElementChild?.remove();
+    await vi.waitFor(() => expect(t.dirtyRounds.length).toBeGreaterThan(0));
+  });
+
+  /** Two paragraphs in one request; the request then ends because the extension went away. */
+  async function haltSetup() {
+    const t = loadingSetup(
+      '<p id="a">Halted paragraph one.</p><p id="b">Halted paragraph two.</p>',
+    );
+    await t.session.start();
+    t.near.add(para('a'));
+    t.near.add(para('b'));
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    await vi.waitFor(() => expect(dots()).toBe(2));
+    const call = t.port.calls[0] as Call;
+    const invalidated = () =>
+      call.finish({
+        status: 'error',
+        error: appError('internal', 'internal/context-invalidated', 'gone'),
+      });
+    return { t, call, invalidated };
+  }
+
+  it('takes every dot away when the session halts, and none comes back', async () => {
+    const { t, invalidated } = await haltSetup();
+    invalidated();
+    await vi.waitFor(() => expect(t.session.state().halted).toBe(true));
+    expect(dots()).toBe(0);
+    const seen = watchDots();
+    await wait(200);
+    seen.stop();
+    expect(seen.added).toEqual([]);
+    expect(dots()).toBe(0);
+  });
+
+  it('halting after a reply but before its render leaves no dot behind', async () => {
+    const { t, call, invalidated } = await haltSetup();
+    answerItem(call, 0, '译:未渲染');
+    invalidated();
+    await vi.waitFor(() => expect(t.session.state().halted).toBe(true));
+    await wait(100);
+    expect(dots()).toBe(0);
+    expect(translations()).toEqual([]);
+  });
+
+  it('retry after a halt leaves the failure note alone, shows no dot and sends nothing', async () => {
+    const t = loadingSetup(
+      '<p id="a">Failed then halted.</p><p id="b">Never answered one.</p>',
+      60_000,
+    );
+    await t.session.start();
+    t.near.add(para('a'));
+    t.near.add(para('b'));
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    const call = t.port.calls[0] as Call;
+    call.onChunk?.({
+      id: idOf(call, 0),
+      error: appError('provider', 'provider/bad-response', 'bad'),
+    });
+    await vi.waitFor(() =>
+      expect(para('a').querySelector('et-tr[data-et-state="error"] button')).not.toBeNull(),
+    );
+    call.finish({
+      status: 'error',
+      error: appError('internal', 'internal/context-invalidated', 'gone'),
+    });
+    await vi.waitFor(() => expect(t.session.state().halted).toBe(true));
+    const seen = watchDots();
+    (para('a').querySelector('et-tr[data-et-state="error"] button') as HTMLElement).click();
+    await wait(150);
+    seen.stop();
+    expect(seen.added).toEqual([]);
+    expect(dots()).toBe(0);
+    expect(para('a').querySelector('et-tr[data-et-state="error"]')).not.toBeNull();
+    expect(t.port.calls).toHaveLength(1);
+  });
+
+  it('shows no dot for a retry pressed while the engine is paused, and one once it resumes', async () => {
+    const t = loadingSetup(
+      '<p id="a">Failed paragraph one.</p><p id="b">Paused paragraph two.</p>',
+      100,
+    );
+    await t.session.start();
+    t.near.add(para('a'));
+    t.near.add(para('b'));
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    const call = t.port.calls[0] as Call;
+    call.onChunk?.({
+      id: idOf(call, 0),
+      error: appError('provider', 'provider/bad-response', 'bad'),
+    });
+    await vi.waitFor(() =>
+      expect(para('a').querySelector('et-tr[data-et-state="error"] button')).not.toBeNull(),
+    );
+    call.onChunk?.({ id: idOf(call, 1), error: engineError('provider/unauthorized') });
+    await vi.waitFor(() => expect(t.session.state().engineError).toBeDefined());
+    const seen = watchDots();
+    (para('a').querySelector('et-tr[data-et-state="error"] button') as HTMLElement).click();
+    await wait(150);
+    expect(seen.added).toEqual([]);
+    expect(dots()).toBe(0);
+    // Resume: the paragraph has waited longer than the delay, so its dot is back at once.
+    await t.session.start({ engine: 'google' });
+    await vi.waitFor(() => expect(dots()).toBe(2));
+    seen.stop();
+  });
+
+  it('stops scanning once a finished request left nothing unfinished', async () => {
+    const t = loadingSetup(
+      '<p id="a">Answered paragraph.</p><p id="b">Left unanswered.</p>',
+      60_000,
+    );
+    await t.session.start();
+    t.near.add(para('a'));
+    t.near.add(para('b'));
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    const call = t.port.calls[0] as Call;
+    const spy = vi.spyOn(globalThis, 'setTimeout');
+    const scans = () => spy.mock.calls.filter((args) => args[1] === 20).length;
+    try {
+      answerItem(call, 0, '译:已答');
+      call.finish({ status: 'done', data: { total: 2, failed: 0 } });
+      await vi.waitFor(() => expect(translations()).toEqual(['译:已答']));
+      await wait(80);
+      const settled = scans();
+      await wait(150);
+      expect(scans()).toBe(settled);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('shows the dot at once on retry, replaces it with the translation, and keeps the paragraph through a page change', async () => {
+    // A delay far beyond the test: the dot can only come from the retry itself.
+    const t = loadingSetup('<p id="a">Retried paragraph text.</p>', 60_000);
+    await t.session.start();
+    t.near.add(para('a'));
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    const first = t.port.calls[0] as Call;
+    first.onChunk?.({
+      id: idOf(first, 0),
+      error: appError('provider', 'provider/bad-response', 'bad'),
+    });
+    first.finish({ status: 'done', data: { total: 1, failed: 1 } });
+    await vi.waitFor(() =>
+      expect(document.querySelector('et-tr[data-et-state="error"]')).not.toBeNull(),
+    );
+    t.session.retryFailed();
+    await vi.waitFor(() => expect(dots()).toBe(1));
+    expect(document.querySelector('et-tr[data-et-state="error"]')).toBeNull();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(2));
+    // A page change meanwhile: the paragraph is neither lost nor given up on.
+    document.body.append(document.createElement('div'));
+    await vi.waitFor(() => expect(t.dirtyRounds.length).toBeGreaterThan(0));
+    await wait(100);
+    expect(dots()).toBe(1);
+    expect(t.port.calls).toHaveLength(2);
+    answerItem(t.port.calls[1] as Call, 0, '译:重试');
+    await vi.waitFor(() => expect(translations()).toEqual(['译:重试']));
+    expect(dots()).toBe(0);
+    expect(t.session.state()).toMatchObject({ translated: 1, failed: 0 });
   });
 });
 
