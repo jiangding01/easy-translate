@@ -141,6 +141,7 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
         3. **CI 增强小 PR**（**已合并**，PR #18）：
            - 构建产物 `.output/chrome-mv3` 作为 artifact 上传，保留 7 天，验收时直接下载；
            - `npm audit --omit=dev --audit-level=high` 硬拦截；全量 audit 只报告；增加 `npm audit signatures`；
+             2026-11-18 起硬拦截改由 `scripts/check-audit.mjs` 执行：`scripts/audit-allowlist.json` 按公告 ID 限期豁免（理由 + 到期日），过期、豁免条目不再出现、审计本身出错都会失败。首条是 picomatch 的 GHSA-fc5q-39xc-vjpf（ReDoS，无补丁，只在构建时用，扩展包里没有），到期 2026-12-18，续期前重新确认构建产物里没有 picomatch；
            - Dependabot 每周检查 npm 和 Actions；
            - checkout 加 `persist-credentials: false`，job 加 15 分钟超时；
            - happy-dom 升到 21.0.4，修复一个高危漏洞。
