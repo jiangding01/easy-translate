@@ -843,6 +843,33 @@ describe('motion and announcements', () => {
     expect(t.clip()).toContain('round 4px');
   });
 
+  it('stays on the edge while the window is still being resized', async () => {
+    // Dragging the window wider drew a dark bar from the old dot to the new edge, and
+    // narrower clipped the dot away, until the resize had been still for 100ms.
+    const t = await setup();
+    await t.start();
+    const before = t.dotPoint();
+    const shell = t.clipRect();
+    const probes = t.elementsFromPoint.mock.calls.length;
+    const descriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+    const width = window.innerWidth;
+    try {
+      for (const delta of [300, -300]) {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: width + delta });
+        window.dispatchEvent(new window.Event('resize'));
+        t.frame();
+        expect(t.dotPoint().x).toBe(before.x + delta);
+        const now = t.clipRect();
+        expect([now.x, now.y, now.w, now.h]).toEqual([shell.x + delta, shell.y, shell.w, shell.h]);
+      }
+      // Stepping around page widgets still waits for the window to settle.
+      expect(t.elementsFromPoint.mock.calls.length).toBe(probes);
+    } finally {
+      if (descriptor) Object.defineProperty(window, 'innerWidth', descriptor);
+      else delete (window as { innerWidth?: number }).innerWidth;
+    }
+  });
+
   it('measures the page again after a resize', async () => {
     const t = await setup();
     await t.start();
