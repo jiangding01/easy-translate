@@ -41,6 +41,11 @@ export interface SessionDeps {
   /** Live config updates while a session runs (the translation style can change). */
   watchConfig?(callback: (config: ConfigV1) => void): () => void;
   reportStatus(status: PageStatus): void;
+  /**
+   * Whether the extension is still reachable. When it is not (reloaded or updated under the
+   * page), the session halts at its next notification; no port error is needed.
+   */
+  alive?(): boolean;
   createReadStyle(): StyleReader;
   /** IntersectionObserver with rootMargin 1000px; injectable for tests. */
   createViewport(onChange: (targets: Element[], visible: boolean[]) => void): ViewportObserver;
@@ -163,6 +168,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
 
   /** Coalesces to one push per frame; listeners read the state when the frame fires. */
   function notify() {
+    if (!halted && deps.alive?.() === false) halt();
     if (cancelFrame || listeners.size === 0) return;
     cancelFrame = scheduleFrame(() => {
       cancelFrame = undefined;
@@ -704,7 +710,11 @@ export function createPageSession(deps: SessionDeps): PageSession {
     notify();
     viewport?.disconnect();
     stopWatching?.();
-    stopWatchingConfig?.();
+    try {
+      stopWatchingConfig?.();
+    } catch {
+      // Its unsubscribe needs the extension (`storage.onChanged`), which is gone.
+    }
     win.removeEventListener('scroll', onScroll, true);
   }
 
@@ -787,6 +797,10 @@ export function createPageSession(deps: SessionDeps): PageSession {
       });
       if (current !== epoch) return state();
       register(units);
+      // The extension may have gone while the page was being scanned: halt now (notify
+      // checks) rather than set up watchers that need it.
+      notify();
+      if (current !== epoch) return state();
       stopWatching = watch({
         root: doc.body,
         isOwn,

@@ -8,6 +8,7 @@ import {
   type PluralFn,
   pickPlural,
   pluralMessage,
+  uiLocale,
 } from './i18n';
 
 type GetMessage = typeof fakeBrowser.i18n.getMessage;
@@ -139,5 +140,16 @@ function typeChecks(m: MessageFn<Fake>, p: PluralFn<Fake>, noArg: 'a.none' | 'a.
 describe('types', () => {
   it('are checked by tsc (typeChecks above)', () => {
     expect(typeChecks).toBeTypeOf('function');
+  });
+});
+
+describe('after the extension is gone', () => {
+  it('returns empty text instead of throwing, and uiLocale falls back to en', () => {
+    fakeBrowser.i18n.getMessage = (() => {
+      throw new Error('Extension context invalidated.');
+    }) as unknown as GetMessage;
+    expect(message('meta.locale')).toBe('');
+    expect(pluralMessage('isle.retryCount', 3)).toBe('');
+    expect(uiLocale()).toBe('en');
   });
 });

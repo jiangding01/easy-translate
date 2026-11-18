@@ -23,6 +23,17 @@ const createPageRuntime: PageRuntimeFactory = (deps) => {
     getConfig: deps.getConfig,
     watchConfig: deps.watchConfig,
     reportStatus: deps.reportStatus,
+    // Once the extension is reloaded or updated, `browser.i18n` is gone or throws. Probe
+    // it instead of reading `runtime.id`: on-demand modules must not read the extension
+    // id (anti-probing rule, enforced by `check:build`).
+    alive: () => {
+      try {
+        browser.i18n.getUILanguage();
+        return true;
+      } catch {
+        return false;
+      }
+    },
     createReadStyle: () => createStyleReader(window),
     createViewport: createIntersectionViewport,
   });
