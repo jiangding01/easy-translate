@@ -1150,7 +1150,7 @@ fieldset.chips {
   background: var(--host-bg);
   color: var(--host-text);
   box-shadow: inset 0 0 0 1px var(--et-color-border);
-  font-family: Georgia, "Songti SC", serif;
+  font-family: Georgia, serif;
   font-size: 13.5px;
   line-height: 1.55;
   transition:

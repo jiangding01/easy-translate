@@ -47,10 +47,11 @@
   --et-color-scrim: oklch(0.25 0.02 70 / 0.28);
   --et-subtitle-bg: rgba(8, 8, 8, 0.72);
 
-  /* 2.2 Typography */
-  --et-font-sans:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
-    "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  /* 2.2 Typography. No CJK family names: Chrome picks the Han font from the element's
+     `lang` (zh-CN → PingFang SC, zh-TW → PingFang TC, ja → Hiragino; Microsoft YaHei /
+     JhengHei on Windows). A named SC font would draw Traditional and Japanese text with
+     Simplified glyph forms. The isle and card stacks follow the same rule. */
+  --et-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --et-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --et-fw-regular: 400;

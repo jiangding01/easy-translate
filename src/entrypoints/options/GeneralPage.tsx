@@ -62,15 +62,32 @@ const HOST_LABELS = {
   dark: 'options.general.hostDark',
 } as const satisfies Record<(typeof HOSTS)[number], string>;
 
+/**
+ * Sample translations for the style preview: a translation on a web page, not UI copy.
+ * Traditional Chinese when that is the target language, Simplified otherwise.
+ */
+const SAMPLES = {
+  'zh-CN': {
+    short: '少，但更好。', // i18n-ignore: sample translation
+    long: '好的软件也是如此：在你需要之前，它不挡你的路；需要时，它就在那里。', // i18n-ignore: sample translation
+  },
+  'zh-TW': {
+    short: '少，但更好。', // i18n-ignore: sample translation
+    long: '好的軟體也是如此：在你需要之前，它不擋你的路；需要時，它就在那裡。', // i18n-ignore: sample translation
+  },
+} as const;
+
 /** The real `<et-tr>` with the page stylesheet, so the preview cannot drift from the page. */
 function Translation({
   style,
   dark,
+  lang,
   className,
   children,
 }: {
   style: PageStyle;
   dark: boolean;
+  lang: keyof typeof SAMPLES;
   className?: string;
   children: string;
 }) {
@@ -79,7 +96,7 @@ function Translation({
     {
       'data-et-s': style,
       'data-et-host': dark ? 'dark' : undefined,
-      lang: 'zh-CN',
+      lang,
       className,
     },
     children,
@@ -196,6 +213,7 @@ function TranslationSection({
   const dark = host === 'dark';
   const { style, mode, isleDock } = config.page;
   const { showDot } = config.selection;
+  const sampleLang = config.language.target === 'zh-TW' ? 'zh-TW' : 'zh-CN';
 
   useEffect(() => {
     const sheet = injectStyles(document);
@@ -258,9 +276,8 @@ function TranslationSection({
                 </span>
                 <span className={styles.sample} data-host={host}>
                   Less, but better.
-                  <Translation style={item} dark={dark}>
-                    {/* i18n-ignore: a sample translation on a web page, not UI copy */}
-                    少，但更好。
+                  <Translation style={item} dark={dark} lang={sampleLang}>
+                    {SAMPLES[sampleLang].short}
                   </Translation>
                 </span>
               </label>
@@ -269,9 +286,14 @@ function TranslationSection({
           <div className={`${styles.sample} ${styles.preview}`} data-host={host} aria-hidden="true">
             Good software works the same way: it stays out of your way until you need it, then it is
             simply there.
-            <Translation key={style} style={style} dark={dark} className={styles.previewIn}>
-              {/* i18n-ignore: a sample translation on a web page, not UI copy */}
-              好的软件也是如此：在你需要之前，它不挡你的路；需要时，它就在那里。
+            <Translation
+              key={style}
+              style={style}
+              dark={dark}
+              lang={sampleLang}
+              className={styles.previewIn}
+            >
+              {SAMPLES[sampleLang].long}
             </Translation>
           </div>
         </div>

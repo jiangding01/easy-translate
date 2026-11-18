@@ -17,7 +17,7 @@ et-tr[data-et-s="underline"][data-et-s]{text-decoration:underline dotted 1px okl
 et-tr[data-et-s="underline"][data-et-host="dark"]{text-decoration-color:oklch(0.82 0.15 78 / .7)}
 et-tr[data-et-s="highlight"][data-et-s]{background:oklch(0.81 0.15 76 / .18);padding:.1em .25em;border-radius:3px;box-decoration-break:clone;-webkit-box-decoration-break:clone;width:fit-content;max-width:100%}
 et-tr[data-et-s="highlight"][data-et-host="dark"]{background:oklch(0.82 0.15 78 / .22)}
-et-tr[data-et-s][data-et-state="error"]{opacity:1;background:none;text-decoration:none;padding:0;font-family:system-ui,-apple-system,"PingFang SC",sans-serif;font-size:12px;line-height:18px;color:oklch(0.55 0.17 30)}
+et-tr[data-et-s][data-et-state="error"]{opacity:1;background:none;text-decoration:none;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:12px;line-height:18px;color:oklch(0.55 0.17 30)}
 et-tr[data-et-state="error"][data-et-host="dark"]{color:oklch(0.74 0.14 32)}
 et-tr[data-et-state="error"] button{all:unset;cursor:pointer;margin-left:.4em;padding:0 3px;border-radius:4px;text-decoration:underline;text-underline-offset:3px}
 et-tr[data-et-state="error"] button:focus-visible{outline:2px solid currentColor;outline-offset:2px}

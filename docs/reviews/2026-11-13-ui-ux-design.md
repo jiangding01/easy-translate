@@ -70,10 +70,11 @@
 
 **字体栈（不打包任何 Web Font）：**
 ```
---et-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-                "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+--et-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 --et-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 ```
+
+**不写中文字体名**（2026-11-18，i18n 第 6 批修订）：中文字体交给 Chrome 按元素的 `lang` 选（zh-CN → 苹方简 / 微软雅黑，zh-TW → 苹方繁 / 微软正黑体，ja → 冬青黑体）。写死 "PingFang SC" 会让繁体和日文也用简体字形。灵岛、卡片、页内提示的字体栈遵守同一条。
 
 **注入 UI（Shadow DOM）：一律用 px，禁止 rem/em。** 宿主可能把 `html { font-size: 10px }` 或 62.5%，用 rem 会失控。
 
