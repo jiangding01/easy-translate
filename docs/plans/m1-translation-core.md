@@ -140,10 +140,10 @@ providers: {
 - 库 `islet-translate`（改名前为 `easy-translate`），对象仓库 `translations`：`{ key, text, createdAt, lastUsedAt, bytes }`，按 `lastUsedAt` 建索引；另有 `meta` 记录 `totalBytes`。
 - **缓存键** = `'v1:' + sha256(stableJSON({ engine, endpoint, model, source, target, promptDigest, paramsDigest, text }))`。`v1` 是缓存格式版本（借鉴 FluentRead）：以后如果改变了结果判定规则或存储格式，只需升级版本号，旧记录自然不再命中，之后由 TTL 清理。
 - **单条上限 256KB**（借鉴 FluentRead）：超过的译文不写入缓存，防止一条异常的超长记录挤掉大量正常记录。`endpoint` 是归一化后的 baseURL。`paramsDigest` 在 M1 恒为 `''`；M4 加入 temperature 时再赋值。这里**不包含**密钥或 credential scope，因为同一端点、同一模型的译文与密钥无关。
-- TTL 7 天，读取时检查，过期即删除。超过 100 MiB 时按 `lastUsedAt` 从旧到新淘汰，直到降到 80 MiB。阈值用常量，沿用旧版默认值。
+- TTL 7 天，读取时检查，过期即删除；另有后台每天按创建时间清扫一次过期记录（见 `cache-honesty.md`）。超过 100 MiB 时按 `lastUsedAt` 从旧到新淘汰，直到降到 80 MiB。阈值用常量，沿用旧版默认值。
 - 命中后，单次请求结束时批量更新 `lastUsedAt`，不逐条写入。
 - **读取超时 1s**（借鉴旧版 yezi）：IndexedDB 在版本升级被阻塞等情况下可能一直挂着不返回，读取超过 1 秒就当作未命中，继续翻译。
-- **故障降级**：打开数据库或读写失败时，当次请求按无缓存继续，记一条警告（只写错误码），下次请求再尝试打开。
+- **故障降级**：打开数据库或读写失败时，当次请求按无缓存继续，记一条警告（只写错误码），下次请求再尝试打开。清空与统计失败如实报告，其余缓存操作仍降级。
 - 只缓存 `translated` 和 `unchanged`；`same-language` 不缓存。
 - **`totalBytes` 的一致性**：每次 put、delete 和淘汰，都在**同一个 readwrite 事务**里同时修改 `translations` 和 `meta`。IndexedDB 中作用域有重叠的 readwrite 事务会按顺序执行，所以并发写入不会导致统计漂移。
 - 设置页显示条数和总字节数，提供「清空缓存」。

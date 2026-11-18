@@ -54,6 +54,6 @@
 1. 第 1 条单独修复 PR（P1），最先做。状态：已修复（分支 `fix/rescan-protected-areas`，待合并），方案与实施记录见 `docs/plans/rescan-protected-areas.md`。
 2. 第 2 条单独小 PR。状态：已修复（分支 `fix/translation-only-style-restore`，待合并），方案与实施记录见 `docs/plans/translation-only-style-restore.md`。
 3. e2e PR2 增补：编辑区（已随第 1 条修复 PR 提前完成）、样式恢复（已随第 2 条修复 PR 提前完成）、扫描期间插入内容。
-4. 第 7 条、第 5 条各一个小 PR，v0.2.0 之前。第 7 条状态：已修复（分支 `fix/popup-translate-anyway`，待合并），方案与实施记录见 `docs/plans/popup-translate-anyway.md`。
+4. 第 7 条、第 5 条各一个小 PR，v0.2.0 之前。第 7 条状态：已修复（分支 `fix/popup-translate-anyway`，待合并），方案与实施记录见 `docs/plans/popup-translate-anyway.md`。第 5 条状态：已修复（分支 `fix/cache-honesty`，待合并），方案与实施记录见 `docs/plans/cache-honesty.md`。
 5. M3d PR-B：第 4 条，连同配置订阅问题。
 6. M3d：第 3 条固定引擎、第 6 条显示跳过数。

@@ -269,6 +269,7 @@ options:
   cache:
     title: 翻譯快取
     counting: 正在統計…
+    unavailable: 暫時無法讀取快取
     empty: 暫無快取 · 譯文保留 7 天
     # $1：快取的段數（按介面語言格式化），$2：佔用大小。
     summary:

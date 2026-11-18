@@ -1,8 +1,12 @@
 import { type DBSchema, type IDBPDatabase, type IDBPTransaction, openDB } from 'idb';
+import { appError } from '@/lib/errors';
 
 const DB_NAME = 'islet-translate';
 const DB_VERSION = 1;
 const META_TOTAL = 'totalBytes';
+const META_SWEPT = 'sweptAt';
+/** Expired records are swept at most this often. */
+const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export const CACHE_DEFAULTS = {
   ttlMs: 7 * 24 * 60 * 60 * 1000,
@@ -12,6 +16,8 @@ export const CACHE_DEFAULTS = {
   readTimeoutMs: 1000,
   /** Records deleted per eviction transaction; reads can run between batches. */
   evictBatchSize: 500,
+  /** Records scanned per sweep transaction. */
+  sweepBatchSize: 500,
 };
 
 interface CacheRecord {
@@ -42,6 +48,8 @@ export interface TranslationCache {
   put(entries: readonly { key: string; text: string }[]): Promise<void>;
   stats(): Promise<CacheStats>;
   clear(): Promise<void>;
+  /** Deletes records older than the TTL, by createdAt, in small batches. */
+  sweepExpired(): Promise<void>;
 }
 
 export interface CacheOptions {
@@ -53,6 +61,7 @@ export interface CacheOptions {
   maxEntryBytes?: number;
   readTimeoutMs?: number;
   evictBatchSize?: number;
+  sweepBatchSize?: number;
 }
 
 export function openCacheDb(name = DB_NAME): Promise<Db> {
@@ -95,10 +104,12 @@ export function createTranslationCache(options: CacheOptions = {}): TranslationC
   const maxEntryBytes = options.maxEntryBytes ?? CACHE_DEFAULTS.maxEntryBytes;
   const readTimeoutMs = options.readTimeoutMs ?? CACHE_DEFAULTS.readTimeoutMs;
   const evictBatchSize = options.evictBatchSize ?? CACHE_DEFAULTS.evictBatchSize;
+  const sweepBatchSize = options.sweepBatchSize ?? CACHE_DEFAULTS.sweepBatchSize;
 
   let dbPromise: Promise<Db> | undefined;
   let evicting: Promise<void> | undefined;
   let evictAgain = false;
+  let sweepChecked = false;
 
   function getDb(): Promise<Db> {
     if (!dbPromise) {
@@ -118,12 +129,11 @@ export function createTranslationCache(options: CacheOptions = {}): TranslationC
     return dbPromise;
   }
 
-  /** Runs a store operation; on failure logs the error name only and returns the fallback. */
-  async function guarded<T>(task: (db: Db) => Promise<T>, fallback: T): Promise<T> {
+  /** Runs a store operation; on failure drops the connection (it reopens next call) and rethrows. */
+  async function run<T>(task: (db: Db) => Promise<T>): Promise<T> {
     try {
       return await task(await getDb());
     } catch (error) {
-      console.warn('[cache] unavailable', errorName(error));
       // Close the connection being dropped, so failures do not pile up open ones.
       const stale = dbPromise;
       dbPromise = undefined;
@@ -131,7 +141,27 @@ export function createTranslationCache(options: CacheOptions = {}): TranslationC
         (db) => db.close(),
         () => undefined,
       );
+      throw error;
+    }
+  }
+
+  /** Like `run`, but a failure only logs the error name and returns the fallback. */
+  async function guarded<T>(task: (db: Db) => Promise<T>, fallback: T): Promise<T> {
+    try {
+      return await run(task);
+    } catch (error) {
+      console.warn('[cache] unavailable', errorName(error));
       return fallback;
+    }
+  }
+
+  /** For operations the user asked for: a failure is reported, not hidden. */
+  async function reported<T>(task: (db: Db) => Promise<T>): Promise<T> {
+    try {
+      return await run(task);
+    } catch (error) {
+      console.warn('[cache] unavailable', errorName(error));
+      throw appError('internal', 'internal/cache-unavailable', 'Cache unavailable');
     }
   }
 
@@ -217,6 +247,68 @@ export function createTranslationCache(options: CacheOptions = {}): TranslationC
     return run;
   }
 
+  /**
+   * One sweep transaction: scans up to `sweepBatchSize` records after `after`
+   * (primary-key order), deletes the expired ones and updates the byte total in
+   * the same transaction. The last batch also records `sweptAt`, so an
+   * interrupted sweep is simply retried.
+   */
+  async function sweepBatch(
+    db: Db,
+    cutoff: number,
+    stamp: number,
+    after: string | undefined,
+  ): Promise<{ last: string | undefined; done: boolean }> {
+    const tx = db.transaction(['translations', 'meta'], 'readwrite');
+    const meta = tx.objectStore('meta');
+    let cursor = await tx
+      .objectStore('translations')
+      .openCursor(after === undefined ? undefined : IDBKeyRange.lowerBound(after, true));
+    let scanned = 0;
+    let freed = 0;
+    let last = after;
+    while (cursor && scanned < sweepBatchSize) {
+      scanned += 1;
+      last = cursor.key;
+      if (cursor.value.createdAt < cutoff) {
+        freed += cursor.value.bytes;
+        await cursor.delete();
+      }
+      cursor = await cursor.continue();
+    }
+    const done = scanned < sweepBatchSize;
+    if (freed > 0) {
+      const total = (await meta.get(META_TOTAL)) ?? 0;
+      await meta.put(Math.max(0, total - freed), META_TOTAL);
+    }
+    if (done) await meta.put(stamp, META_SWEPT);
+    await tx.done;
+    return { last, done };
+  }
+
+  /** Sweeps the whole table batch by batch; throws on failure. */
+  async function sweepAll(db: Db): Promise<void> {
+    const stamp = now();
+    const cutoff = stamp - ttlMs;
+    let after: string | undefined;
+    for (;;) {
+      const { last, done } = await sweepBatch(db, cutoff, stamp, after);
+      if (done) return;
+      after = last;
+      await yieldToOthers();
+    }
+  }
+
+  /** Sweeps unless the last completed sweep is under a day old (a future stamp counts as due). */
+  function sweepIfDue(): Promise<void> {
+    return guarded(async (db) => {
+      const swept = await db.get('meta', META_SWEPT);
+      const time = now();
+      if (swept !== undefined && swept <= time && time - swept < SWEEP_INTERVAL_MS) return;
+      await sweepAll(db);
+    }, undefined);
+  }
+
   return {
     async getMany(keys) {
       if (keys.length === 0) return new Map();
@@ -287,30 +379,34 @@ export function createTranslationCache(options: CacheOptions = {}): TranslationC
         }
         // Evict least recently used down to the low-water mark, outside the write.
         if (total > maxBytes) await evict();
+        // Once per service worker lifetime, check whether expired records are due for a sweep.
+        if (!sweepChecked) {
+          sweepChecked = true;
+          await sweepIfDue();
+        }
       }, undefined);
     },
 
     stats() {
-      return guarded(
-        async (db) => {
-          const tx = db.transaction(['translations', 'meta'], 'readonly');
-          const [count, totalBytes] = await Promise.all([
-            tx.objectStore('translations').count(),
-            tx.objectStore('meta').get(META_TOTAL),
-          ]);
-          await tx.done;
-          return { count, totalBytes: totalBytes ?? 0 };
-        },
-        { count: 0, totalBytes: 0 },
-      );
+      return reported(async (db) => {
+        const tx = db.transaction(['translations', 'meta'], 'readonly');
+        const [count, totalBytes] = await Promise.all([
+          tx.objectStore('translations').count(),
+          tx.objectStore('meta').get(META_TOTAL),
+        ]);
+        await tx.done;
+        return { count, totalBytes: totalBytes ?? 0 };
+      });
     },
 
+    sweepExpired: sweepIfDue,
+
     clear() {
-      return guarded(async (db) => {
+      return reported(async (db) => {
         const tx = db.transaction(['translations', 'meta'], 'readwrite');
         await Promise.all([tx.objectStore('translations').clear(), tx.objectStore('meta').clear()]);
         await tx.done;
-      }, undefined);
+      });
     },
   };
 }
