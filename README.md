@@ -62,7 +62,13 @@ Islet Translate is at version `0.1.0`. M0 (foundation), M1 (translation core), M
 
 ## 🚀 Install
 
-Islet Translate is not in a web store yet. There are two ways to install it.
+Islet Translate is not in a web store yet. There are three ways to install it.
+
+**From a GitHub Release**
+
+1. Open the [Releases](https://github.com/jiangding01/islet-translate/releases) page and download `islet-translate-<version>-chrome.zip` (for example `islet-translate-0.2.0-chrome.zip`) from the latest release.
+2. Unzip it, open `chrome://extensions`, turn on Developer mode, and choose **Load unpacked**, then select the unzipped folder.
+3. Optional: each release also has a `.sha256` file. Run `sha256sum -c islet-translate-<version>-chrome.zip.sha256` next to the zip (on macOS, `shasum -a 256 -c`) to check the download.
 
 **From a CI build**
 
@@ -338,7 +344,7 @@ Unit tests sit next to the source they cover and are named `*.test.ts`.
 | ✅ Done | Bilingual README |
 | ✅ Done | Rename to Islet Translate (译屿) |
 | ✅ Done | Smoke end-to-end tests (PR 1, PR 2 and the extension-reload case all merged) |
-| 🔨 Next | v0.2.0 as a GitHub Release |
+| ✅ Done | v0.2.0 as a GitHub Release |
 | Later | M3d dynamic pages and site rules |
 | Later | M3b paragraph-level interaction |
 | Later | M3c command palette and keyboard control of the control bar |

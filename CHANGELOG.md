@@ -6,6 +6,18 @@
 
 ## [未发布]
 
+## [0.2.0] - 2026-11-18
+
+### 本版要点
+- 新增繁体中文（台湾）界面，扩展改名为「译屿 / Islet Translate」，图标随之更新。
+- 选中单个英文单词时，划词卡片显示英式和美式音标，点喇叭即可朗读。
+- 整页翻译更稳：输入框和不该翻译的区域不会被翻译，退出「仅看译文」后网页原有样式得以保留，扩展更新后已打开的页面不再报错。
+- 段落等译文时，段末会出现一个小圆点；失败后点「重试」，圆点立刻显示。
+- 在已经是目标语言的页面上，工具栏面板仍可点「仍然翻译」。
+- 翻译缓存每天自动清理超过 7 天的译文，清空缓存失败时会如实提示。
+- 引擎列表和设置页里，各翻译服务显示对应的供应商图标。
+- 朗读不再因连点而卡死，迟迟不开始时会自动换用本机语音。
+
 ### 新增
 - 整页翻译：段落等待译文超过约 0.6 秒时，段末显示一个小圆点，译文到达后换成译文；翻译很快的段落不会出现。失败后点「重试」，原位立即显示圆点，不再留空白。开启「减少动态效果」时圆点静止。方案与实施记录见 `docs/plans/paragraph-loading.md`。
 - DOM 约定补充（兼容）：`et-tr[data-et-state]` 新增 `loading`（加载点，无文字、`aria-hidden`）。按「删掉所有 `data-et-state` 的 `et-tr`」导出的做法无需改动。见 `docs/dom-contract.md`。
@@ -174,5 +186,6 @@
 ### 文档
 - 2026-11-12：整理分模块技术方案 `docs/design/00–15`，把前期逆向研究资料归档。
 
-[未发布]: https://github.com/jiangding01/islet-translate/compare/7a03dbf...HEAD
+[未发布]: https://github.com/jiangding01/islet-translate/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jiangding01/islet-translate/compare/51cdccd...v0.2.0
 [0.1.0]: https://github.com/jiangding01/islet-translate/commit/51cdccd

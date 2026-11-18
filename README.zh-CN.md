@@ -62,7 +62,13 @@
 
 ## 🚀 安装
 
-译屿尚未上架商店，有两种安装方式。
+译屿尚未上架商店，有三种安装方式。
+
+**从 GitHub Release 下载**
+
+1. 打开 [Releases](https://github.com/jiangding01/islet-translate/releases) 页面，在最新版本里下载 `islet-translate-<版本号>-chrome.zip`（例如 `islet-translate-0.2.0-chrome.zip`）。
+2. 解压后打开 `chrome://extensions`，启用「开发者模式」，点击「加载已解压的扩展程序」，选择解压出的文件夹。
+3. 可选：每个版本还附带一个 `.sha256` 文件。在 zip 所在目录运行 `sha256sum -c islet-translate-<版本号>-chrome.zip.sha256`（macOS 用 `shasum -a 256 -c`）即可校验下载。
 
 **从 CI 构建产物安装**
 
@@ -338,7 +344,7 @@ node scripts/screenshots/shoot.mjs --ui zh_CN --article en
 | ✅ 已完成 | 双语 README |
 | ✅ 已完成 | 改名「译屿 / Islet Translate」 |
 | ✅ 已完成 | 冒烟 e2e（PR1、PR2 与扩展重载用例均已合并） |
-| 🔨 下一步 | v0.2.0（GitHub Release） |
+| ✅ 已完成 | v0.2.0（GitHub Release） |
 | 之后 | M3d 动态页与站点规则 |
 | 之后 | M3b 段落级交互 |
 | 之后 | M3c 指令台与控制条键盘操作 |
