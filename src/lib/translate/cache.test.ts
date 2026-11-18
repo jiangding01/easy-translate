@@ -90,7 +90,7 @@ describe('translation cache', () => {
     });
     await cache.put([{ key: 'a', text: 'A' }]);
     expect((await cache.getMany(['a'])).size).toBe(0);
-    expect(await cache.stats()).toEqual({ count: 0, totalBytes: 0 });
+    await expect(cache.stats()).rejects.toMatchObject({ code: 'internal/cache-unavailable' });
     expect(console.warn).toHaveBeenCalled();
     fail = false;
     await cache.put([{ key: 'a', text: 'A' }]);
@@ -135,6 +135,9 @@ function instrumented(name: string) {
     opened: 0,
     closed: 0,
     failNext: undefined as string | undefined,
+    /** Which transactions failNext hits, and how many matching ones to let through first. */
+    failMode: 'readwrite' as 'readwrite' | 'readonly',
+    failSkip: 0,
     onReadwrite: undefined as ((done: Promise<void>) => void) | undefined,
   };
   const open = async () => {
@@ -151,9 +154,14 @@ function instrumented(name: string) {
         if (prop === 'transaction') {
           return (...args: Parameters<typeof target.transaction>) => {
             const failure = state.failNext;
-            if (failure && args[2] === undefined && args[1] === 'readwrite') {
-              state.failNext = undefined;
-              throw new DOMException('injected', failure);
+            const mode = args[1] ?? 'readonly';
+            if (failure && args[2] === undefined && mode === state.failMode) {
+              if (state.failSkip > 0) {
+                state.failSkip -= 1;
+              } else {
+                state.failNext = undefined;
+                throw new DOMException('injected', failure);
+              }
             }
             const tx = target.transaction(...args);
             if (args[1] === 'readwrite') state.onReadwrite?.(tx.done);
@@ -268,4 +276,194 @@ describe('translation cache: hardening', () => {
     expect(state.opened - state.closed).toBe(1);
     expect((await cache.getMany(['ok4'])).get('ok4')).toBe('x');
   });
+});
+
+// ------------------------------------------------------------ sweep and honest errors
+
+const DAY = 24 * 60 * 60 * 1000;
+
+/** Writes through a throwaway instance so the cache under test has not yet had its first put. */
+async function seed(name: string, time: number, entries: { key: string; text: string }[]) {
+  const seeder = createTranslationCache({ open: open(name), now: () => time, ttlMs: 100 * DAY });
+  await seeder.put(entries);
+  const db = await openCacheDb(name);
+  await db.delete('meta', 'sweptAt'); // the seeding put swept once; start without a record of it
+  db.close();
+}
+
+/** Writes records straight into the database (bytes = key + text), with no sweep record. */
+async function writeRecords(
+  name: string,
+  records: { key: string; text: string; createdAt: number; lastUsedAt?: number }[],
+) {
+  const db = await openCacheDb(name);
+  let total = 0;
+  for (const record of records) {
+    const bytes = record.key.length + record.text.length;
+    total += bytes;
+    await db.put('translations', {
+      ...record,
+      lastUsedAt: record.lastUsedAt ?? record.createdAt,
+      bytes,
+    });
+  }
+  await db.put('meta', total, 'totalBytes');
+  db.close();
+}
+
+describe('translation cache: expired sweep', () => {
+  it('deletes cold expired records and keeps fresh ones', async () => {
+    const { name, cache } = setup({ now: () => 1_000, ttlMs: 100 });
+    await writeRecords(name, [
+      { key: 'cold', text: 'C', createdAt: 890 },
+      { key: 'fresh', text: 'F', createdAt: 980 },
+    ]);
+    await cache.sweepExpired();
+    expect(await cache.stats()).toEqual({ count: 1, totalBytes: 'fresh'.length + 1 });
+    expect((await cache.getMany(['fresh'])).get('fresh')).toBe('F');
+  });
+
+  it('judges by createdAt: a record read once and never again still goes at 7 days', async () => {
+    const { name, cache } = setup({ now: () => 1_000, ttlMs: 100 });
+    // Created 101 ago, last used 41 ago.
+    await writeRecords(name, [{ key: 'a', text: 'A', createdAt: 899, lastUsedAt: 959 }]);
+    await cache.sweepExpired();
+    expect(await cache.stats()).toEqual({ count: 0, totalBytes: 0 });
+  });
+
+  it('leaves meta.totalBytes equal to the remaining records after a sweep', async () => {
+    const { name, cache } = setup({ now: () => 1_000, ttlMs: 100 });
+    await writeRecords(name, [
+      { key: 'a', text: 'AAAA', createdAt: 880 },
+      { key: 'b', text: 'BB', createdAt: 940 },
+      { key: 'c', text: 'CCC', createdAt: 1_000 },
+    ]);
+    await cache.sweepExpired();
+    expect(await cache.stats()).toEqual({ count: 2, totalBytes: 1 + 2 + 1 + 3 });
+  });
+
+  it('finishes tables larger than one batch', async () => {
+    const name = `test-${dbName++}`;
+    await seed(
+      name,
+      1,
+      Array.from({ length: 1300 }, (_, i) => ({
+        key: `k${String(i).padStart(4, '0')}`,
+        text: 'x',
+      })),
+    );
+    const { state, open: openDb } = instrumented(name);
+    const cache = createTranslationCache({
+      open: openDb,
+      now: () => 1 + 100 * DAY + 1,
+      ttlMs: 100 * DAY,
+      readTimeoutMs: 60_000,
+    });
+    let writes = 0;
+    state.onReadwrite = () => {
+      writes += 1;
+    };
+    await cache.sweepExpired();
+    expect(await cache.stats()).toEqual({ count: 0, totalBytes: 0 });
+    expect(writes).toBe(3); // 500 + 500 + 300
+  });
+
+  it('does not sweep again within 24 hours', async () => {
+    let time = 1_000;
+    const { name, cache } = setup({ now: () => time, ttlMs: 100 });
+    await writeRecords(name, [{ key: 'old', text: 'O', createdAt: 0 }]);
+    await cache.sweepExpired(); // old is swept, sweptAt = 1000
+    await writeRecords(name, [{ key: 'cold', text: 'C', createdAt: 0 }]);
+    time += 150; // cold is expired, but the last sweep was 150 ms ago
+    await cache.sweepExpired();
+    expect((await cache.stats()).count).toBe(1);
+    time += DAY;
+    await cache.sweepExpired();
+    expect((await cache.stats()).count).toBe(0);
+  });
+
+  it('treats a sweptAt in the future as due', async () => {
+    const { name, cache } = setup({ now: () => 10 * DAY, ttlMs: 100 });
+    await writeRecords(name, [{ key: 'cold', text: 'C', createdAt: 0 }]);
+    const db = await openCacheDb(name);
+    await db.put('meta', 10 * DAY + 5 * DAY, 'sweptAt'); // the clock went back
+    db.close();
+    await cache.sweepExpired();
+    expect(await cache.stats()).toEqual({ count: 0, totalBytes: 0 });
+  });
+
+  it('does not write sweptAt when the sweep fails midway', async () => {
+    const name = `test-${dbName++}`;
+    await seed(
+      name,
+      1,
+      Array.from({ length: 700 }, (_, i) => ({ key: `k${String(i).padStart(4, '0')}`, text: 'x' })),
+    );
+    const { state, open: openDb } = instrumented(name);
+    const time = 1 + 100 * DAY + 1;
+    const cache = createTranslationCache({
+      open: openDb,
+      now: () => time,
+      ttlMs: 100 * DAY,
+      readTimeoutMs: 60_000,
+    });
+    state.failNext = 'InvalidStateError';
+    state.failSkip = 1; // first batch goes through, second fails
+    await cache.sweepExpired();
+    expect(state.failNext).toBeUndefined();
+    const db = await openCacheDb(name);
+    expect(await db.get('meta', 'sweptAt')).toBeUndefined();
+    expect(await db.count('translations')).toBe(200);
+    db.close();
+    await cache.sweepExpired(); // retried, not throttled
+    expect((await cache.stats()).count).toBe(0);
+  });
+
+  it('first sweeps after the first put of the lifetime; reads never trigger it', async () => {
+    const name = `test-${dbName++}`;
+    await seed(name, 1, [{ key: 'cold', text: 'C' }]);
+    const time = 1 + 100 * DAY + 1;
+    const cache = createTranslationCache({ open: open(name), now: () => time, ttlMs: 100 * DAY });
+    await cache.getMany(['other']);
+    await cache.touch(['cold']);
+    const check = await openCacheDb(name);
+    expect(await check.count('translations')).toBe(1);
+    await cache.put([{ key: 'fresh', text: 'F' }]);
+    expect(await check.count('translations')).toBe(1); // cold swept, fresh added
+    expect(await check.get('translations', 'cold')).toBeUndefined();
+    expect(await check.get('meta', 'sweptAt')).toBe(time);
+    check.close();
+  });
+});
+
+describe('translation cache: clear and stats report failures', () => {
+  for (const method of ['clear', 'stats'] as const) {
+    it(`${method} throws when opening fails, then recovers`, async () => {
+      const name = `test-${dbName++}`;
+      let fail = true;
+      const cache = createTranslationCache({
+        open: () => (fail ? Promise.reject(new Error('blocked')) : openCacheDb(name)),
+      });
+      await expect(cache[method]()).rejects.toMatchObject({
+        kind: 'internal',
+        code: 'internal/cache-unavailable',
+      });
+      fail = false;
+      await expect(cache[method]()).resolves.not.toThrow();
+    });
+
+    it(`${method} throws when the transaction fails, drops the connection and recovers`, async () => {
+      const { state, open: openDb } = instrumented(`test-${dbName++}`);
+      const cache = createTranslationCache({ open: openDb });
+      await cache.put([{ key: 'a', text: 'A' }]);
+      state.failMode = method === 'clear' ? 'readwrite' : 'readonly';
+      state.failNext = 'InvalidStateError';
+      await expect(cache[method]()).rejects.toMatchObject({ code: 'internal/cache-unavailable' });
+      await cache[method]();
+      expect(state.opened - state.closed).toBe(1);
+      expect(await cache.stats()).toEqual(
+        method === 'clear' ? { count: 0, totalBytes: 0 } : { count: 1, totalBytes: 2 },
+      );
+    });
+  }
 });

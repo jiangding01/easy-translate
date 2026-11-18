@@ -193,6 +193,21 @@ describe('cache', () => {
     expect(await handlers['cache.clear'](options)).toEqual({ ok: true, data: null });
     expect(cache.clear).toHaveBeenCalledOnce();
   });
+
+  it('reports a failing cache instead of success', async () => {
+    const { handlers, cache } = setup();
+    const down = appError('internal', 'internal/cache-unavailable', 'Cache unavailable');
+    cache.stats.mockRejectedValueOnce(down);
+    cache.clear.mockRejectedValueOnce(down);
+    expect(await handlers['cache.stats'](options)).toMatchObject({
+      ok: false,
+      error: { code: 'internal/cache-unavailable' },
+    });
+    expect(await handlers['cache.clear'](options)).toMatchObject({
+      ok: false,
+      error: { code: 'internal/cache-unavailable' },
+    });
+  });
 });
 
 describe('provider.test', () => {

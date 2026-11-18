@@ -20,6 +20,12 @@ describe('cacheSummary', () => {
     );
   });
 
+  it('says the cache cannot be read when the stats failed', async () => {
+    expect(cacheSummary('failed')).toBe('暂时无法读取缓存');
+    await useEnglish();
+    expect(cacheSummary('failed')).toBe("Couldn't read the cache");
+  });
+
   it('keeps the zh copy unchanged', () => {
     expect(cacheSummary({ count: 1, totalBytes: 512 })).toBe('1 段译文 · 512 B · 保留 7 天');
     expect(cacheSummary({ count: 1234, totalBytes: 2048 })).toBe(

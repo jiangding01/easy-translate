@@ -117,6 +117,7 @@ describe('translate port host', () => {
         put: async () => {},
         stats: async () => ({ count: 0, totalBytes: 0 }),
         clear: async () => {},
+        sweepExpired: async () => {},
       },
       getAdapter: () => adapter,
       detectLanguage: null,

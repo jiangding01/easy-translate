@@ -276,6 +276,7 @@ options:
   cache:
     title: Translation cache
     counting: Counting…
+    unavailable: Couldn't read the cache
     empty: No cache yet · translations are kept 7 days
     # $1: the number of cached translations (formatted for the UI language), $2: their size.
     summary:

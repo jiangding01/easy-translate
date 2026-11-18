@@ -13,7 +13,8 @@ export function formatBytes(bytes: number): string {
 }
 
 /** The one-line cache summary under the section title; copy follows the UI language. */
-export function cacheSummary(stats: CacheStatsInfo): string {
+export function cacheSummary(stats: CacheStatsInfo | 'failed'): string {
+  if (stats === 'failed') return i18n.t('options.cache.unavailable');
   if (stats.count === 0) return i18n.t('options.cache.empty');
   return i18n.t('options.cache.summary', stats.count, [
     stats.count.toLocaleString(uiLocale()),
@@ -23,13 +24,13 @@ export function cacheSummary(stats: CacheStatsInfo): string {
 
 export function CacheSection() {
   const notice = useNotice();
-  const [stats, setStats] = useState<CacheStatsInfo>();
+  const [stats, setStats] = useState<CacheStatsInfo | 'failed'>();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let live = true;
-    void admin.cacheStats().then((result) => live && result.ok && setStats(result.data));
+    void admin.cacheStats().then((result) => live && setStats(result.ok ? result.data : 'failed'));
     return () => {
       live = false;
     };
@@ -83,7 +84,7 @@ export function CacheSection() {
           type="button"
           className={styles.ghostSmall}
           onClick={() => setConfirming(true)}
-          disabled={stats?.count === 0}
+          disabled={typeof stats === 'object' && stats.count === 0}
         >
           {i18n.t('options.cache.clear')}
         </button>

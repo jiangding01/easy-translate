@@ -269,6 +269,7 @@ options:
   cache:
     title: 翻译缓存
     counting: 正在统计…
+    unavailable: 暂时无法读取缓存
     empty: 暂无缓存 · 译文保留 7 天
     # $1：缓存的段数（按界面语言格式化），$2：占用大小。
     summary:
