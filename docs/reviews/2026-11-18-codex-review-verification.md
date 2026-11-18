@@ -30,7 +30,7 @@
 | 4 | 初扫与监听之间有空窗 | 已排期 | `session.ts:659` 到 `:666` 仍先扫后监听 | P2 | M3d PR-B；e2e PR2 第 19 条加「扫描期间插入内容」 |
 | 5 | 缓存「保留 7 天」与实际不符、清空失败仍提示成功 | 部分属实 | `cache.ts:164` 过期只在读到时删；clear 被 guarded 包住，失败返回默认值（`:308`） | P3 | 小 PR：SW 启动按 lastUsedAt 清扫过期；clear 失败抛错 |
 | 6 | 超过 5000 字的段落无提示跳过 | 属实 | `text.ts:15,25` | P3 | M3d 之后：先计入「跳过」并显示，再考虑按句切分 |
-| 7 | html lang 挡住手动翻译 | 属实 | `panel-state.ts:23` lang 等于目标语言时，`App.tsx:186` 隐藏「翻译此页」与目标语言 | P3（快捷键、灵岛仍可用） | 小 PR：保留「仍然翻译」按钮与目标语言（新增文案需用户确认） |
+| 7 | html lang 挡住手动翻译 | 属实 | `panel-state.ts:23` lang 等于目标语言时，`App.tsx:186` 隐藏「翻译此页」与目标语言 | P3（快捷键与页面右键菜单仍可用，灵岛要在翻译开始后才出现，不是入口） | 小 PR：保留「仍然翻译」按钮与目标语言（新增文案需用户确认） |
 
 ## 从零设计 5 条的采纳判断
 
@@ -54,6 +54,6 @@
 1. 第 1 条单独修复 PR（P1），最先做。状态：已修复（分支 `fix/rescan-protected-areas`，待合并），方案与实施记录见 `docs/plans/rescan-protected-areas.md`。
 2. 第 2 条单独小 PR。状态：已修复（分支 `fix/translation-only-style-restore`，待合并），方案与实施记录见 `docs/plans/translation-only-style-restore.md`。
 3. e2e PR2 增补：编辑区（已随第 1 条修复 PR 提前完成）、样式恢复（已随第 2 条修复 PR 提前完成）、扫描期间插入内容。
-4. 第 7 条、第 5 条各一个小 PR，v0.2.0 之前。
+4. 第 7 条、第 5 条各一个小 PR，v0.2.0 之前。第 7 条状态：已修复（分支 `fix/popup-translate-anyway`，待合并），方案与实施记录见 `docs/plans/popup-translate-anyway.md`。
 5. M3d PR-B：第 4 条，连同配置订阅问题。
 6. M3d：第 3 条固定引擎、第 6 条显示跳过数。
