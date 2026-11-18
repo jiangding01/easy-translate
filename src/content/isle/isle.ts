@@ -1245,6 +1245,17 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
     else close();
   };
   const onResize = () => {
+    // The shell and the content are placed in viewport pixels: redrawn only after the
+    // settle, a window dragged wider showed a dark bar from the old dot to the new edge
+    // and a narrower one clipped the dot away. Glue to the new edge on every event (no
+    // layout beyond the viewport size); stepping around widgets waits for the settle.
+    if (els && mount !== 'none') {
+      hideTip();
+      viewport = readViewport();
+      const offset = clampOffset(placed.offset, reservedLength(shapes), dock, viewport);
+      setPlace({ ...placed, offset }, true);
+      draw();
+    }
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       if (!els || mount === 'none') return;
