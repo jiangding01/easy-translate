@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultConfig } from '@/lib/config/defaults';
 import { BUILTIN_ENGINES, type ConfigV1 } from '@/lib/config/types';
-import { NOT_READY_TEXT } from '@/lib/engine-view';
+import { notReadyText } from '@/lib/engine-view';
 import { PROVIDER_ICONS } from '@/lib/provider-icons';
-import { buildEngineOptions, UNNAMED_CUSTOM_NAME } from './engine-options';
+import { buildEngineOptions } from './engine-options';
 
 const keyed = { configured: true, last4: 'wxyz' };
 
@@ -46,8 +46,8 @@ describe('buildEngineOptions', () => {
     const byId = Object.fromEntries(result.options.map((option) => [option.id, option]));
     expect(byId.google?.ready).toBe(true);
     expect(byId.openai?.ready).toBe(true);
-    expect(byId.deepseek).toMatchObject({ ready: false, note: NOT_READY_TEXT['needs-key'] });
-    expect(byId.gemini).toMatchObject({ ready: false, note: NOT_READY_TEXT['needs-key'] });
+    expect(byId.deepseek).toMatchObject({ ready: false, note: notReadyText('needs-key') });
+    expect(byId.gemini).toMatchObject({ ready: false, note: notReadyText('needs-key') });
   });
 
   it('reports a missing model', async () => {
@@ -60,7 +60,7 @@ describe('buildEngineOptions', () => {
     });
     expect(result.options.find((option) => option.id === 'gemini')).toMatchObject({
       ready: false,
-      note: NOT_READY_TEXT['needs-model'],
+      note: notReadyText('needs-model'),
     });
   });
 
@@ -91,11 +91,11 @@ describe('buildEngineOptions', () => {
     expect(byId['custom-aaaaaaaa']?.ready).toBe(true);
     expect(byId['custom-bbbbbbbb']).toMatchObject({
       ready: false,
-      note: NOT_READY_TEXT['needs-grant'],
+      note: notReadyText('needs-grant'),
     });
     expect(byId['custom-cccccccc']).toMatchObject({
       ready: false,
-      note: NOT_READY_TEXT['bad-url'],
+      note: notReadyText('bad-url'),
     });
   });
 
@@ -126,8 +126,8 @@ describe('buildEngineOptions', () => {
     expect(custom.map((option) => [option.name, option.short])).toEqual([
       ['本地模型', '本地'],
       ['Ollama', 'Ol'],
-      [UNNAMED_CUSTOM_NAME, '自'],
-      [UNNAMED_CUSTOM_NAME, '自'],
+      ['自定义服务', '自'],
+      ['自定义服务', '自'],
       ['👨‍👩‍👧x', '👨‍👩‍👧x'],
     ]);
   });

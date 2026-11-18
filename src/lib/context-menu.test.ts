@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
+import { createGetMessage, loadLocales } from '../../scripts/i18n-messages.mjs';
 import {
   createMenuHandlers,
   MENU_PAGE_ID,
@@ -164,5 +166,23 @@ describe('commands', () => {
     await flush();
     process.off('unhandledRejection', unhandled);
     expect(unhandled).not.toHaveBeenCalled();
+  });
+});
+
+/** Switches the getMessage stub to the en copy (vitest.setup puts zh_CN back before each test). */
+async function useEnglish() {
+  const getMessage = createGetMessage(await loadLocales(), 'en');
+  fakeBrowser.i18n.getMessage = getMessage as typeof fakeBrowser.i18n.getMessage;
+}
+
+describe('context menu copy', () => {
+  it('uses the shortcut descriptions of the current UI language', async () => {
+    await useEnglish();
+    const { api, created } = fakeApi();
+    await rebuildContextMenus(api);
+    expect(created).toMatchObject([
+      { title: 'Translate selected text' },
+      { title: 'Translate this page / Show original' },
+    ]);
   });
 });

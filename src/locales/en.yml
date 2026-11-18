@@ -15,3 +15,69 @@ manifest:
   commands:
     translatePage: Translate this page / Show original
     translateSelection: Translate selected text
+
+# Error copy (the code → key table in src/lib/error-messages.ts; the content side,
+# src/content/error-text.ts, reuses three of them). Pattern: what happened + what to do.
+errors:
+  generic: Something went wrong. Try again.
+  config:
+    newerVersion: These settings were saved by a newer version of the extension. Update the extension to change them.
+    writeFailed: Couldn't save. Try again.
+    readFailed: Couldn't load settings. Refresh and try again.
+    invalidBaseUrl: Invalid API URL. Use an https address, or http://localhost for a local model.
+    modelRequired: No model entered. Enter a model name and try again.
+    permissionMissing: The extension doesn't have access to this API URL yet. Click "Grant access" in Settings, then try again.
+    providerLimit: You can add up to 10 custom services. Delete one you don't use, then try again.
+    providerMissing: Couldn't find this custom service. It may have been deleted. Choose a default engine again in Settings.
+    invalidValue: Invalid value, so it wasn't saved. Check it and try again.
+  network:
+    extensionUnreachable: Can't connect to the extension. Reload the extension and try again.
+    pageUnreachable: Can't connect to this page. Refresh it and try again. The extension doesn't work on restricted pages such as the Chrome Web Store.
+    fetchFailed: Can't reach the translation service. Check your connection and try again.
+    timeout: The translation service took too long to respond. Check your connection and try again.
+    streamInterrupted: The connection was lost during translation. Try again.
+  validation:
+    payloadTooLarge: Too much text in one request. Translate a smaller part and try again.
+    emptyTranslation: The translation service returned an empty result. Try again, or switch to another service.
+    invalidPayload: The request was invalid. Refresh the page and try again.
+    forbiddenSender: This can only be done in Settings. Open Settings and try again.
+    invalidSecret: "Invalid API key: use only letters, numbers and symbols, with no spaces and at most 512 characters. Copy the key again and paste it."
+    badResponse: Couldn't read the translation service's response. Try again, or switch to another service.
+    unsupportedPage: Open the extension on a regular HTTP or HTTPS web page.
+  provider:
+    unauthorized: The API key is invalid or doesn't have access. Check the key and try again.
+    localOriginRejected: The local service blocked the extension's request. For Ollama, set the OLLAMA_ORIGINS environment variable to chrome-extension://*, then quit Ollama completely and reopen it.
+    notFound: The API URL or model doesn't exist. Check both and try again.
+    quotaExceeded: This service's quota has run out. Add credit, or switch to another service.
+    serverError: The translation service is having problems. Try again later, or switch to another service.
+    outputTruncated: The translation exceeded the model's output limit and was cut off. Translate a smaller part, or switch to another model.
+    contentBlocked: The translation service's safety filter blocked this content, so it can't be translated.
+    badRequest: The translation service rejected the request. Check settings such as the model name, then try again.
+  rateLimit:
+    tooManyRequests: The service is rate limiting requests. Wait a moment and try again.
+    portBusy: Too many translations are running on this page. Wait a moment and try again.
+
+# Engine names and readiness (src/lib/engine-view.ts, src/lib/translate/engine-options.ts).
+engine:
+  googleName: Google Translate
+  # A nameless custom service in Settings and the panel (its host is shown when it has one).
+  unnamed: Unnamed service
+  # A nameless custom service in the page isle (never falls back to the host).
+  customFallback: Custom service
+  # One-line problem under a row; the status labels below are the short forms.
+  notReady:
+    badUrl: The API URL is invalid
+    needsGrant: No access to this API URL yet
+    needsKey: No API key yet
+    needsModel: No model yet
+  status:
+    free: Free
+    # $1: the key's last 4 characters.
+    keySuffix: Key ••••$1
+    keyConfigured: Key saved
+    badUrl: Invalid URL
+    needsGrant: Needs access
+    noKey: No key
+    notConfigured: Not set up
+    noModel: No model
+    unsaved: Not saved

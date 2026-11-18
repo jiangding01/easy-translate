@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { describeError } from '@/lib/error-messages';
 import { appError } from '@/lib/errors';
+import { createGetMessage, loadLocales } from '../../scripts/i18n-messages.mjs';
 import { errorText } from './error-text';
 
 describe('errorText', () => {
@@ -36,5 +38,23 @@ describe('errorText', () => {
       userMessage: '后台文案',
     };
     expect(errorText(error)).toBe('后台文案');
+  });
+});
+
+/** Switches the getMessage stub to the en copy (vitest.setup puts zh_CN back before each test). */
+async function useEnglish() {
+  const getMessage = createGetMessage(await loadLocales(), 'en');
+  fakeBrowser.i18n.getMessage = getMessage as typeof fakeBrowser.i18n.getMessage;
+}
+
+describe('errorText in English', () => {
+  it('looks up its local errors and fallback in the current UI language', async () => {
+    await useEnglish();
+    expect(errorText(appError('validation', 'validation/bad-response', 'x'))).toBe(
+      describeError(appError('validation', 'validation/bad-response', 'x')),
+    );
+    expect(errorText(appError('internal', 'internal/whatever', 'x'))).toBe(
+      'Something went wrong. Try again.',
+    );
   });
 });

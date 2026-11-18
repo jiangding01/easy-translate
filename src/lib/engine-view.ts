@@ -1,3 +1,4 @@
+import { i18n } from '#i18n';
 import { hasEditableBaseURL, takesApiKey } from '@/lib/config/engine-fields';
 import {
   BUILTIN_ENGINES,
@@ -12,7 +13,8 @@ import {
 import { normalizeBaseURL, requiredHostPermission } from '@/lib/endpoint';
 import type { SecretStatusInfo } from '@/lib/messaging/protocol';
 
-// Engine view logic shared by the settings page and the toolbar panel: no React, no browser APIs.
+// Engine view logic shared by the settings page, the toolbar panel and the background: no
+// React. UI copy comes from src/locales and is looked up per call, never at module top level.
 
 /** `host[:port]` of a URL, or '' when it does not parse. */
 export function hostOf(url: string): string {
@@ -28,13 +30,19 @@ export function hostName(baseURL: string): string {
   return hostOf(baseURL).slice(0, CUSTOM_PROVIDER_LIMITS.name);
 }
 
-/** Display names of the built-in engines. */
-export const BUILTIN_NAMES: Record<BuiltinEngine, string> = {
-  google: 'Google 翻译',
-  openai: 'OpenAI',
-  deepseek: 'DeepSeek',
-  gemini: 'Gemini',
-};
+/** Display name of a built-in engine; brand names stay untranslated (i18n.md 4.5). */
+export function builtinName(engine: BuiltinEngine): string {
+  switch (engine) {
+    case 'google':
+      return i18n.t('engine.googleName');
+    case 'openai':
+      return 'OpenAI';
+    case 'deepseek':
+      return 'DeepSeek';
+    case 'gemini':
+      return 'Gemini';
+  }
+}
 
 export interface EngineEntry {
   id: Engine;
@@ -46,10 +54,10 @@ export interface EngineEntry {
 /** Built-in engines first, then custom providers in stored order. */
 export function engineEntries(config: ConfigV1): EngineEntry[] {
   return [
-    ...BUILTIN_ENGINES.map((id) => ({ id, name: BUILTIN_NAMES[id] })),
+    ...BUILTIN_ENGINES.map((id) => ({ id, name: builtinName(id) })),
     ...Object.entries(config.customProviders).map(([id, custom]) => ({
       id: id as CustomProviderId,
-      name: custom.name || hostOf(custom.baseURL) || '未命名服务',
+      name: custom.name || hostOf(custom.baseURL) || i18n.t('engine.unnamed'),
       custom,
     })),
   ];
@@ -65,13 +73,17 @@ export function permissionPattern(baseURL: string): string | undefined {
 /** Why an engine cannot translate (or be tested) yet, in the order the user should fix it. */
 export type NotReady = 'bad-url' | 'checking-grant' | 'needs-grant' | 'needs-key' | 'needs-model';
 
+const NOT_READY_KEYS = {
+  'bad-url': 'engine.notReady.badUrl',
+  'needs-grant': 'engine.notReady.needsGrant',
+  'needs-key': 'engine.notReady.needsKey',
+  'needs-model': 'engine.notReady.needsModel',
+} as const satisfies Record<Exclude<NotReady, 'checking-grant'>, string>;
+
 /** Row and panel wording; `checking-grant` is transient and never shown as a problem. */
-export const NOT_READY_TEXT: Record<Exclude<NotReady, 'checking-grant'>, string> = {
-  'bad-url': '地址格式不正确',
-  'needs-grant': '还没有授权访问这个地址',
-  'needs-key': '还没有填写密钥',
-  'needs-model': '还没有填写模型',
-};
+export function notReadyText(reason: Exclude<NotReady, 'checking-grant'>): string {
+  return i18n.t(NOT_READY_KEYS[reason]);
+}
 
 export interface EngineReadiness {
   /** Short status on the right of the row. */
@@ -99,34 +111,45 @@ export interface ReadinessInput {
 /** The single readiness rule for rows, the panel and the connection test. */
 export function engineReadiness(input: ReadinessInput): EngineReadiness {
   const { engine, baseURL, model, secret, granted } = input;
-  if (engine === 'google') return { status: '免费', mono: false, attention: false };
+  if (engine === 'google')
+    return { status: i18n.t('engine.status.free'), mono: false, attention: false };
   const keyed = secret?.configured === true;
-  const keyStatus = keyed ? (secret.last4 ? `密钥 ••••${secret.last4}` : '已配置密钥') : '';
+  const keyStatus = keyed
+    ? secret.last4
+      ? i18n.t('engine.status.keySuffix', [secret.last4])
+      : i18n.t('engine.status.keyConfigured')
+    : '';
   const mono = keyed && secret.last4 !== '';
   const notReady = (reason: NotReady, status: string, attention: boolean): EngineReadiness => ({
     status,
     mono: status === keyStatus && mono,
     attention,
     reason,
-    problem: reason === 'checking-grant' ? undefined : NOT_READY_TEXT[reason],
+    problem: reason === 'checking-grant' ? undefined : notReadyText(reason),
   });
 
   if (hasEditableBaseURL(engine)) {
-    if (!requiredHostPermission(baseURL).ok) return notReady('bad-url', '地址有误', true);
+    if (!requiredHostPermission(baseURL).ok)
+      return notReady('bad-url', i18n.t('engine.status.badUrl'), true);
     if (permissionPattern(baseURL)) {
-      if (granted === false) return notReady('needs-grant', '待授权', true);
+      if (granted === false)
+        return notReady('needs-grant', i18n.t('engine.status.needsGrant'), true);
       if (granted === undefined) {
-        return notReady('checking-grant', keyStatus || '未填密钥', false);
+        return notReady('checking-grant', keyStatus || i18n.t('engine.status.noKey'), false);
       }
     }
   }
   if (isBuiltinEngine(engine) && takesApiKey(engine) && !keyed && !input.keyDraft) {
-    return notReady('needs-key', '未配置', false);
+    return notReady('needs-key', i18n.t('engine.status.notConfigured'), false);
   }
-  if (model.trim() === '') return notReady('needs-model', keyStatus || '未填模型', true);
+  if (model.trim() === '') {
+    return notReady('needs-model', keyStatus || i18n.t('engine.status.noModel'), true);
+  }
   if (!keyed)
     return {
-      status: isBuiltinEngine(engine) ? '未保存' : '未填密钥',
+      status: isBuiltinEngine(engine)
+        ? i18n.t('engine.status.unsaved')
+        : i18n.t('engine.status.noKey'),
       mono: false,
       attention: false,
     };
