@@ -118,6 +118,7 @@ popup:
   settings: 设置
   goSettings: 去设置
   translatePage: 翻译此页
+  translateAnyway: 仍然翻译
   noShortcut: 还没有快捷键 ·
   setShortcut: 设置快捷键 ↗
   # $1：默认引擎名，$2：它还不能翻译的原因（engine.notReady.*）。

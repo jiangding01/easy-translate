@@ -108,7 +108,8 @@ export function App() {
     if (report(await session.start(engine))) window.close();
   };
   const active = session.state !== undefined && session.state.phase !== 'idle';
-  const canAlways = page?.origin !== undefined && (active || view.kind === 'foreign');
+  const canAlways =
+    page?.origin !== undefined && view.kind !== 'native' && (active || view.kind === 'foreign');
 
   return (
     <main className={styles.panel}>
@@ -128,10 +129,10 @@ export function App() {
           )}
           {view.kind === 'loading' && ' '}
         </span>
-        {(view.kind === 'foreign' || view.kind === 'loading') && (
+        {(view.kind === 'foreign' || view.kind === 'native' || view.kind === 'loading') && (
           <div className={styles.pair}>
             <span>
-              {view.kind === 'foreign' && view.language
+              {view.kind !== 'loading' && view.language
                 ? languageName(view.language)
                 : i18n.t('common.autoDetect')}
             </span>
@@ -184,10 +185,21 @@ export function App() {
           />
         )}
         {!active && view.kind === 'native' && (
-          <div className={styles.message}>
-            <strong>{i18n.t('popup.nativeTitle', [languageName(view.language)])}</strong>
-            <span>{i18n.t('popup.nativeHint')}</span>
-          </div>
+          <>
+            <div className={styles.message}>
+              <strong>{i18n.t('popup.nativeTitle', [languageName(view.language)])}</strong>
+              <span>{i18n.t('popup.nativeHint')}</span>
+            </div>
+            <IdleActions
+              key="anyway"
+              variant="anyway"
+              config={config}
+              statuses={statuses}
+              shortcut={shortcut}
+              onStart={(engine) => void start(engine)}
+              onOpenSettings={openSettings}
+            />
+          </>
         )}
         {view.kind === 'unreachable' && (
           <div className={styles.message}>
@@ -290,15 +302,19 @@ function IdleActions({
   config,
   statuses,
   shortcut,
+  variant = 'main',
   onStart,
   onOpenSettings,
 }: {
   config: ConfigV1;
   statuses: Statuses | undefined;
   shortcut: string | undefined;
+  /** `anyway`: the page already reads as the target language; a quiet secondary button. */
+  variant?: 'main' | 'anyway';
   onStart: (engine?: Engine) => void;
   onOpenSettings: () => void;
 }) {
+  const anyway = variant === 'anyway';
   const readiness = useReadiness(config, statuses);
   const blocked = statuses !== undefined && readiness.problem !== undefined;
   return (
@@ -324,12 +340,18 @@ function IdleActions({
           </span>
         </button>
       ) : (
-        <button type="button" className={styles.primary} onClick={() => onStart()}>
-          <span className={styles.grow}>{i18n.t('popup.translatePage')}</span>
+        <button
+          type="button"
+          className={anyway ? styles.secondary : styles.primary}
+          onClick={() => onStart()}
+        >
+          <span className={styles.grow}>
+            {anyway ? i18n.t('popup.translateAnyway') : i18n.t('popup.translatePage')}
+          </span>
           <Kbd shortcut={shortcut} />
         </button>
       )}
-      {shortcut === '' && (
+      {!anyway && shortcut === '' && (
         <span className={styles.quiet}>
           {i18n.t('popup.noShortcut')}{' '}
           <button

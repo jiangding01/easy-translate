@@ -125,6 +125,7 @@ popup:
   settings: Settings
   goSettings: Open Settings
   translatePage: Translate this page
+  translateAnyway: Translate anyway
   noShortcut: No shortcut yet ·
   setShortcut: Set a shortcut ↗
   # $1: the default engine's name, $2: why it cannot translate yet (engine.notReady.*).

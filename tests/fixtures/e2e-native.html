@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>E2E native-language fixture</title>
+    <!--
+      Smoke e2e fixture (tests/e2e): the page declares the target language (zh-CN) but its body
+      is an English article, so the panel's "already in this language" state must still let the
+      reader start a translation.
+    -->
+    <style>
+      body {
+        margin: 0;
+        padding: 16px 32px;
+        font: 15px/1.45 system-ui, -apple-system, sans-serif;
+        color: #222;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 24px;
+      }
+      p {
+        margin: 0 0 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="article">
+      <h1 id="title">Notes from a quiet harbour town</h1>
+      <p id="intro">
+        Every morning the fishing boats leave before sunrise, and the harbour stays silent until
+        the first bakery opens its shutters.
+      </p>
+      <p id="second">
+        The old lighthouse keeper still writes a short weather report, which visitors can read on
+        the town notice board every afternoon.
+      </p>
+      <p id="third">
+        A small town teaches you to notice the weather, the tide and the people who wave back.
+      </p>
+    </main>
+  </body>
+</html>

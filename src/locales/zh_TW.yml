@@ -118,6 +118,7 @@ popup:
   settings: 設定
   goSettings: 前往設定
   translatePage: 翻譯此頁
+  translateAnyway: 仍然翻譯
   noShortcut: 還沒有快速鍵 ·
   setShortcut: 設定快速鍵 ↗
   # $1：預設引擎名稱，$2：它還不能翻譯的原因（engine.notReady.*）。

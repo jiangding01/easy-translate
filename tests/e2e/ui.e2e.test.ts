@@ -152,4 +152,74 @@ describe('action panel', () => {
       await popup.close();
     }
   });
+
+  it('offers "Translate anyway" on a page that declares the target language', async () => {
+    const harness = await start('en');
+    await harness.openPage('e2e-native.html');
+    const { origin, host } = await harness.evaluate<{ origin: string; host: string }>(
+      '({ origin: location.origin, host: location.host })',
+    );
+    const tab = { id: harness.tabId, url: `${origin}/e2e-native.html`, active: true, windowId: 1 };
+    const preload = `for (const api of [globalThis.browser, globalThis.chrome]) {
+      if (api?.tabs) api.tabs.query = async () => [${JSON.stringify(tab)}];
+    }`;
+    const text = (popup: { evaluate<T>(expression: string): Promise<T> }) =>
+      popup.evaluate<string>('document.body.innerText');
+    const anyway = `[...document.querySelectorAll('button')].find((b) => b.textContent.includes('Translate anyway'))`;
+    const always = `[...document.querySelectorAll('[role="switch"]')].some((el) => el.textContent.includes('Always translate this site'))`;
+
+    const first = await harness.extPage('popup.html', { preload });
+    try {
+      await waitFor(
+        async () =>
+          (await text(first)).includes('This page is already in') &&
+          (await first.evaluate<boolean>(`!!(${anyway})`)),
+        { message: 'the panel to show the native state and its Translate anyway button' },
+      );
+      const shown = await text(first);
+      expect(shown).toContain(host);
+      // The target picker is there, with the page's own language on its left.
+      const pair = await first.evaluate<{ source: string; picker: string }>(
+        `(() => {
+          const arrow = document.querySelector('main svg');
+          return {
+            source: arrow?.previousElementSibling?.textContent ?? '',
+            picker: arrow?.nextElementSibling?.textContent ?? '',
+          };
+        })()`,
+      );
+      expect(pair.source).toBe('简体中文');
+      expect(pair.picker).toContain('Translate to');
+      expect(shown).not.toContain('Auto-detect');
+      expect(await first.evaluate<boolean>(always)).toBe(false);
+      expect(shown).not.toContain('Always translate this site');
+
+      await first.evaluate(`(${anyway}).click()`);
+      await waitFor(
+        () =>
+          harness.evaluate<boolean>(
+            `document.querySelector('#intro et-tr')?.textContent.includes('【MOCK】') ?? false`,
+          ),
+        { message: 'the English paragraph to be translated from the panel' },
+      );
+      harness.assertNoErrors();
+    } finally {
+      await first.close();
+    }
+
+    // With the session running, the site switch still stays away on a native-language page.
+    const second = await harness.extPage('popup.html', { preload });
+    try {
+      await waitFor(async () => (await text(second)).includes(host), {
+        message: 'the panel to show the test page again',
+      });
+      await waitFor(async () => (await text(second)).includes('Show original'), {
+        message: 'the panel to show the running session',
+      });
+      expect(await second.evaluate<boolean>(always)).toBe(false);
+      harness.assertNoErrors();
+    } finally {
+      await second.close();
+    }
+  });
 });
