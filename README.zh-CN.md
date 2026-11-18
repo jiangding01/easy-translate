@@ -337,7 +337,7 @@ node scripts/screenshots/shoot.mjs --ui zh_CN --article en
 | ✅ 已完成 | 界面多语言（en / zh_CN / zh_TW） |
 | ✅ 已完成 | 双语 README |
 | ✅ 已完成 | 改名「译屿 / Islet Translate」 |
-| 🔨 进行中 | 冒烟 e2e（PR1 已合并，PR2 待合并） |
+| ✅ 已完成 | 冒烟 e2e（PR1、PR2 与扩展重载用例均已合并） |
 | 🔨 下一步 | v0.2.0（GitHub Release） |
 | 之后 | M3d 动态页与站点规则 |
 | 之后 | M3b 段落级交互 |

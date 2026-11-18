@@ -337,7 +337,7 @@ Unit tests sit next to the source they cover and are named `*.test.ts`.
 | ✅ Done | Interface languages (English, Simplified Chinese, Traditional Chinese) |
 | ✅ Done | Bilingual README |
 | ✅ Done | Rename to Islet Translate (译屿) |
-| 🔨 In progress | Smoke end-to-end tests (PR 1 merged, PR 2 awaiting merge) |
+| ✅ Done | Smoke end-to-end tests (PR 1, PR 2 and the extension-reload case all merged) |
 | 🔨 Next | v0.2.0 as a GitHub Release |
 | Later | M3d dynamic pages and site rules |
 | Later | M3b paragraph-level interaction |
