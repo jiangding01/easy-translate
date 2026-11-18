@@ -50,5 +50,5 @@
 - CHANGELOG：`[未发布]` 归入 `[0.2.0] - 2026-11-18`，其上新增空的 `[未发布]`，`[0.2.0]` 下新增 8 条面向用户的「本版要点」；底部链接按方案更新，保留 `[0.1.0]`。
 - `.github/workflows/release.yml`：沿用 `ci.yml` 的 `actions/checkout@v7`、`actions/setup-node@v7`、`.nvmrc`；`fetch-depth: 0`、`persist-credentials: false`、job 级 `contents: write`、`timeout-minutes: 15`、按标签的 concurrency；校验标签与 `package.json`、CHANGELOG 小节、提交在 `origin/main` 上；`npm ci` → `npm run check` → `npm run zip`；生成 `.sha256`，用 awk 截取 CHANGELOG 小节为发布说明；`gh release create ... --verify-tag`，不使用第三方 release action。
 - README 双语：安装一节新增「从 GitHub Release 下载」（含可选 SHA-256 校验），路线图 v0.2.0 项改为已完成。HANDOFF 按终态更新。
-- 本地验证：本机没有 actionlint，只用 Python 解析 YAML 确认语法；在本地用 bash 模拟了三项校验（版本一致、CHANGELOG 小节存在、`HEAD` 是 `origin/main` 的祖先）与发布说明截取，均通过。`npm run zip` 产物为 `.output/islet-translate-0.2.0-chrome.zip`，其 `manifest.json` 版本为 0.2.0。`npm run check` 结果见 PR 说明。
+- 本地验证：本机没有 actionlint，只用 Python 解析 YAML 确认语法；在本地用 bash 模拟了三项校验（版本一致、CHANGELOG 小节存在、`HEAD` 是 `origin/main` 的祖先）与发布说明截取，均通过。`npm run zip` 产物为 `.output/Islet-Translate-v0.2.0-chrome.zip`，其 `manifest.json` 版本为 0.2.0。`npm run check` 结果见 PR 说明。
 - 待办（第 2 步，需用户确认）：合并后确认 main 上 CI 全绿，再推送 `v0.2.0` 标签，读回 Release 核对。

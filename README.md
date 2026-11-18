@@ -66,9 +66,9 @@ Islet Translate is not in a web store yet. There are three ways to install it.
 
 **From a GitHub Release**
 
-1. Open the [Releases](https://github.com/jiangding01/islet-translate/releases) page and download `islet-translate-<version>-chrome.zip` (for example `islet-translate-0.2.0-chrome.zip`) from the latest release.
+1. Open the [Releases](https://github.com/jiangding01/islet-translate/releases) page and download `Islet-Translate-v<version>-chrome.zip` (for example `Islet-Translate-v0.2.0-chrome.zip`) from the latest release.
 2. Unzip it, open `chrome://extensions`, turn on Developer mode, and choose **Load unpacked**, then select the unzipped folder.
-3. Optional: each release also has a `.sha256` file. Run `sha256sum -c islet-translate-<version>-chrome.zip.sha256` next to the zip (on macOS, `shasum -a 256 -c`) to check the download.
+3. Optional: each release also has a `.sha256` file. Run `sha256sum -c Islet-Translate-v<version>-chrome.zip.sha256` next to the zip (on macOS, `shasum -a 256 -c`) to check the download.
 
 **From a CI build**
 

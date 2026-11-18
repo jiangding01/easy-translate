@@ -66,9 +66,9 @@
 
 **从 GitHub Release 下载**
 
-1. 打开 [Releases](https://github.com/jiangding01/islet-translate/releases) 页面，在最新版本里下载 `islet-translate-<版本号>-chrome.zip`（例如 `islet-translate-0.2.0-chrome.zip`）。
+1. 打开 [Releases](https://github.com/jiangding01/islet-translate/releases) 页面，在最新版本里下载 `Islet-Translate-v<版本号>-chrome.zip`（例如 `Islet-Translate-v0.2.0-chrome.zip`）。
 2. 解压后打开 `chrome://extensions`，启用「开发者模式」，点击「加载已解压的扩展程序」，选择解压出的文件夹。
-3. 可选：每个版本还附带一个 `.sha256` 文件。在 zip 所在目录运行 `sha256sum -c islet-translate-<版本号>-chrome.zip.sha256`（macOS 用 `shasum -a 256 -c`）即可校验下载。
+3. 可选：每个版本还附带一个 `.sha256` 文件。在 zip 所在目录运行 `sha256sum -c Islet-Translate-v<版本号>-chrome.zip.sha256`（macOS 用 `shasum -a 256 -c`）即可校验下载。
 
 **从 CI 构建产物安装**
 
