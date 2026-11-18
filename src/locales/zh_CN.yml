@@ -39,7 +39,7 @@ errors:
     forbiddenSender: 该操作只能在设置页中进行。请从设置页重试。
     invalidSecret: 密钥格式不正确：只能包含英文字母、数字和符号，不能有空格，且不超过 512 个字符。请重新复制后再粘贴。
     badResponse: 翻译服务返回的内容无法解析。请重试，或换一个翻译服务。
-    unsupportedPage: 请在普通 HTTP 或 HTTPS 网页中打开插件。
+    unsupportedPage: 请在普通 HTTP 或 HTTPS 网页中打开扩展。
   provider:
     unauthorized: 密钥无效或没有访问权限。请检查密钥后重试。
     localOriginRejected: 本地服务拒绝了扩展的请求。如果是 Ollama，需要把环境变量 OLLAMA_ORIGINS 设为 chrome-extension://*，再彻底退出并重新打开 Ollama。

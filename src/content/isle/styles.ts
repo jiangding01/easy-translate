@@ -6,8 +6,7 @@
 // No `url(` anywhere: the module may not load resources by address.
 
 /** tokens.css `--et-font-sans` (system fonts only). */
-const SANS =
-  '-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif';
+const SANS = '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
 
 export const ISLE_CSS = `
 .r{position:absolute;inset:0;pointer-events:none;font:400 13px/20px ${SANS};letter-spacing:normal;word-spacing:normal;text-transform:none;text-indent:0;text-align:left;text-shadow:none;direction:ltr;writing-mode:horizontal-tb;white-space:normal;color:var(--et-color-isle-text);visibility:visible;cursor:default;user-select:none;-webkit-user-select:none;-webkit-font-smoothing:antialiased}

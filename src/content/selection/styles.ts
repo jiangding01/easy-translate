@@ -8,8 +8,7 @@
 // by address.
 
 /** tokens.css `--et-font-sans` (system fonts only). */
-const SANS =
-  '-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif';
+const SANS = '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
 
 export const CARD_CSS = `
 .r{all:initial;position:absolute;inset:0;pointer-events:none;font:13px/20px ${SANS};color:var(--et-color-isle-text);cursor:default;user-select:none;-webkit-user-select:none;-webkit-font-smoothing:antialiased;--c3:oklch(0.34 0.01 70);--on:oklch(0.22 0.04 65)}

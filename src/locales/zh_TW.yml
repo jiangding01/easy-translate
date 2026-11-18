@@ -1,0 +1,355 @@
+# 繁體中文（台灣）介面文案。鍵名與 en.yml 完全一致，規則見 en.yml 頂部與 docs/plans/i18n.md。
+
+meta:
+  locale: zh-TW
+
+manifest:
+  name: 譯嶼
+  shortName: 譯嶼
+  description: 雙語網頁閱讀：整頁、反白、單字翻譯。
+  actionTitle: 譯嶼
+  commands:
+    translatePage: 翻譯此頁 / 顯示原文
+    translateSelection: 翻譯選取文字
+
+# 錯誤文案（src/lib/error-messages.ts 的錯誤碼 → 鍵表；內容端 src/content/error-text.ts 複用其中 3 條）。
+# 寫法：發生了什麼 + 怎麼辦。
+errors:
+  generic: 操作失敗，請重試。
+  config:
+    newerVersion: 設定由較新版本的擴充功能寫入，目前版本無法修改。請更新擴充功能。
+    writeFailed: 儲存失敗，請重試。
+    readFailed: 讀取設定失敗，請重新整理後重試。
+    invalidBaseUrl: API 網址不正確。請填寫 https 開頭的網址，本機模型可用 http://localhost。
+    modelRequired: 尚未填寫模型名稱。請填寫模型後重試。
+    permissionMissing: 尚未授權存取該 API 網址。請在設定頁點選「授權存取」後重試。
+    providerLimit: 自訂服務已達 10 個上限。請先刪除不用的服務。
+    providerMissing: 找不到這個自訂服務，可能已被刪除。請在設定頁重新選擇預設引擎。
+    invalidValue: 設定值不正確，未儲存。請檢查後重試。
+  network:
+    extensionUnreachable: 無法連線到擴充功能背景程式，請重新載入擴充功能後重試。
+    pageUnreachable: 無法連線到頁面，請重新整理網頁後重試。Chrome 線上應用程式商店等受限頁面無法使用。
+    fetchFailed: 無法連線翻譯服務。請檢查網路後重試。
+    timeout: 翻譯服務回應逾時。請檢查網路後重試。
+    streamInterrupted: 翻譯過程中連線中斷。請重試。
+  validation:
+    payloadTooLarge: 一次送出的內容過多。請縮小翻譯範圍後重試。
+    emptyTranslation: 翻譯服務傳回了空白結果。請重試，或換一個翻譯服務。
+    invalidPayload: 請求格式不正確。請重新整理頁面後重試。
+    forbiddenSender: 該操作只能在設定頁中進行。請從設定頁重試。
+    invalidSecret: 金鑰格式不正確：只能包含英文字母、數字和符號，不能有空格，且不超過 512 個字元。請重新複製後再貼上。
+    badResponse: 翻譯服務傳回的內容無法解析。請重試，或換一個翻譯服務。
+    unsupportedPage: 請在一般 HTTP 或 HTTPS 網頁中開啟擴充功能。
+  provider:
+    unauthorized: 金鑰無效或沒有存取權限。請檢查金鑰後重試。
+    localOriginRejected: 本機服務拒絕了擴充功能的請求。如果是 Ollama，需要把環境變數 OLLAMA_ORIGINS 設為 chrome-extension://*，再完全結束並重新開啟 Ollama。
+    notFound: API 網址或模型不存在。請檢查 API 網址和模型名稱。
+    quotaExceeded: 該服務的額度已用完。請儲值，或換一個翻譯服務。
+    serverError: 翻譯服務暫時發生錯誤。請稍後重試，或換一個翻譯服務。
+    outputTruncated: 譯文超出模型的輸出長度，被截斷了。請縮小翻譯範圍，或換一個模型。
+    contentBlocked: 這段內容被翻譯服務的安全政策攔截，無法翻譯。
+    badRequest: 翻譯服務拒絕了該請求。請檢查模型名稱等設定後重試。
+  rateLimit:
+    tooManyRequests: 請求過於頻繁，服務暫時限制了請求頻率。請稍候片刻後重試。
+    portBusy: 目前頁面同時進行的翻譯請求過多。請稍候片刻後重試。
+  action:
+    panelReadFailed: 讀取設定失敗，請重新開啟面板。
+    openSettingsFailed: 無法開啟設定頁，請重試。
+    addFailed: 新增失敗，請重試。
+    clearFailed: 清除失敗，請重試。
+    deleteFailed: 刪除失敗，請重試。
+    connectFailed: 連線失敗，請重試。
+
+# 引擎名稱與就緒狀態（src/lib/engine-view.ts、src/lib/translate/engine-options.ts）。
+engine:
+  googleName: Google 翻譯
+  # 設定頁和面板裡未命名自訂服務的名稱（有網址時顯示主機名稱）。
+  unnamed: 未命名服務
+  # 靈島裡未命名自訂服務的名稱（不回退到主機名稱）。
+  customFallback: 自訂服務
+  # 未命名自訂服務的簡稱（有名稱時取名稱前兩個字元）。
+  unnamedShort: 自
+  notReady:
+    badUrl: 網址格式不正確
+    needsGrant: 還沒有授權存取這個網址
+    needsKey: 還沒有填寫金鑰
+    needsModel: 還沒有填寫模型
+  status:
+    free: 免費
+    # $1：金鑰末 4 碼。
+    keySuffix: 金鑰 ••••$1
+    keyConfigured: 已設定金鑰
+    badUrl: 網址有誤
+    needsGrant: 待授權
+    noKey: 未填金鑰
+    notConfigured: 未設定
+    noModel: 未填模型
+    unsaved: 未儲存
+
+# 面板、設定頁與內容模組共用、意思完全相同的詞。
+common:
+  autoDetect: 自動偵測
+  modeBilingual: 雙語
+  modeTranslation: 僅譯文
+  # $1：Google 引擎的名稱（engine.googleName）。
+  useGoogleOnce: 這次先用 $1
+  retry: 重試
+
+# 工具列面板（src/entrypoints/popup）。
+popup:
+  loading: 正在載入…
+  browserPage: 瀏覽器頁面
+  # $1：頁面語言的自稱（不翻譯）。
+  detected: 偵測到 $1
+  noLanguage: 未宣告語言
+  translateTo: 翻譯成
+  # $1：頁面語言的自稱。
+  nativeTitle: 這一頁已經是$1
+  nativeHint: 不需要翻譯。
+  reloadTitle: 需要重新整理這個網頁
+  reloadHint: 擴充功能安裝或更新之後，已經開啟的網頁要重新整理一次才能翻譯。
+  blockedTitle: 這個頁面無法翻譯
+  blockedHint: 瀏覽器不允許擴充功能讀取它自己的頁面和應用程式商店頁面。請換到一般網頁再試。
+  readingPage: 正在讀取頁面…
+  alwaysSite: 一律翻譯此網站
+  # $1：網站主機名稱。
+  alwaysOn: 開啟 $1 時自動翻譯
+  alwaysOff: 只在你啟動時翻譯
+  settings: 設定
+  goSettings: 前往設定
+  translatePage: 翻譯此頁
+  noShortcut: 還沒有快速鍵 ·
+  setShortcut: 設定快速鍵 ↗
+  # $1：預設引擎名稱，$2：它還不能翻譯的原因（engine.notReady.*）。
+  engineNotReady: $1：$2
+  # $1：引擎名稱，$2：暫停原因（popup.pausedReason.*）。
+  pausedNotice: $1 $2，翻譯已暫停
+  pausedReason:
+    unauthorized: 金鑰無效
+    quotaExceeded: 額度已用完
+    localRejected: 本機服務拒絕了請求
+    permissionMissing: 還沒有授權存取 API
+    incomplete: 設定不完整
+  showOriginal: 顯示原文
+  stopShowOriginal: 停止並顯示原文
+  progress: 正在翻譯眼前的段落，往下讀時繼續
+  # $1：沒有譯出的段數。
+  failedCount:
+    1: $1 段沒有譯出
+    n: $1 段沒有譯出
+  displayMode: 顯示方式
+  defaultEngine: 預設引擎
+
+# 設定頁（src/entrypoints/options）。
+options:
+  title: 譯嶼 · 設定
+  nav:
+    label: 設定分區
+    general: 一般
+    generalSub: 語言、外觀與譯文樣式，變更會立即生效。
+    services: 翻譯服務
+    servicesSub: Google 可免費使用；AI 引擎和自訂服務需要你自己的金鑰。
+    loading: 正在載入設定…
+  notice:
+    saved: 已儲存
+  general:
+    targetLanguage: 目標語言
+    targetLanguageHint: 網頁會被翻譯成這種語言
+    sourceLanguage: 來源語言
+    sourceLanguageHint: 自動偵測適合大多數網頁；偵測不準時再手動指定
+    recommended: 建議
+    appearance: 外觀
+    appearanceHint: 設定頁和工具列面板的主題
+    themeSystem: 跟隨系統
+    themeLight: 淺色
+    themeDark: 深色
+    styleNone: 無裝飾
+    styleFaded: 淡化
+    styleUnderline: 底線
+    styleHighlight: 醒目提示
+    dockRight: 右側
+    dockLeft: 左側
+    dockBottom: 底部
+    dotOn: 開
+    dotOff: 關
+    hostLight: 淺色網頁
+    hostDark: 深色網頁
+    translationTitle: 譯文
+    translationHint: 譯文沿用網頁自己的字型、字級和顏色，樣式只決定如何與原文區分
+    style: 樣式
+    previewHost: 預覽底色
+    defaultBadge: 預設
+    openShows: 開啟時顯示
+    openShowsHint: 每次開始翻譯時的顯示方式，翻譯中可以隨時切換
+    dock: 靈島位置
+    dockHint: 翻譯時貼在網頁邊緣的控制列，正在翻譯的頁面立即生效
+    dot: 反白小點
+    dotHint: 選取外文後在末尾顯示翻譯小點
+  services:
+    engines: 引擎
+    enginesHint: 圓點選取的是預設引擎，點一列查看和修改設定
+    addService: 新增服務
+    addTooltip: 新增一個相容 OpenAI API 的服務
+    # $1：自訂服務的數量上限。
+    limitReached: 最多新增 $1 個自訂服務
+    customGroup: 自訂 · 相容 OpenAI
+    madeDefault: 已設為預設
+    deleted: 已刪除
+    # $1：Google 引擎的名稱（engine.googleName）。
+    deletedFallback: 已刪除，預設改用 $1
+    added: 已新增
+    addedPending: 已新增，等待授權
+  engine:
+    # $1：引擎名稱。
+    makeDefaultAria: 設為預設引擎：$1
+    defaultBadge: 預設
+    # $1：Google 引擎的名稱（engine.googleName）。
+    googleNote: 免費，無需設定。網頁文字會傳送到 $1。遇到頻率限制時會自動放慢；如果持續受限，會建議你換一個引擎。
+    name: 名稱
+    baseUrl: Base URL
+    baseUrlInvalid: 請填寫 https 開頭的網址，本機模型可用 http://localhost
+    apiKey: API Key
+    keyShow: 顯示
+    keyHide: 隱藏
+    keyClear: 清除
+    keyLocalOnly: 只儲存在這台電腦上，不會匯出或同步
+    getKey: 取得 API Key ↗
+    getKeyAndModels: 金鑰與模型清單 ↗
+    # $1：金鑰末 4 碼。
+    keyPlaceholderSavedLast4: 已儲存 ••••$1，貼上新金鑰可取代
+    keyPlaceholderSaved: 已儲存，貼上新金鑰可取代
+    keyPlaceholderBuiltin: 貼上金鑰，離開輸入框時自動儲存
+    keyPlaceholderOptional: 沒有可以不填
+    model: 模型
+    modelPlaceholder: 填寫模型 ID
+    modelPlaceholderGemini: 填寫模型 ID，例如官方清單中的 flash 型號
+    access: 存取權限
+    # $1：API 網址的主機名稱（程式碼裡拆成前後兩段，中間放主機名稱節點）。
+    grantNeeded: 需要允許擴充功能存取 $1
+    grantButton: 授權存取
+    isDefaultHint: 這是目前的預設引擎
+    makeDefault: 設為預設引擎
+    deleteService: 刪除此服務
+    # $1：Google 引擎的名稱（engine.googleName）。
+    deleteNoteDefault: 刪除後預設改用 $1
+    deleteNote: 刪除後無法復原
+    cancel: 取消
+    delete: 刪除
+    keySaved: 已儲存金鑰
+    keyCleared: 已清除金鑰
+    granted: 已授權
+    subFree: 免費 · 無需設定
+    subNoModel: 未填寫模型
+    subNeedsModelId: 需要填寫模型 ID
+  add:
+    title: 新增服務
+    sub: 任何相容 OpenAI API 的服務都可以新增，包括本機執行的模型。
+    close: 關閉
+    presets: 常用服務
+    presetOllama: Ollama（本機）
+    presetLmstudio: LM Studio（本機）
+    presetOpenrouter: OpenRouter
+    presetSiliconflow: 矽基流動
+    presetOther: 其他
+    name: 名稱
+    namePlaceholder: 留空則使用網域名稱
+    baseUrl: Base URL
+    baseUrlInvalid: 請填寫 https 開頭的網址，本機模型可用 http://localhost
+    apiKey: API Key
+    keyPlaceholderLocal: 本機服務通常不需要
+    keyPlaceholderOptional: 沒有可以不填
+    model: 模型
+    modelPlaceholder: 填寫模型 ID
+    accessHint: 新增時瀏覽器會詢問是否允許存取這個網址
+    cancel: 取消
+    submit: 新增
+    adding: 新增中…
+    keyNotSaved: 服務已新增，但金鑰未儲存，請在詳細資料裡重新貼上。
+  cache:
+    title: 翻譯快取
+    counting: 正在統計…
+    empty: 暫無快取 · 譯文保留 7 天
+    # $1：快取的段數（按介面語言格式化），$2：佔用大小。
+    summary:
+      1: $1 段譯文 · $2 · 保留 7 天
+      n: $1 段譯文 · $2 · 保留 7 天
+    clearHint: 清除後，翻譯過的網頁需要重新請求
+    cancel: 取消
+    clear: 清除
+    cleared: 已清除快取
+  test:
+    run: 測試連線
+    running: 測試中
+    again: 再測一次
+    prompt: 用這句話試一次
+    requesting: 正在請求…
+    failed: 未連線成功
+    collapse: 收合
+    details: 詳細資料
+    # 連線測試無法執行的原因（providers.ts 的 TEST_BLOCKED_TEXT）。
+    blocked:
+      badUrl: 請先填寫正確的網址
+      checkingGrant: 正在檢查授權…
+      needsGrant: 授權後可以測試
+      needsKey: 填寫 API Key 後可以測試
+      needsModel: 填寫模型後可以測試
+
+# 頁面靈島（src/content/isle）與譯文失敗佔位（src/content/render.ts）。
+isle:
+  toolbar: 翻譯控制
+  modes: 顯示方式
+  modeBilingual: 雙語對照
+  modeTranslation: 只看譯文
+  modeOriginal: 顯示原文（結束本次翻譯）
+  # 單字模式按鈕：介面語言是中文時顯示這三個字，其他語言畫圖示。
+  glyphBilingual: 雙
+  glyphTranslation: 譯
+  glyphOriginal: 原
+  engines: 本頁翻譯引擎
+  listTitle: 這次用哪個引擎翻譯
+  listNote: 只用於這一頁，不改預設引擎
+  listFailed: 暫時無法取得引擎清單
+  started: 開始翻譯
+  finished: 翻譯完成
+  # $1：未譯出的段落數。
+  retryCount:
+    1: 重試 $1 段未譯出的段落
+    n: 重試 $1 段未譯出的段落
+  # $1：引擎名稱，$2：失敗原因。
+  engineError: 本頁引擎：$1（$2）
+  # $1：引擎名稱。
+  engineSwitch: 本頁引擎：$1（點一下切換）
+
+# 反白翻譯卡片（src/content/selection/card.ts）。
+card:
+  source: 原文
+  close: 關閉
+  listTitle: 這次用哪個引擎翻譯
+  listNote: 只用於這一次，不改預設引擎
+  listFailed: 暫時無法取得引擎清單
+  # $1：引擎名稱。
+  engineSwitch: 引擎：$1（點一下切換）
+  # $1：下面的英式或美式，$2：音標。
+  sayPhonetic: $1發音 /$2/，點一下朗讀
+  accentUk: 英式
+  accentUs: 美式
+  # $1：字數上限（已格式化，2000）。
+  tooLong: 選取的文字太長（超過 $1 字），請縮小選取範圍，或使用整頁翻譯。
+  # $1：目標語言的自稱。
+  alreadyIn: 這段文字已經是 $1，不需要翻譯。
+  unchanged: 這段文字不需要翻譯。
+  copy: 複製譯文
+  copied: 已複製
+  speak: 朗讀原文
+  speakStop: 停止朗讀
+  noVoice: 這台裝置沒有可用的朗讀語音
+  speechFailed: 朗讀沒有回應，請稍後再試
+  pin: 固定卡片
+  unpin: 取消固定
+  translating: 正在翻譯
+  translated: 已翻譯
+
+# 段落翻譯失敗時的佔位（src/content/render.ts）。
+render:
+  failed: 未譯出
+  retry: 重試

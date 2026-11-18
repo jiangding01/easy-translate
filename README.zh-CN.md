@@ -55,7 +55,7 @@
 | 工具栏面板 | 显示当前网站和页面语言，切换目标语言和默认引擎。<br>母语页面、浏览器页面、需要刷新的页面各有安静的提示。 | <sub>示例图待补充</sub> |
 | 设置页 · 通用 | 目标语言、源语言、外观、带预览的译文样式、打开时显示、灵岛位置和划词小点。 | <img src="docs/assets/readme/zh-options-general.png" width="240" alt="设置页通用页"> |
 | 设置页 · 翻译服务 | 默认引擎、密钥与模型、最多 10 个自定义 OpenAI 兼容服务（含本地模型）、测试连接，以及翻译缓存。 | <img src="docs/assets/readme/zh-options-services.png" width="240" alt="设置页翻译服务页"> |
-| 界面语言 | 跟随浏览器语言：English 和简体中文，默认英文。 | <sub>示例图待补充</sub> |
+| 界面语言 | 跟随浏览器语言：English、简体中文和繁体中文，默认英文。中文按简体或繁体分别用对应的字形显示。 | <sub>示例图待补充</sub> |
 | 隐私与密钥 | 密钥只保存在本机，页面只能看到末 4 位。<br>没有账户，也没有统计或追踪代码。网页文字只会发给你选择的翻译引擎。 | |
 
 <!-- 示例图：后续可在「示例」列补充截图或 GIF，放在 docs/assets/readme/ -->
@@ -195,7 +195,7 @@ npm run dev
 8. 在 `chrome://serviceworker-internals` 停止 Service Worker 后再修改设置或测试连接，确认仍能正常工作。
 9. 整页翻译的完整验收清单（含 4 倍 CPU 降速下的动效检查）见 [`docs/plans/m2-page-translation.md`](docs/plans/m2-page-translation.md) 第 10 节。
 10. 「仅译文」的版面：运行 `python3 -m http.server 8765 --directory tests/fixtures`，打开 `http://localhost:8765/translation-only-layout.html`（内容脚本只在 http/https 页面运行，不能直接打开文件），翻译整页、切到仅译文、拖动窗口宽度，按每个用例下方的灰色说明核对，再切回双语确认原样恢复。
-11. 界面语言：把 Chrome 语言改为英文并重启，再到 `chrome://extensions` 重新加载扩展，界面应为英文。
+11. 界面语言：把 Chrome 语言改为英文并重启，再到 `chrome://extensions` 重新加载扩展，界面应为英文。再改为繁体中文（台湾）重复一次，界面应显示「譯嶼」，中文使用繁体字形。
 
 </details>
 
@@ -294,7 +294,7 @@ node scripts/screenshots/shoot.mjs --ui zh_CN --article en
 │   │   ├── messaging/           # 类型化消息、handle/call、Port 传输层、发送方校验
 │   │   ├── phonetic/            # 英文音标：写法转换、分片查找、变形推导
 │   │   └── translate/           # 翻译核心（只在后台使用）：provider、调度器、缓存、密钥
-│   ├── locales/                 # en.yml（默认）与 zh_CN.yml，构建时生成 _locales 与类型
+│   ├── locales/                 # en.yml（默认）、zh_CN.yml 与 zh_TW.yml，构建时生成 _locales 与类型
 │   └── styles/                  # 设计 token、基础样式、主题切换
 ├── tests/
 │   └── fixtures/                # 手动验收用的页面，如 translation-only-layout.html
@@ -326,10 +326,9 @@ node scripts/screenshots/shoot.mjs --ui zh_CN --article en
 | ✅ 已完成 | M1 翻译核心 |
 | ✅ 已完成 | M2 整页翻译与控制条 |
 | ✅ 已完成 | M3a 划词翻译与音标 |
-| ✅ 已完成 | 界面多语言（en / zh_CN） |
+| ✅ 已完成 | 界面多语言（en / zh_CN / zh_TW） |
 | ✅ 已完成 | 双语 README |
 | ✅ 已完成 | 改名「译屿 / Islet Translate」 |
-| 🔨 下一步 | 繁体中文界面 zh_TW |
 | 🔨 下一步 | 冒烟 e2e |
 | 🔨 下一步 | v0.2.0（GitHub Release） |
 | 之后 | M3d 动态页与站点规则 |

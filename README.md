@@ -55,7 +55,7 @@ Islet Translate is at version `0.1.0`. M0 (foundation), M1 (translation core), M
 | Toolbar panel | Shows the current site and page language, and switches the target language and default engine.<br>Quiet hints for pages already in your language, browser pages, and pages that need a reload. | <sub>Coming soon</sub> |
 | Settings: General | Target and source language, appearance, translation style with a live preview, how a page is shown when translation starts, control bar position, and the selection dot. | <img src="docs/assets/readme/en-options-general.png" width="240" alt="Settings, General page"> |
 | Settings: Translation services | Default engine, keys and models, up to 10 custom OpenAI-compatible services (local models included), **Test connection**, and the translation cache. | <img src="docs/assets/readme/en-options-services.png" width="240" alt="Settings, Translation services page"> |
-| Interface language | Follows the browser language: English and Simplified Chinese, with English as the default. | <sub>Coming soon</sub> |
+| Interface language | Follows the browser language: English, Simplified Chinese and Traditional Chinese, with English as the default. Chinese text uses the right Simplified or Traditional font forms. | <sub>Coming soon</sub> |
 | Privacy and keys | API keys stay on your computer, and pages only ever see the last 4 characters of a key.<br>There are no accounts and no analytics or tracking code. Page text is sent only to the translation engine you choose. | |
 
 <!-- Preview images: add screenshots or GIFs to the Preview column and keep them in docs/assets/readme/. -->
@@ -195,7 +195,7 @@ Dependabot (`.github/dependabot.yml`) checks npm and GitHub Actions weekly, and 
 8. Stop the service worker at `chrome://serviceworker-internals`, then change a setting or test a connection. It should still work.
 9. The full checklist for page translation, including motion checks at 4x CPU slowdown, is in section 10 of [`docs/plans/m2-page-translation.md`](docs/plans/m2-page-translation.md).
 10. Layout of Translation only: run `python3 -m http.server 8765 --directory tests/fixtures`, open `http://localhost:8765/translation-only-layout.html` (content scripts run only on http and https pages, so the file cannot be opened directly), translate the page, switch to Translation only, drag the window width, and check each case against the gray note under it. Then switch back to Bilingual and check that the page is restored exactly.
-11. Interface language: set Chrome's language to English and restart it, then reload the extension at `chrome://extensions`. The interface should be in English.
+11. Interface language: set Chrome's language to English and restart it, then reload the extension at `chrome://extensions`. The interface should be in English. Do the same with Traditional Chinese (Taiwan): the interface should read 譯嶼, and Chinese text should use Traditional font forms.
 
 </details>
 
@@ -294,7 +294,7 @@ It finds the newest Playwright Chrome for Testing, or takes a path from `CHROME`
 │   │   ├── messaging/           # Typed messages, handle/call, Port transport, sender checks
 │   │   ├── phonetic/            # English phonetics: notation, sharded lookup, inflections
 │   │   └── translate/           # Translation core (background only): providers, scheduler, cache, secrets
-│   ├── locales/                 # en.yml (default) and zh_CN.yml, turned into _locales and types
+│   ├── locales/                 # en.yml (default), zh_CN.yml and zh_TW.yml, turned into _locales and types
 │   └── styles/                  # Design tokens, base styles, theme switching
 ├── tests/
 │   └── fixtures/                # Pages for manual checks, such as translation-only-layout.html
@@ -326,10 +326,9 @@ Unit tests sit next to the source they cover and are named `*.test.ts`.
 | ✅ Done | M1 translation core |
 | ✅ Done | M2 page translation and control bar |
 | ✅ Done | M3a selection translation and phonetics |
-| ✅ Done | Interface languages (English, Simplified Chinese) |
+| ✅ Done | Interface languages (English, Simplified Chinese, Traditional Chinese) |
 | ✅ Done | Bilingual README |
 | ✅ Done | Rename to Islet Translate (译屿) |
-| 🔨 Next | Traditional Chinese interface (zh_TW) |
 | 🔨 Next | Smoke end-to-end tests |
 | 🔨 Next | v0.2.0 as a GitHub Release |
 | Later | M3d dynamic pages and site rules |
