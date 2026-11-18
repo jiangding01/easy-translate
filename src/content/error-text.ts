@@ -1,15 +1,18 @@
 import type { AppError } from '@/lib/errors';
+import { message, type NoArgKey } from './i18n';
 
 // Error copy for content scripts. The full table (lib/error-messages) stays out of the
 // content bundles (scripts/check-build.mjs): errors from the background arrive with
 // `userMessage` already attached; only the errors the content side makes itself are
-// looked up here. Same wording as the full table. Callers render it as text.
+// looked up here, under the same keys as the full table. Callers render it as text.
+// Key table only at top level: the copy is looked up per call (docs/plans/i18n.md 4.2).
 
-const LOCAL: Record<string, string> = {
-  'network/page-unreachable': '无法连接页面，请刷新网页后重试。Chrome 商店等受限页面无法使用。',
-  'validation/bad-response': '翻译服务返回的内容无法解析。请重试，或换一个翻译服务。',
+const LOCAL: Record<string, NoArgKey> = {
+  'network/page-unreachable': 'errors.network.pageUnreachable',
+  'validation/bad-response': 'errors.validation.badResponse',
 };
 
 export function errorText(error: AppError): string {
-  return error.userMessage ?? LOCAL[error.code] ?? '操作失败，请重试。';
+  if (error.userMessage !== undefined) return error.userMessage;
+  return message(LOCAL[error.code] ?? 'errors.generic');
 }

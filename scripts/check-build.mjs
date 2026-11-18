@@ -149,12 +149,32 @@ for (const runtimeFile of runtimeFiles) {
 
 // The full error copy table (src/lib/error-messages.ts) is background and extension-page
 // only: content scripts show the `userMessage` the background attaches, plus a two-line
-// local table (src/content/error-text.ts). These strings exist only in the full table.
-const FULL_COPY_TABLE_MARKERS = ['OLLAMA_ORIGINS', '密钥格式不正确', '自定义服务已达 10 个上限'];
-const contentFiles = [
-  ...manifest.content_scripts.flatMap((script) => script.js ?? []),
-  ...runtimeFiles,
+// local table (src/content/error-text.ts). The copy lives in _locales now, so the markers
+// are keys that only the full code → key table names (bundles keep the dotted form; the
+// `.` → `_` happens at run time). The background must contain them, or this check would
+// pass for nothing (docs/plans/i18n.md 4.9).
+const FULL_COPY_TABLE_MARKERS = [
+  'errors.provider.localOriginRejected',
+  'errors.validation.invalidSecret',
+  'errors.config.providerLimit',
 ];
+const backgroundCode = await readFile(resolve(output, manifest.background.service_worker), 'utf8');
+for (const marker of FULL_COPY_TABLE_MARKERS) {
+  assert.ok(
+    backgroundCode.includes(marker),
+    `background no longer contains "${marker}": update FULL_COPY_TABLE_MARKERS`,
+  );
+}
+const residentFiles = manifest.content_scripts.flatMap((script) => script.js ?? []);
+// Resident content scripts carry no UI copy (docs/plans/i18n.md 4.3).
+for (const file of residentFiles) {
+  const code = await readFile(resolve(output, file), 'utf8');
+  assert.ok(
+    !code.includes('getMessage'),
+    `${file} calls i18n.getMessage; resident content scripts must not carry UI copy`,
+  );
+}
+const contentFiles = [...residentFiles, ...runtimeFiles];
 for (const file of contentFiles) {
   const code = await readFile(resolve(output, file), 'utf8');
   for (const marker of FULL_COPY_TABLE_MARKERS) {

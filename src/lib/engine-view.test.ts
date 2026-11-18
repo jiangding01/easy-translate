@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { createDefaultConfig } from '@/lib/config/defaults';
 import type { ConfigV1 } from '@/lib/config/types';
+import { createGetMessage, loadLocales } from '../../scripts/i18n-messages.mjs';
 import {
+  builtinName,
   customShort,
   engineEntries,
   engineReadiness,
   hostName,
   hostOf,
+  notReadyText,
   permissionPattern,
 } from './engine-view';
 
@@ -141,5 +145,29 @@ describe('customShort', () => {
   it('uses a generic label for an empty name', () => {
     expect(customShort('')).toBe('自');
     expect(customShort('   ')).toBe('自');
+  });
+});
+
+/** Switches the getMessage stub to the en copy (vitest.setup puts zh_CN back before each test). */
+async function useEnglish() {
+  const getMessage = createGetMessage(await loadLocales(), 'en');
+  fakeBrowser.i18n.getMessage = getMessage as typeof fakeBrowser.i18n.getMessage;
+}
+
+describe('engine copy in English', () => {
+  it('names Google and the readiness states from the en copy', async () => {
+    await useEnglish();
+    expect(builtinName('google')).toBe('Google Translate');
+    expect(builtinName('deepseek')).toBe('DeepSeek');
+    expect(notReadyText('needs-key')).toBe('No API key yet');
+    expect(
+      engineReadiness({
+        engine: 'deepseek',
+        baseURL: '',
+        model: 'deepseek-chat',
+        secret: { configured: true, last4: '1234' },
+        granted: undefined,
+      }),
+    ).toEqual({ status: 'Key ••••1234', mono: true, attention: false });
   });
 });

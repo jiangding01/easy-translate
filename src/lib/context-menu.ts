@@ -1,3 +1,5 @@
+import { i18n } from '#i18n';
+
 // Context menu and shortcut handling for the background. The browser API is injected so
 // the logic is testable; `background.ts` registers the listeners at top level, so a menu
 // click or shortcut that wakes the service worker is still handled.
@@ -32,13 +34,14 @@ export async function rebuildContextMenus(api: MenuApi): Promise<void> {
   await api.removeAll();
   await api.create({
     id: MENU_SELECTION_ID,
-    title: '翻译选中文字',
+    // Same wording as the shortcut's description in the manifest.
+    title: i18n.t('manifest.commands.translateSelection'),
     contexts: ['selection'],
     documentUrlPatterns: MENU_URL_PATTERNS,
   });
   await api.create({
     id: MENU_PAGE_ID,
-    title: '翻译此页 / 显示原文',
+    title: i18n.t('manifest.commands.translatePage'),
     contexts: ['page'],
     documentUrlPatterns: MENU_URL_PATTERNS,
   });

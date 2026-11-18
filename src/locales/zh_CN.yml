@@ -10,3 +10,68 @@ manifest:
   commands:
     translatePage: 翻译此页 / 显示原文
     translateSelection: 翻译选中文字
+
+# 错误文案（src/lib/error-messages.ts 的错误码 → 键表；内容侧 src/content/error-text.ts 复用其中 3 条）。
+# 写法：发生了什么 + 怎么办。
+errors:
+  generic: 操作失败，请重试。
+  config:
+    newerVersion: 设置由更新版本的扩展写入，当前版本无法修改。请更新扩展。
+    writeFailed: 保存失败，请重试。
+    readFailed: 读取设置失败，请刷新后重试。
+    invalidBaseUrl: 接口地址不正确。请填写 https 开头的地址，本地模型可用 http://localhost。
+    modelRequired: 尚未填写模型名称。请填写模型后重试。
+    permissionMissing: 尚未授权访问该接口地址。请在设置页点击「授权访问」后重试。
+    providerLimit: 自定义服务已达 10 个上限。请先删除不用的服务。
+    providerMissing: 找不到这个自定义服务，可能已被删除。请在设置页重新选择默认引擎。
+    invalidValue: 设置值不正确，没有保存。请检查后重试。
+  network:
+    extensionUnreachable: 无法连接扩展后台，请重新加载扩展后重试。
+    pageUnreachable: 无法连接页面，请刷新网页后重试。Chrome 商店等受限页面无法使用。
+    fetchFailed: 无法连接翻译服务。请检查网络后重试。
+    timeout: 翻译服务响应超时。请检查网络后重试。
+    streamInterrupted: 翻译过程中连接中断。请重试。
+  validation:
+    payloadTooLarge: 一次提交的内容过多。请缩小翻译范围后重试。
+    emptyTranslation: 翻译服务返回了空结果。请重试，或换一个翻译服务。
+    invalidPayload: 请求格式不正确。请刷新页面后重试。
+    forbiddenSender: 该操作只能在设置页中进行。请从设置页重试。
+    invalidSecret: 密钥格式不正确：只能包含英文字母、数字和符号，不能有空格，且不超过 512 个字符。请重新复制后再粘贴。
+    badResponse: 翻译服务返回的内容无法解析。请重试，或换一个翻译服务。
+    unsupportedPage: 请在普通 HTTP 或 HTTPS 网页中打开插件。
+  provider:
+    unauthorized: 密钥无效或没有访问权限。请检查密钥后重试。
+    localOriginRejected: 本地服务拒绝了扩展的请求。如果是 Ollama，需要把环境变量 OLLAMA_ORIGINS 设为 chrome-extension://*，再彻底退出并重新打开 Ollama。
+    notFound: 接口地址或模型不存在。请检查接口地址和模型名称。
+    quotaExceeded: 该服务的额度已用完。请充值，或换一个翻译服务。
+    serverError: 翻译服务暂时出错。请稍后重试，或换一个翻译服务。
+    outputTruncated: 译文超出模型的输出长度，被截断了。请缩小翻译范围，或换一个模型。
+    contentBlocked: 这段内容被翻译服务的安全策略拦截，无法翻译。
+    badRequest: 翻译服务拒绝了该请求。请检查模型名称等设置后重试。
+  rateLimit:
+    tooManyRequests: 请求过于频繁，服务暂时限流。请稍等片刻后重试。
+    portBusy: 当前页面同时进行的翻译请求过多。请稍等片刻后重试。
+
+# 引擎名称与就绪状态（src/lib/engine-view.ts、src/lib/translate/engine-options.ts）。
+engine:
+  googleName: Google 翻译
+  # 设置页和面板里无名自定义服务的名称（有地址时显示主机名）。
+  unnamed: 未命名服务
+  # 灵岛里无名自定义服务的名称（不回退到主机名）。
+  customFallback: 自定义服务
+  notReady:
+    badUrl: 地址格式不正确
+    needsGrant: 还没有授权访问这个地址
+    needsKey: 还没有填写密钥
+    needsModel: 还没有填写模型
+  status:
+    free: 免费
+    # $1：密钥末 4 位。
+    keySuffix: 密钥 ••••$1
+    keyConfigured: 已配置密钥
+    badUrl: 地址有误
+    needsGrant: 待授权
+    noKey: 未填密钥
+    notConfigured: 未配置
+    noModel: 未填模型
+    unsaved: 未保存

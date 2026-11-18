@@ -1,6 +1,6 @@
 # Easy Translate 交接文档（HANDOFF）
 
-> 最后更新：2026-11-17 · 阶段：**路线图前 3 项已完成**（PR-A #17、CI 增强 #18），仓库已开源（#23，MIT）；**i18n 第 1 批基础设施已合并**（#26）；只看译文的两处修复已合并（#27、#28），Google 丢标签时改用 HTML 模式重试、保住译文里的链接（#30）。插件改名为 **译屿 / Islet Translate**（已定，待实施）。下一步：i18n 第 2 批起与双语 README → 改名 → 冒烟 e2e → 发 v0.2.0 → M3d，详见第 5 节「路线图与发版」
+> 最后更新：2026-11-18 · 阶段：**路线图前 3 项已完成**（PR-A #17、CI 增强 #18），仓库已开源（#23，MIT）；**i18n 第 1 批基础设施已合并**（#26）；只看译文的两处修复已合并（#27、#28），Google 丢标签时改用 HTML 模式重试、保住译文里的链接（#30）。插件改名为 **译屿 / Islet Translate**（已定，待实施）。**i18n 第 2 批（后台与公共库）已实现**，分支 `feat/i18n-batch2-background`，待提交、开 PR（同分支带上之前未提交的本文件与 `docs/reviews/2026-11-17-translation-only-followups.md`）。之后 `fix/translation-only-pins` → 第 3–6 批与双语 README → 改名 → 冒烟 e2e → 发 v0.2.0 → M3d，详见第 5 节「路线图与发版」。
 > 本文给接手的 Agent 或开发者用，按顺序读完即可直接开工。文中凡与其他文档冲突的地方，以本文和「权威文档」为准。
 
 ## 1. 项目一句话
@@ -43,7 +43,7 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
 
 ## 4. 当前代码状态
 
-- **main**（截至 PR #30）：
+- **main**（截至 PR #30，b2e20a2）：
   - **M0 地基**（PR #1）：质量门禁、配置仓库、类型化消息与 Port、设计 token。
   - **M1 翻译核心**（PR #2、#3）：`src/lib/translate/`（provider、调度器、缓存、密钥、权限、翻译服务、Port `et-translate`）；最多 10 个自定义服务；设置页与工具栏面板（「隐中生岛」琥珀主题，`src/styles/tokens.css`，对比度由 `scripts/check-contrast.mjs` 校验）；页面共用 `src/lib/engine-view.ts`、`src/lib/endpoint.ts`、`src/components/Select.tsx`。
   - **M2a 整页翻译**（PR #4、#6）与扩展图标（PR #5）：`src/content/`（扫描分段、视口队列与会话、渲染、动态内容、站点记忆）。
@@ -57,13 +57,13 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
   - **CI 增强**（PR #18）：构建产物上传、依赖审计与审查、CodeQL、Dependabot；Dependabot 升级（#20、#24）。
   - **扩展重载后旧页面划词报错**（PR #22）、**CodeQL 告警修复**（PR #25）。
   - **开源准备**（PR #23）：MIT 许可证、THIRD_PARTY_NOTICES、SECURITY.md、仓库元数据。
-  - **i18n 第 1 批基础设施**（PR #26）：方案 `docs/plans/i18n.md`；`scripts/check-i18n.mjs` 与 `scripts/i18n-baseline.json` 卡住新增中文字面量。
-  - **只看译文修复**：`ch`/`em` 限宽段落不再塌成竖排（PR #27）；链接标记丢失、退回纯文本的段落照常隐藏原文（PR #28，推翻 M2 方案附录 C 第 8 条）。
+  - **i18n 第 1 批基础设施**（PR #26）：方案 `docs/plans/i18n.md`；`scripts/check-i18n.mjs` 与 `scripts/i18n-baseline.json` 卡住新增中文字面量。用 `@wxt-dev/i18n`，文案在 `src/locales/en.yml`、`zh_CN.yml`，默认 en、跟随浏览器；manifest 文案已本地化；按需模块用 `src/content/i18n.ts`（类型化 `message`/`pluralMessage`），扩展页用 `i18n.t`；`npm run check:i18n` 校验语言文件，中文硬编码按哈希基线（287 条）只减不增。规则见 [`docs/plans/i18n.md`](docs/plans/i18n.md) 第 4 节。
+  - **只看译文修复**：`ch`/`em` 限宽段落不再塌成竖排（PR #27：根元素 `font-size:0` 会把 em/ch 长度归零，`render.ts` 在切换前读计算值钉成内联像素 `PINNED`/`PINNED_TYPED`，遗留问题见第 5 节 4b）；链接标记丢失、退回纯文本的段落照常隐藏原文（PR #28，推翻 M2 方案附录 C 第 8 条）。
   - **Google 标签修复**（PR #30）：纯文本模式丢掉行内标签时，适配器对这些条目用 `format=html` 重试一次（`src/lib/translate/providers/google-html.ts`），保住译文里的链接。
 - **音标（PR #15，已合并）**：UK/US 音标（`src/lib/phonetic/`，数据 `public/dict/gb|us/` 分片，生成脚本 `scripts/build-phonetics.mjs`）、朗读卡死修复（`src/content/selection/speech.ts`）、底部朗读英文默认美音；`docs/reviews/` 收录 Codex 复核清单与核实结论。方案 [`docs/plans/phonetics-en.md`](docs/plans/phonetics-en.md)。
 - **体积（gzip，`npm run check:size`）**：content 6.99/7KB（**几乎没有余量，改引导层前先瘦身或经用户同意调预算**）、page-runtime 22.15/24KB、selection-runtime 18.63/19KB、background 58.20/60KB、popup 84.92/90KB、options 91.42/150KB；音标分片英 1.41MB、美 0.80MB（各 2MB，单片 40KB）。
-- **可用命令**：`npm run dev | build | lint | format | typecheck | test | check | check:contrast | check:size | zip`。`npm run check` 通过（截至 PR #30：73 个测试文件、1448 个用例）。
-- **还没有**：M3d 动态页与站点规则、M3b 段落级交互、M3c 指令台与灵岛键盘、M3e 本地引擎；i18n 第 2–6 批（文案迁移）与双语 README；改名。
+- **可用命令**：`npm run dev | build | lint | format | typecheck | test | check | check:contrast | check:size | zip`。`check:i18n`、`check:build` 也在其中。`npm run check` 通过（截至 PR #30：73 个测试文件、1448 个用例）。
+- **还没有**：M3d 动态页与站点规则、M3b 段落级交互、M3c 指令台与灵岛键盘、M3e 本地引擎；i18n 第 2–6 批（文案迁移，界面文案大部分仍是中文硬编码）与双语 README；改名。
 
 ## 5. 批次状态与下一步
 
@@ -153,9 +153,10 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
           - 历史中 15 个使用公司邮箱的提交已改写成个人邮箱，并已强推；旧提交在 PR #8–#21 中的引用已提交 GitHub 支持工单 #5016642 申请清除，等待答复；本仓库的 local git 邮箱已改为 noreply；
           - 开源准备 PR：LICENSE（MIT）、THIRD_PARTY_NOTICES（扩展包内也附一份，由 check-build 校验两份一致）、SECURITY.md、package.json 的元数据、去掉文档中的本机路径。
           - Dependabot：TypeScript 7 已设为忽略（`@dependabot ignore this major version`）。以后单独升级时，需要修改 `src/entrypoints/options/providers.ts:37` 的 Uint8Array 类型。
-        4. **i18n 基础设施**（**进行中**：用户已定界面语言跟随浏览器；方案 `docs/plans/i18n.md` 已获批，分 6 批；**第 1 批基建已合并**（PR #26），经 3 轮审查；第 1–4 批之间不发版。后续小项：CI 在 PR 上把 `scripts/i18n-baseline.json` 与 `origin/main` 比较，每个哈希的次数不得超过主分支，防止手工往基线里加条目）：用 `@wxt-dev/i18n` / `chrome.i18n`，文案放到 `_locales`（zh-CN、en）；读屏的 aria-label 也一起改。**同批完成中英双语 README**：`README.md` 改成英文（默认显示），新增 `README.zh-CN.md`，两份文件顶部互加 `English | 简体中文` 链接；术语和 i18n 的英文文案统一。
+        4. **i18n 基础设施**（**进行中**：用户已定界面语言跟随浏览器；方案 `docs/plans/i18n.md` 已获批，分 6 批；**第 1 批基建已合并**（PR #26，经 3 轮审查）；**第 2 批（后台与公共库）已实现**（分支 `feat/i18n-batch2-background`，实施记录见方案第 5 节第 2 条），下一步第 3 批（面板与设置页）；第 1–4 批之间不发版。后续小项：CI 在 PR 上把 `scripts/i18n-baseline.json` 与 `origin/main` 比较，每个哈希的次数不得超过主分支，防止手工往基线里加条目）：用 `@wxt-dev/i18n` / `chrome.i18n`，文案放到 `_locales`（zh-CN、en）；读屏的 aria-label 也一起改。**同批完成中英双语 README**：`README.md` 改成英文（默认显示），新增 `README.zh-CN.md`，两份文件顶部互加 `English | 简体中文` 链接；术语和 i18n 的英文文案统一。
         5. **改名**（用户已定）：中文名 **译屿**，英文名 **Islet Translate**，`short_name` 用「Islet」/「译屿」。查重记录：「译屿」没有发现重名；「Islet Translate」也没有，但 Chrome 商店里有两个只叫「Islet」的扩展（一个日记、一个下载提示），都不是翻译类；Isleglow 已被 Cay Skin 的 Isle Glow 等占用，放弃。需要改的地方：manifest 的 `name`/`short_name`、面板和设置页标题、README、包名（另议）。图标沿用「暗岛微光」，微调成小岛的意象，**先在原型里新建画板出 2–3 个方案给用户挑**。放在发 v0.2.0 之前，和双语 README 一起做。
-        6. **冒烟 e2e**（i18n 之后）：用 Playwright 加载构建产物，在本地测试页上验证三条主流程：整页翻译出译文、划词出现小点和卡片、面板能打开。翻译请求用 mock。
+        4b. **「仅看译文」遗留问题**（2026-11-17 核实，PR #27 已修竖排塌陷）：核实记录见 [`docs/reviews/2026-11-17-translation-only-followups.md`](docs/reviews/2026-11-17-translation-only-followups.md)。小 PR `fix/translation-only-pins` 排在 i18n 第 2 批之后、冒烟 e2e 之前：margin/padding 改读 Typed OM（`auto` 不钉、百分比原样），`letter-spacing`/`word-spacing` 以变量设回 `et-tr`，补回归测试。视口单位与媒体查询不跟随接受为已知限制；em 边框/圆角归零等真实反馈再修。
+        6. **冒烟 e2e**（i18n 之后）：用 Playwright（Node 版）加载构建产物，在本地测试页上验证三条主流程：整页翻译出译文、划词出现小点和卡片、面板能打开。翻译请求用 mock。另加「仅看译文」布局 fixture（`max-width: Nch`、`width: Nem`、`flex: 0 0 Nem`、`margin: 0 auto`、`padding: N%`、`letter-spacing: Nem`），断言切换前后译文根元素不塌陷、不偏移。先作为可选命令，不进 `npm run check`。
         7. 稳定性检查之后**发 v0.2.0**：**先不上架应用商店**，只发 GitHub Release。同时加发版工作流：推送 `v*` 标签时，校验标签与 `package.json`、CHANGELOG 的版本一致，跑完整检查后执行 `npm run zip`，创建 Release 并附上 zip，说明取自 CHANGELOG 中对应的一段。`package.json` 版本号和 CHANGELOG 的「未发布」同步改成 0.2.0。上架商店需要的材料（128px 图标、隐私政策、商店介绍和截图）等用户决定上架时再准备。
         8. 然后做 M3d（含 PR-B）。版本号保持 0.x，功能和接口稳定后再出 1.0。每完成一批，Agent 要主动评估离发版还差什么，接近时提醒用户。
       - **Codex 复核清单（已核实；第 1、2、4 条已由 PR-A 修复，第 3 条和第 6 条随 M3d 处理）**：用户请 Codex 审查核心实现，清单见 [`docs/reviews/2026-11-17-core-implementation-findings.md`](docs/reviews/2026-11-17-core-implementation-findings.md)。Opus 子代理在 `dd5d58b` 的隔离副本里逐条写了先红的复现测试，核实结论见 [`docs/reviews/2026-11-17-core-findings-verification.md`](docs/reviews/2026-11-17-core-findings-verification.md)：
@@ -240,12 +241,16 @@ M1 和 M2（整页翻译）完成后即构成 MVP。
 
 > 注：CI 在 M0 中建立。M0 的 PR 开出时 CI 才首次运行，需确认它能通过。
 
+> **i18n 真机验收注意**（2026-11-17）：Chrome 只在加载或重新加载扩展时读取 `_locales`，页面 JS 却每次都从磁盘读最新文件。因此，凡是改了 `src/locales` 的构建（i18n 第 2–6 批每批都会改），覆盖 `.output` 之后必须在 `chrome://extensions` 点一次「重新加载」，否则新代码会查不到新键。表现为扩展错误页出现 `[i18n] Message not found: "…"`，界面文案为空；`meta.locale` 缺失时 `uiLocale()` 回退为 `en`。用户在第 1 批合并后遇到过一次：报错堆栈里的 chunk（`popup-DHqEj0wc.js`）不属于当前产物，当前产物的 `_locales` 两个语言都有 `meta_locale`。用户重新加载扩展后报错消失，已确认原因。在 Chrome 商店更新或重新加载时会一并换掉文案目录，不影响最终用户。验收前先清空扩展错误页，避免把旧错误当成新问题。
+
 ## 9. 进度日志
 
 | 日期 | 事项 |
 | --- | --- |
+| 2026-11-18 | **i18n 第 2 批（后台与公共库）已实现**：错误文案 31 条加兜底、引擎名称与就绪状态、右键菜单迁到 `src/locales`；`error-text.ts` 与完整错误表共用键；check-build 改用键名标记并加正向断言，另断言常驻 `content.js` 不含 `getMessage`。方案经 /think 与 Opus 审查（无阻断，4 条应修已并入，含「`session.ts` 被误列为常驻脚本」）；实现后 check 审查发现两处可简化（engine-options 复用 `readiness.problem`、去掉多余的 `hasOwn`），已修。中文文案经脚本逐条比对与迁移前一致；`npm run check` 通过（73 个文件、1452 个用例），基线 287→233，background 58.20→57.14KB。<br>**下一步**：用户确认后提交并开 PR；合并后做 `fix/translation-only-pins` |
 | 2026-11-17 | **Google 丢标签时用 HTML 模式重试，已合并**（PR #30，`a4f06fa`）。PR #28 合并后用户复验：只看译文已隐藏首段原文，但首段译文没有链接。用户两次 curl 取证：纯文本模式把 `<t0>` 整个丢掉；`format=html` 能把标签放到「由 Claude 编写和审查的」上；`<a>` 套 `<a>` 会被拆平，`<a>` 套 `<b>`、空 `<code>` 都能保留。用户另测 DeepSeek 本来就能保住链接，所以只改 Google 适配器：标签不完好的条目合批用 HTML 模式重试一次（`google-html.ts`），失败或回显时保留第一次的译文。方案经 /think 获批；check 时 Fable 审查发现「HTML 回显原文会覆盖已有译文」与编号按数字比较两处，已修并补测试，1448 个用例。**已缓存的坏译文需清缓存后才会修好**。用户清缓存后真机验证通过：首段译文「由 Claude 编写和审查的」带链接，其他段落链接正常。**流程调整**：Fable 审查改为视情况使用，只用于十分重要且复杂的改动 |
 | 2026-11-17 | **只看译文露出原文的修复已合并**（PR #28，`ad3d8ba`；同日 PR #27 修了 `ch`/`em` 限宽段落塌成竖排）。用户在 claude.dev 博客 verification 一文发现，切到只看译文后第一段英文没有隐藏。根因：首段含链接，Google 返回时把 `<t0>…</t0>` 整个丢掉（用户用 curl 取证），段落退回纯文本；按 M2 方案附录 C 第 8 条，这类段落在只看译文下保留双语。**用户决定推翻该条**：照常隐藏原文，链接切回双语可用。删掉失效的 `keepOriginal`、`hasLink`；放宽标签识别（对此情况无效）和 `format=html` 重试都不做，后者仍按风险 1 的 10% 阈值评估 |
+| 2026-11-17 | **i18n 第 1 批已合并**（PR #26）：方案经对抗式审查后获批；实现经 3 轮独立审查（第 1 轮 5 条应修，含基线可绕过、联合键绕过插值检查等；第 2 轮 1 条复数插值漏检；第 3 轮无应修）。**「仅看译文」竖排**：用户在 claude.com 文章页发现，子会话定位为 `font-size:0` 让 `max-width: 80ch` 归零，修复合并为 PR #27；子会话另报 4 个遗留问题，主会话在 Chrome 156 实测全部属实（另发现百分比 padding 同类问题），记入 `docs/reviews/2026-11-17-translation-only-followups.md` 并排期。<br>**下一步**：新会话开始 i18n 第 2 批，开分支时带上本地未提交的两份文档 |
 | 2026-11-17 | **音标已合并**（PR #15）。**原型**更新到第 36 版：4 个画板对齐当前实现，没有实际渲染检查，请用户打开确认。**命名**：候选有译屿、屿光、渡、隐屿等，查重后定为「译屿 / Islet Translate」；Isleglow 已被占用，放弃。**路线图**：PR-A → CI 增强（产物上传、依赖审查、CodeQL）→ i18n 与双语 README → 改名 → 冒烟 e2e → 发 v0.2.0（只发 GitHub Release，暂不上架）→ M3d |
 | 2026-11-17 | **供应商图标已合并**（PR #14）。**英文单词音标**：ECDICT 调研 → 方案复查（修了音标分片被当成最终译文、晚到被丢等 3 处设计错误）→ 英音 3 万词 → 用户要求英美双音标（美音 ipa-dict en_US）→ 真机发现中文页面不显示（语言判断过严）和长尾词缺失 → 改全量分片 → 补美式拼写互查、UK/US 标签 → 真机发现朗读卡死，子代理在真实 Chrome 复现出 Google 在线声音「cancel 后立即 speak」的浏览器级 bug 并修复 → 底部朗读英文默认美音。用户验收通过。**Codex 复核清单**由 Opus 子代理逐条核实（第 1–4 条属实，定级下调），排进 PR-A 和 M3d。<br>**下一步**：音标 PR → 原型 → PR-A |
 | 2026-11-17 | **面板设置入口已合并**（PR #13）。**引擎供应商图标**：先出效果图，用户确认后出方案并获批；图标来自 lobe-icons 1.102.0（MIT），存成路径数据，卡片和灵岛的图标由后台随 `engine.options` 下发，面板和设置页直接引用；审查时把 `customShort` 挪到 `engine-view.ts`；用户在浅色、深色下逐一检查 5 处，均无问题。**排期**：i18n 基础设施提前到音标之后、M3d 之前。<br>**下一步**：提交并开 PR |
