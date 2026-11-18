@@ -152,6 +152,7 @@ wxt.config.ts           # WXT 与 Manifest V3 配置
 | [M3a 划词翻译方案](docs/plans/m3a-selection.md) | 小点与卡片、流式、选区一致性、真机调整 |
 | [引擎供应商图标](docs/plans/provider-icons.md) | 图标数据、下发方式与体积 |
 | [英文单词音标](docs/plans/phonetics-en.md) | 数据来源、写法转换、分片、朗读卡死修复 |
+| [页面 DOM 约定（对外）](docs/dom-contract.md) | 译文插进网页后留下的标记，供网页导出等第三方工具读取；修改属于不兼容变更 |
 | [Codex 复核核实](docs/reviews/2026-11-17-core-findings-verification.md) | 核心实现问题的核实结论与修复排期 |
 
 ## 接入本地 Ollama

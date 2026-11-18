@@ -4,6 +4,8 @@
 // would otherwise pass down), everything else is inherited from the host so
 // translations read native.
 
+// The display these rules give `et-tr`, `data-et-inline` and `data-et-only` is a public
+// contract for tools that read the DOM without CSS (docs/dom-contract.md).
 export const STYLE_ATTR = 'data-et';
 
 const CSS = `

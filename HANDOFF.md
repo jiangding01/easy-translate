@@ -1,6 +1,6 @@
 # Easy Translate 交接文档（HANDOFF）
 
-> 最后更新：2026-11-18 · 阶段：**路线图前 3 项已完成**（PR-A #17、CI 增强 #18），仓库已开源（#23，MIT）；**i18n 第 1 批基础设施已合并**（#26）；只看译文的两处修复已合并（#27、#28），Google 丢标签时改用 HTML 模式重试、保住译文里的链接（#30）。插件改名为 **译屿 / Islet Translate**（已定，待实施）。**i18n 第 2 批（后台与公共库）已实现**，分支 `feat/i18n-batch2-background`，待提交、开 PR（同分支带上之前未提交的本文件与 `docs/reviews/2026-11-17-translation-only-followups.md`）。之后 `fix/translation-only-pins` → 第 3–6 批与双语 README → 改名 → 冒烟 e2e → 发 v0.2.0 → M3d，详见第 5 节「路线图与发版」。
+> 最后更新：2026-11-18 · 阶段：**路线图前 3 项已完成**（PR-A #17、CI 增强 #18），仓库已开源（#23，MIT）；**i18n 第 1 批基础设施已合并**（#26）；只看译文的两处修复已合并（#27、#28），Google 丢标签时改用 HTML 模式重试、保住译文里的链接（#30）。插件改名为 **译屿 / Islet Translate**（已定，待实施）。**i18n 第 2 批已合并**（#33），运行时依赖审计支持按公告 ID 限期豁免（#34，picomatch，到期 2026-12-18）。**`fix/translation-only-pins` 已实现**（含对外 DOM 约定 `docs/dom-contract.md`），待提交、开 PR。之后 i18n 第 3–6 批与双语 README → 改名 → 冒烟 e2e → 发 v0.2.0 → M3d，详见第 5 节「路线图与发版」。
 > 本文给接手的 Agent 或开发者用，按顺序读完即可直接开工。文中凡与其他文档冲突的地方，以本文和「权威文档」为准。
 
 ## 1. 项目一句话
@@ -126,6 +126,7 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
         2. 版面安全：单元所在的容器定宽、隐藏溢出或不换行时，不做行内追加，改为放到下方，或者跳过；
         3. 站点规则（M3d 本来就要做）：允许按站点排除选择器，例如 `.efx-fig`；
         4. 以后可以加「不翻译此区域」的手动入口。
+        5. **代码块工具栏**（2026-11-18，Inkmark 协作需求 P2）：claude.dev 的 `<div class="art-code"><div class="ch"><span>CODE<span class="lang">Python</span></span><button>Copy</button></div><pre>…</pre></div>` 中，`CODE Python` 被翻成「代码Python」，污染页面和导出。候选条件：紧邻 `PRE` 的兄弟元素，且含按钮或语言类 class（`lang`、`language`、`filename` 等），且文本很短。出方案前多看几个站点的工具栏结构（有的在 `pre` 之后或之内），与第 1 条「界面示意」统一成一套规则。
       - **另一项 M3 后的改进**：AI 引擎的整页翻译改为逐段出现。模型还在生成一批时，后台边收边解析，某一段完整了就立即渲染；首屏第一批切小。用户已同意排在 M3a、音标之后。
     - **2026-11-17 真机反馈修复已验收通过**（方案附录 F）：
       - Google 偶发「部分句子原样回显」被写进 7 天缓存，每次复现。新增 `src/lib/translate/echo.ts` 的 `isEchoedTranslation`；`scheduler.ts` 的 `complete()` 对回显条目不写缓存；`providers/google.ts` 的 `retryEchoed` 用 `/translate_a/single` 重试一次，失败则保留原结果并停止重试。已补回归测试。
@@ -156,7 +157,7 @@ Easy Translate 是一个 Chrome MV3 网页翻译扩展，技术栈为 WXT 0.21 +
           - Dependabot：TypeScript 7 已设为忽略（`@dependabot ignore this major version`）。以后单独升级时，需要修改 `src/entrypoints/options/providers.ts:37` 的 Uint8Array 类型。
         4. **i18n 基础设施**（**进行中**：用户已定界面语言跟随浏览器；方案 `docs/plans/i18n.md` 已获批，分 6 批；**第 1 批基建已合并**（PR #26，经 3 轮审查）；**第 2 批（后台与公共库）已实现**（分支 `feat/i18n-batch2-background`，实施记录见方案第 5 节第 2 条），下一步第 3 批（面板与设置页）；第 1–4 批之间不发版。后续小项：CI 在 PR 上把 `scripts/i18n-baseline.json` 与 `origin/main` 比较，每个哈希的次数不得超过主分支，防止手工往基线里加条目）：用 `@wxt-dev/i18n` / `chrome.i18n`，文案放到 `_locales`（zh-CN、en）；读屏的 aria-label 也一起改。**同批完成中英双语 README**：`README.md` 改成英文（默认显示），新增 `README.zh-CN.md`，两份文件顶部互加 `English | 简体中文` 链接；术语和 i18n 的英文文案统一。
         5. **改名**（用户已定）：中文名 **译屿**，英文名 **Islet Translate**，`short_name` 用「Islet」/「译屿」。查重记录：「译屿」没有发现重名；「Islet Translate」也没有，但 Chrome 商店里有两个只叫「Islet」的扩展（一个日记、一个下载提示），都不是翻译类；Isleglow 已被 Cay Skin 的 Isle Glow 等占用，放弃。需要改的地方：manifest 的 `name`/`short_name`、面板和设置页标题、README、包名（另议）。图标沿用「暗岛微光」，微调成小岛的意象，**先在原型里新建画板出 2–3 个方案给用户挑**。放在发 v0.2.0 之前，和双语 README 一起做。
-        4b. **「仅看译文」遗留问题**（2026-11-17 核实，PR #27 已修竖排塌陷）：核实记录见 [`docs/reviews/2026-11-17-translation-only-followups.md`](docs/reviews/2026-11-17-translation-only-followups.md)。小 PR `fix/translation-only-pins` 排在 i18n 第 2 批之后、冒烟 e2e 之前：margin/padding 改读 Typed OM（`auto` 不钉、百分比原样），`letter-spacing`/`word-spacing` 以变量设回 `et-tr`，补回归测试。视口单位与媒体查询不跟随接受为已知限制；em 边框/圆角归零等真实反馈再修。
+        4b. **「仅看译文」遗留问题**（2026-11-17 核实，PR #27 已修竖排塌陷）：核实记录见 [`docs/reviews/2026-11-17-translation-only-followups.md`](docs/reviews/2026-11-17-translation-only-followups.md)。小 PR `fix/translation-only-pins`（**已实现**，2026-11-18）：margin/padding 改读 Typed OM（`auto` 不钉、百分比原样），`letter-spacing`/`word-spacing` 以变量 `--et-ls`/`--et-ws` 设回 `et-tr`，补回归测试。同 PR 另一个提交：对外 DOM 约定 [`docs/dom-contract.md`](docs/dom-contract.md)（来自网页导出扩展 Inkmark 的协作需求 P1、P3：`et-tr`、`lang`、`data-et-inline`、`data-et-only`、`data-et-state` 定为约定，改动须在 CHANGELOG 标「DOM 约定变更」；`render.test.ts` 的「DOM contract」一组锁定）。视口单位与媒体查询不跟随接受为已知限制；em 边框/圆角归零等真实反馈再修。
         6. **冒烟 e2e**（i18n 之后）：用 Playwright（Node 版）加载构建产物，在本地测试页上验证三条主流程：整页翻译出译文、划词出现小点和卡片、面板能打开。翻译请求用 mock。另加「仅看译文」布局 fixture（`max-width: Nch`、`width: Nem`、`flex: 0 0 Nem`、`margin: 0 auto`、`padding: N%`、`letter-spacing: Nem`），断言切换前后译文根元素不塌陷、不偏移。先作为可选命令，不进 `npm run check`。
         7. 稳定性检查之后**发 v0.2.0**：**先不上架应用商店**，只发 GitHub Release。同时加发版工作流：推送 `v*` 标签时，校验标签与 `package.json`、CHANGELOG 的版本一致，跑完整检查后执行 `npm run zip`，创建 Release 并附上 zip，说明取自 CHANGELOG 中对应的一段。`package.json` 版本号和 CHANGELOG 的「未发布」同步改成 0.2.0。上架商店需要的材料（128px 图标、隐私政策、商店介绍和截图）等用户决定上架时再准备。
         8. 然后做 M3d（含 PR-B）。版本号保持 0.x，功能和接口稳定后再出 1.0。每完成一批，Agent 要主动评估离发版还差什么，接近时提醒用户。
@@ -248,6 +249,7 @@ M1 和 M2（整页翻译）完成后即构成 MVP。
 
 | 日期 | 事项 |
 | --- | --- |
+| 2026-11-18 | **`fix/translation-only-pins` 已实现**：只看译文时 margin/padding 改读 Typed OM，`margin: 0 auto` 保持居中、百分比 padding 随窗口变化；根元素的 `letter-spacing`/`word-spacing` 以变量设回译文。先红后绿，新增 1 个回归用例（另有 2 个 DOM 约定锁定用例）；page-runtime 22.04→22.11KB；真机验收待做。**Inkmark 协作需求**（网页转 Markdown 扩展，文档在用户本地）：经核实 P1、P3 合理，写成 `docs/dom-contract.md` 并加锁定测试，随本 PR 单独提交；P2（代码块工具栏不翻译）记入 M3d 待处理项第 5 条。**CI**：picomatch 无补丁高危公告拦下所有分支，经 Fable 5.2 决策改为按公告 ID 限期豁免（#34），#33 随后合并。<br>**下一步**：用户确认后提交并开 PR；之后 i18n 第 3 批（面板与设置页） |
 | 2026-11-18 | **i18n 第 2 批（后台与公共库）已实现**：错误文案 31 条加兜底、引擎名称与就绪状态、右键菜单迁到 `src/locales`；`error-text.ts` 与完整错误表共用键；check-build 改用键名标记并加正向断言，另断言常驻 `content.js` 不含 `getMessage`。方案经 /think 与 Opus 审查（无阻断，4 条应修已并入，含「`session.ts` 被误列为常驻脚本」）；实现后 check 审查发现两处可简化（engine-options 复用 `readiness.problem`、去掉多余的 `hasOwn`），已修。中文文案经脚本逐条比对与迁移前一致；`npm run check` 通过（73 个文件、1452 个用例），基线 287→233，background 58.20→57.14KB。<br>**下一步**：用户确认后提交并开 PR；合并后做 `fix/translation-only-pins` |
 | 2026-11-17 | **Google 丢标签时用 HTML 模式重试，已合并**（PR #30，`a4f06fa`）。PR #28 合并后用户复验：只看译文已隐藏首段原文，但首段译文没有链接。用户两次 curl 取证：纯文本模式把 `<t0>` 整个丢掉；`format=html` 能把标签放到「由 Claude 编写和审查的」上；`<a>` 套 `<a>` 会被拆平，`<a>` 套 `<b>`、空 `<code>` 都能保留。用户另测 DeepSeek 本来就能保住链接，所以只改 Google 适配器：标签不完好的条目合批用 HTML 模式重试一次（`google-html.ts`），失败或回显时保留第一次的译文。方案经 /think 获批；check 时 Fable 审查发现「HTML 回显原文会覆盖已有译文」与编号按数字比较两处，已修并补测试，1448 个用例。**已缓存的坏译文需清缓存后才会修好**。用户清缓存后真机验证通过：首段译文「由 Claude 编写和审查的」带链接，其他段落链接正常。**流程调整**：Fable 审查改为视情况使用，只用于十分重要且复杂的改动 |
 | 2026-11-17 | **只看译文露出原文的修复已合并**（PR #28，`ad3d8ba`；同日 PR #27 修了 `ch`/`em` 限宽段落塌成竖排）。用户在 claude.dev 博客 verification 一文发现，切到只看译文后第一段英文没有隐藏。根因：首段含链接，Google 返回时把 `<t0>…</t0>` 整个丢掉（用户用 curl 取证），段落退回纯文本；按 M2 方案附录 C 第 8 条，这类段落在只看译文下保留双语。**用户决定推翻该条**：照常隐藏原文，链接切回双语可用。删掉失效的 `keepOriginal`、`hasLink`；放宽标签识别（对此情况无效）和 `format=html` 重试都不做，后者仍按风险 1 的 10% 阈值评估 |

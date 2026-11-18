@@ -9,6 +9,9 @@ import { plainTranslation, restoreTranslation, segment } from './segment';
 // moves host nodes: only inserts <et-tr> and sets a few attributes, all undone
 // on restore. Reads layout first, writes in one animation frame, animates with
 // interruptible Web Animations on opacity/filter only.
+// The <et-tr> element, `lang`, `data-et-inline`, `data-et-only` and `data-et-state` are a
+// public contract (docs/dom-contract.md): export tools read them. Changing one is a
+// breaking change, noted in CHANGELOG.md.
 
 export interface RenderOptions {
   win: Window;
@@ -149,6 +152,7 @@ export function createRenderer(options: RenderOptions): Renderer {
     return dark;
   };
 
+  // Contract (docs/dom-contract.md): tag, `lang`, `data-et-inline`.
   function makeElement(dark: boolean, inline: boolean): HTMLElement {
     const el = doc.createElement('et-tr');
     el.setAttribute('data-et-s', style);
@@ -271,6 +275,7 @@ export function createRenderer(options: RenderOptions): Renderer {
     for (const [name, value] of pins) {
       if (value && !KEYWORD.test(value)) root.style.setProperty(name, value);
     }
+    // Contract: on the original, hides its direct children other than <et-tr>.
     root.setAttribute('data-et-only', '');
     record.el.style.setProperty('--et-fs', fontSize);
     record.el.style.setProperty('--et-lh', lineHeight);
@@ -402,6 +407,8 @@ export function createRenderer(options: RenderOptions): Renderer {
         inline,
         failed: true,
       };
+      // Contract: an <et-tr> with data-et-state holds plugin UI, not translation. Any new
+      // non-translation content must carry a state too (docs/dom-contract.md).
       record.el.setAttribute('data-et-state', 'error');
       if (detail) record.el.title = detail;
       record.el.append(doc.createTextNode('未译出'));

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { discoverUnits } from './discover';
-import type { StyleReader } from './dom-rules';
+import { ISLE_TAG, OWN_ATTR, OWN_TAG, SELECTION_TAG, type StyleReader } from './dom-rules';
 import { createRenderer } from './render';
 
 const readStyle: StyleReader = (el) => {
@@ -324,3 +324,55 @@ describe('renderer: writes racing a restore', () => {
   });
 });
 
+// docs/dom-contract.md: export tools read these markers from a DOM clone without CSS.
+// A failing test here is a breaking change for them: update the contract and CHANGELOG.md.
+describe('renderer: DOM contract', () => {
+  it('marks block, inline, translation-only and failed translations as documented', async () => {
+    const { units, renderer } = await setup(
+      '<p>Block paragraph text.</p>' +
+        '<div>Run text here<p>Inner block text.</p></div>' +
+        '<div style="display:flex"><span>Flex item</span><span>Second item</span></div>' +
+        '<p>Failed paragraph text.</p>',
+    );
+    const [block, run, flex, failed] = [
+      units.find((unit) => unit.root.textContent === 'Block paragraph text.'),
+      units.find((unit) => unit.kind === 'run'),
+      units.find((unit) => (unit.root as HTMLElement).style?.display === 'flex'),
+      units.find((unit) => unit.root.textContent === 'Failed paragraph text.'),
+    ];
+    if (!block || !run || !flex || !failed) throw new Error('missing units');
+    await renderer.insert([
+      { unit: block, translation: '块' },
+      { unit: run, translation: '片段' },
+      { unit: flex, translation: '弹性' },
+    ]);
+    await renderer.fail(failed, () => {}, 'x');
+    const trOf = (root: Element) => [...root.querySelectorAll('et-tr')].at(-1) as Element;
+
+    const blockTr = trOf(block.root);
+    expect(blockTr.localName).toBe('et-tr');
+    expect(blockTr.getAttribute('lang')).toBe('zh-CN');
+    expect(blockTr.hasAttribute('data-et-inline')).toBe(false);
+    expect(blockTr.hasAttribute('data-et-state')).toBe(false);
+    expect(blockTr.textContent).toBe('块');
+    expect(trOf(run.root).hasAttribute('data-et-inline')).toBe(true);
+    expect(trOf(flex.root).hasAttribute('data-et-inline')).toBe(true);
+    expect(trOf(failed.root).getAttribute('data-et-state')).toBe('error');
+
+    await renderer.setMode('translation');
+    // Only block units are hidden; runs, flex items and failures stay bilingual.
+    expect(block.root.hasAttribute('data-et-only')).toBe(true);
+    for (const unit of [run, flex, failed]) {
+      expect(unit.root.hasAttribute('data-et-only')).toBe(false);
+    }
+  });
+
+  it('keeps the documented tag and attribute names for the plugin UI hosts', () => {
+    expect([OWN_TAG, ISLE_TAG, SELECTION_TAG, OWN_ATTR]).toEqual([
+      'ET-TR',
+      'ET-ISLE',
+      'ET-SELECTION',
+      'data-et',
+    ]);
+  });
+});
