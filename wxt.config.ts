@@ -10,6 +10,7 @@ export default defineConfig({
     // the browser's language and falls back to en (docs/plans/i18n.md).
     default_locale: 'en',
     name: '__MSG_manifest_name__',
+    short_name: '__MSG_manifest_shortName__',
     description: '__MSG_manifest_description__',
     permissions: ['storage', 'activeTab', 'contextMenus'],
     host_permissions: [

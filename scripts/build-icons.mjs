@@ -1,5 +1,7 @@
 // Extension icon, direction "暗岛微光": a warm-black squircle; a warm-white line is the
-// source text, a shorter amber pill below it is the translation.
+// source text, a shorter amber pill below it is the translation. Since the rename to
+// 译屿 / Islet Translate, the pill is the islet (the isle capsule on pages) and faint amber
+// reflections under it are the dark water it glows on.
 // One geometry table per size drives both the SVG sources (docs/assets/icon) and the
 // PNGs (public/icon). 16, 32 and 48 are drawn on their own pixel grid, never scaled
 // down; 128 follows the Chrome Web Store layout: 16px transparent margin, 96px body.
@@ -19,27 +21,30 @@ const AMBER_TOP = '#ffc860';
 const AMBER_BOTTOM = '#f2a531';
 const SQUIRCLE_EXPONENT = 5;
 
-/** [x, y, width, height]; ends are fully rounded. */
+/** [x, y, width, height]; ends are fully rounded. Reflections add an opacity. */
 const ICONS = [
   {
     size: 16,
     plate: [0, 0, 16, 16],
     line: [3, 4, 10, 2],
     pill: [3, 8, 6, 3],
+    reflections: [[4, 12, 4, 1, 0.45]],
     ink: INK,
   },
   {
     size: 32,
     plate: [0, 0, 32, 32],
     line: [7, 9, 18, 3],
-    pill: [7, 17, 12, 5],
+    pill: [7, 16, 12, 5],
+    reflections: [[9, 23, 8, 2, 0.32]],
     ink: INK,
   },
   {
     size: 48,
     plate: [0, 0, 48, 48],
     line: [10, 14, 28, 4],
-    pill: [10, 26, 18, 7],
+    pill: [10, 25, 18, 7],
+    reflections: [[12, 35, 14, 2, 0.3]],
     ink: INK_SOFT,
     gradient: true,
     glow: { sigma: 2.5, opacity: 0.45, dy: 0.5 },
@@ -48,7 +53,11 @@ const ICONS = [
     size: 128,
     plate: [16, 16, 96, 96],
     line: [37, 43, 54, 9],
-    pill: [37, 67, 36, 15],
+    pill: [37, 64, 36, 15],
+    reflections: [
+      [42, 85, 26, 5, 0.3],
+      [47, 94, 16, 3, 0.14],
+    ],
     ink: INK_SOFT,
     gradient: true,
     glow: { sigma: 7, opacity: 0.55, dy: 1 },
@@ -180,6 +189,12 @@ function rasterize(icon) {
     mask: coverage(size, (x, y) => insidePill(pill, x, y)),
     color: icon.gradient ? vertical(AMBER_TOP, AMBER_BOTTOM, pillY, pillY + pillH) : solid(AMBER),
   });
+  for (const [x, y, w, h, opacity] of icon.reflections) {
+    layers.push({
+      mask: coverage(size, (px, py) => insidePill([x, y, w, h], px, py)).map((v) => v * opacity),
+      color: solid(AMBER),
+    });
+  }
 
   // Premultiplied source-over, then back to straight alpha for PNG.
   const pixels = Buffer.alloc(size * size * 4);
@@ -278,6 +293,9 @@ function svg(icon) {
     );
   }
   body.push(rect(pill, pillFill));
+  for (const [x, y, w, h, opacity] of icon.reflections) {
+    body.push(rect([x, y, w, h], AMBER, ` opacity="${opacity}"`));
+  }
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`,
     ...(defs.length ? [`<defs>${defs.join('')}</defs>`] : []),
@@ -297,4 +315,15 @@ for (const icon of ICONS) {
   await writeFile(resolve(pngDir, `${icon.size}.png`), encodePng(icon.size, rasterize(icon)));
   await writeFile(resolve(svgDir, `icon-${icon.size}.svg`), svg(icon));
 }
-console.log(`Icons written: ${ICONS.map((icon) => icon.size).join(', ')}px.`);
+// A scalable master for docs and branding: the 128 design cropped to its body, without the
+// store's transparent margin.
+const master = ICONS.find((icon) => icon.size === 128);
+const [mx, my, mw, mh] = master.plate;
+await writeFile(
+  resolve(svgDir, 'icon.svg'),
+  svg(master).replace(
+    'width="128" height="128" viewBox="0 0 128 128"',
+    `width="${mw}" height="${mh}" viewBox="${mx} ${my} ${mw} ${mh}"`,
+  ),
+);
+console.log(`Icons written: ${ICONS.map((icon) => icon.size).join(', ')}px, and icon.svg.`);

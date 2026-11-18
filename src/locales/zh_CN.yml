@@ -4,9 +4,10 @@ meta:
   locale: zh-CN
 
 manifest:
-  name: Easy Translate
-  description: 网页翻译工具，TypeScript 重构开发版。
-  actionTitle: Easy Translate
+  name: 译屿
+  shortName: 译屿
+  description: 双语网页阅读：整页、划词、单词翻译。
+  actionTitle: 译屿
   commands:
     translatePage: 翻译此页 / 显示原文
     translateSelection: 翻译选中文字
@@ -141,7 +142,7 @@ popup:
 
 # 设置页（src/entrypoints/options）。
 options:
-  title: Easy Translate · 设置
+  title: 译屿 · 设置
   nav:
     label: 设置分区
     general: 通用

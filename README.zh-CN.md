@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="public/icon/128.png" width="96" alt="Easy Translate">
+<img src="public/icon/128.png" width="96" alt="译屿">
 
-<h1>Easy Translate</h1>
+<h1>译屿</h1>
 
 <p>Chrome 上的双语网页阅读：整页、划词、单词，安静地翻译。</p>
 
@@ -44,7 +44,7 @@
 
 ## ✨ 功能
 
-Easy Translate 当前版本为 `0.1.0`，已完成 M0 地基、M1 翻译核心、M2 整页翻译与控制条、M3a 划词翻译与音标，以及界面多语言。
+译屿当前版本为 `0.1.0`，已完成 M0 地基、M1 翻译核心、M2 整页翻译与控制条、M3a 划词翻译与音标，以及界面多语言。
 
 | 功能 | 说明 | 示例 |
 | --- | --- | --- |
@@ -62,7 +62,7 @@ Easy Translate 当前版本为 `0.1.0`，已完成 M0 地基、M1 翻译核心�
 
 ## 🚀 安装
 
-Easy Translate 尚未上架商店，有两种安装方式。
+译屿尚未上架商店，有两种安装方式。
 
 **从 CI 构建产物安装**
 
@@ -328,8 +328,8 @@ node scripts/screenshots/shoot.mjs --ui zh_CN --article en
 | ✅ 已完成 | M3a 划词翻译与音标 |
 | ✅ 已完成 | 界面多语言（en / zh_CN） |
 | ✅ 已完成 | 双语 README |
+| ✅ 已完成 | 改名「译屿 / Islet Translate」 |
 | 🔨 下一步 | 繁体中文界面 zh_TW |
-| 🔨 下一步 | 改名「译屿 / Islet Translate」 |
 | 🔨 下一步 | 冒烟 e2e |
 | 🔨 下一步 | v0.2.0（GitHub Release） |
 | 之后 | M3d 动态页与站点规则 |
@@ -369,7 +369,7 @@ node scripts/screenshots/shoot.mjs --ui zh_CN --article en
 
 ## 📄 许可
 
-Easy Translate 以 [MIT 许可证](LICENSE) 开源。
+译屿以 [MIT 许可证](LICENSE) 开源。
 
 扩展中包含以下第三方资源，各自沿用原许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，扩展包里另有一份 `THIRD_PARTY_NOTICES.txt`：
 
