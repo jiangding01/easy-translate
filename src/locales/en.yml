@@ -71,6 +71,8 @@ engine:
   unnamed: Unnamed service
   # A nameless custom service in the page isle (never falls back to the host).
   customFallback: Custom service
+  # The short label of a nameless custom service (a named one shows its first two characters).
+  unnamedShort: C
   # One-line problem under a row; the status labels below are the short forms.
   notReady:
     badUrl: The API URL is invalid
@@ -89,11 +91,14 @@ engine:
     noModel: No model
     unsaved: Not saved
 
-# Words the panel and the settings page share, with the same meaning in both.
+# Words shared by the panel, the settings page and the content modules, with the same meaning.
 common:
   autoDetect: Auto-detect
   modeBilingual: Bilingual
   modeTranslation: Translation only
+  # $1: the Google engine's name (engine.googleName).
+  useGoogleOnce: Use $1 this time
+  retry: Retry
 
 # The toolbar panel (src/entrypoints/popup).
 popup:
@@ -117,8 +122,6 @@ popup:
   alwaysOff: Translates only when you ask
   settings: Settings
   goSettings: Open Settings
-  # $1: the Google engine's name (engine.googleName).
-  useGoogleOnce: Use $1 this time
   translatePage: Translate this page
   noShortcut: No shortcut yet ·
   setShortcut: Set a shortcut ↗
@@ -132,7 +135,6 @@ popup:
     localRejected: the local service refused the request
     permissionMissing: access to the API URL not granted
     incomplete: setup incomplete
-  retry: Retry
   showOriginal: Show original
   stopShowOriginal: Stop and show original
   progress: Translating what's on screen; more as you scroll
@@ -296,3 +298,64 @@ options:
       needsGrant: Test after granting access
       needsKey: Enter an API key to test
       needsModel: Enter a model to test
+
+# The page isle (src/content/isle) and the render placeholder (src/content/render.ts).
+isle:
+  toolbar: Translation controls
+  modes: Display mode
+  modeBilingual: Bilingual
+  modeTranslation: Translation only
+  modeOriginal: Show original (ends this translation)
+  # The single-character mode buttons show these only when the UI language is Chinese;
+  # other languages draw an icon (the isle's MODE_ICONS) and do not display these.
+  glyphBilingual: B
+  glyphTranslation: T
+  glyphOriginal: O
+  engines: Engine for this page
+  listTitle: Engine for this translation
+  listNote: Doesn't change your default
+  listFailed: Couldn't load the engine list
+  started: Translation started
+  finished: Translation finished
+  # $1: the number of paragraphs not translated.
+  retryCount:
+    1: Retry $1 paragraph that wasn't translated
+    n: Retry $1 paragraphs that weren't translated
+  # $1: the engine's name, $2: why it failed.
+  engineError: "Engine for this page: $1 ($2)"
+  # $1: the engine's name.
+  engineSwitch: "Engine for this page: $1 (click to switch)"
+
+# The selection card (src/content/selection/card.ts).
+card:
+  source: Original
+  close: Close
+  listTitle: Engine for this translation
+  listNote: Doesn't change your default
+  listFailed: Couldn't load the engine list
+  # $1: the engine's name.
+  engineSwitch: "Engine: $1 (click to switch)"
+  # $1: the accent below, $2: the phonetic transcription.
+  sayPhonetic: $1 pronunciation /$2/, click to play
+  accentUk: British
+  accentUs: American
+  # $1: the limit, formatted (2000).
+  tooLong: The selected text is too long (over $1 characters). Select less, or translate the whole page.
+  # $1: the target language's own name.
+  alreadyIn: This text is already in $1. No translation needed.
+  unchanged: This text doesn't need translating.
+  copy: Copy translation
+  copied: Copied
+  speak: Read original aloud
+  speakStop: Stop reading
+  noVoice: No speech voice is available on this device
+  speechFailed: Reading aloud didn't respond. Try again later.
+  pin: Pin card
+  unpin: Unpin card
+  translating: Translating
+  translated: Translated
+
+# The placeholder where a paragraph failed to translate (src/content/render.ts).
+render:
+  failed: Not translated
+  retry: Retry

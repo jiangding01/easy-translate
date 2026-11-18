@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { createDefaultConfig } from '@/lib/config/defaults';
 import type { ConfigV1 } from '@/lib/config/types';
 import type { EngineOptions, PageState } from '@/lib/messaging/protocol';
+import { createGetMessage, loadLocales } from '../../../scripts/i18n-messages.mjs';
 import type { PageSession } from '../session';
 import { createIsle, type IsleEnv } from './isle';
 
@@ -1556,5 +1558,94 @@ describe('hover tip', () => {
     expect(tip.textContent).toBe(ENGINE_LABEL);
     await t.settle();
     expect(tip.textContent).toBe('');
+  });
+});
+
+/** Switches the getMessage stub to the en copy (vitest.setup puts zh_CN back each test). */
+async function switchToEnglish() {
+  const getMessage = createGetMessage(await loadLocales(), 'en');
+  fakeBrowser.i18n.getMessage = getMessage as typeof fakeBrowser.i18n.getMessage;
+}
+
+describe('English copy', () => {
+  it('picks the singular or plural retry label by the failure count', async () => {
+    await switchToEnglish();
+    const t = await setup();
+    await t.start();
+    const retry = t.$('.rt');
+    t.emit({ failed: 1 });
+    expect(retry.getAttribute('aria-label')).toBe("Retry 1 paragraph that wasn't translated");
+    t.emit({ failed: 3 });
+    expect(retry.getAttribute('aria-label')).toBe("Retry 3 paragraphs that weren't translated");
+    t.emit({ failed: 0, engineError: undefined });
+  });
+
+  it('says plainly "Retry" for an engine error, and names the engine in English', async () => {
+    await switchToEnglish();
+    const t = await setup();
+    await t.start();
+    const error = {
+      kind: 'provider',
+      code: 'provider/unauthorized',
+      message: '',
+      retryable: false,
+    } as const;
+    t.emit({ engineError: { ...error, userMessage: 'Invalid key' } });
+    expect(t.$('.rt').getAttribute('aria-label')).toBe('Retry');
+    expect(t.$('.eg').getAttribute('aria-label')).toBe(
+      'Engine for this page: Google 翻译 (Invalid key)',
+    );
+    t.emit({ engineError: undefined });
+    expect(t.$('.eg').getAttribute('aria-label')).toBe(
+      'Engine for this page: Google 翻译 (click to switch)',
+    );
+  });
+
+  it('draws icons for the modes in English, with full labels', async () => {
+    await switchToEnglish();
+    const t = await setup();
+    await t.start();
+    const buttons = [...t.root().querySelectorAll<HTMLElement>('.md')];
+    expect(buttons).toHaveLength(3);
+    for (const button of buttons) {
+      expect(button.querySelector('svg')).not.toBeNull();
+      expect(button.textContent).toBe('');
+    }
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Bilingual',
+      'Translation only',
+      'Show original (ends this translation)',
+    ]);
+  });
+
+  it('keeps the Chinese characters on the mode buttons in Chinese', async () => {
+    const t = await setup();
+    await t.start();
+    const buttons = [...t.root().querySelectorAll<HTMLElement>('.md')];
+    expect(buttons.map((button) => button.textContent)).toEqual(['双', '译', '原']);
+    expect(buttons.some((button) => button.querySelector('svg'))).toBe(false);
+  });
+
+  it('sets lang on the host to the interface language, not the page', async () => {
+    document.documentElement.setAttribute('lang', 'fr');
+    try {
+      await switchToEnglish();
+      const t = await setup();
+      await t.start();
+      expect(t.host()?.getAttribute('lang')).toBe('en');
+    } finally {
+      document.documentElement.removeAttribute('lang');
+    }
+  });
+
+  it('sets the Chinese interface language on the host in Chinese', async () => {
+    document.documentElement.setAttribute('lang', 'fr');
+    try {
+      const t = await setup();
+      await t.start();
+      expect(t.host()?.getAttribute('lang')).toBe('zh-CN');
+    } finally {
+      document.documentElement.removeAttribute('lang');
+    }
   });
 });

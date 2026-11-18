@@ -11,6 +11,7 @@ import type { EngineOptions, TranslateDisposition } from '@/lib/messaging/protoc
 import isleTokens from '@/styles/tokens-isle.css?inline';
 import { ISLE_TAG, SELECTION_TAG } from '../dom-rules';
 import { errorText } from '../error-text';
+import { message, type NoArgKey, uiLocale } from '../i18n';
 import { type ProbeEnv, probeTheme } from '../isle/probe';
 import { createSpring, GROW, retarget, SHRINK, snap, step } from '../isle/spring';
 import type {
@@ -136,7 +137,7 @@ const TIP_GAP = 6;
 const TIP_EDGE = 8;
 const COPIED_MS = 1500;
 /** Shown on the button that was pressed when no voice could read (speech.ts). */
-const SPEECH_FAILED = '朗读没有响应，请稍后再试';
+const SPEECH_FAILED: NoArgKey = 'card.speechFailed';
 const SPEECH_FAILED_MS = 3000;
 /** Selection changes the copy fallback causes are ignored this long (debounce included). */
 const QUIET_MS = 400;
@@ -169,7 +170,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * The panel's names (languages.ts: English, 简体中文…) for a supported language;
- * undefined for any other, which the header shows as 「自动检测」.
+ * undefined for any other, which the header shows as "Auto-detect".
  */
 function languageLabel(tag: string): string | undefined {
   const code = normalizeLanguage(tag);
@@ -276,7 +277,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
    */
   let parked: Current | undefined;
   let parkFrame = 0;
-  /** "这次用 X 翻译": this card's requests only, never the config. */
+  /** "Use X this time": this card's requests only, never the config. */
   let engineOverride: Engine | undefined;
   let force = false;
   let status: Status = 'loading';
@@ -428,13 +429,14 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     // The word is the expand button; the phonetic buttons sit beside it (never inside a
     // button), the label and the chevron expand too.
     const sourceText = button('st', 'source', { 'aria-expanded': 'false' });
-    const phoneticText = node('span', { class: 'ph' });
+    // Phonetics are shown for English words only: not the host's UI language.
+    const phoneticText = node('span', { class: 'ph', lang: 'en' });
     const chevron = icon(12, PATH.chevron, {}, 'sc');
     chevron.setAttribute('data-act', 'source');
     const sourceLine = node(
       'div',
       { class: 'src' },
-      node('span', { class: 'k', 'data-act': 'source' }, '原文'),
+      node('span', { class: 'k', 'data-act': 'source' }, message('card.source')),
       node('span', { class: 'sw' }, sourceText, phoneticText),
       chevron,
     );
@@ -447,7 +449,10 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     const pinIcon = icon(16, PATH.pin);
     const pinPath = pinIcon.firstElementChild as SVGPathElement;
     pinButton.append(pinIcon);
-    const close = button('ib', 'close', { 'data-tip': 'down', 'aria-label': '关闭' });
+    const close = button('ib', 'close', {
+      'data-tip': 'down',
+      'aria-label': message('card.close'),
+    });
     close.append(icon(16, PATH.close, { 'stroke-width': '1.5' }));
     const footer = node(
       'div',
@@ -462,9 +467,9 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     const list = node(
       'div',
       { class: 'ls', 'aria-hidden': 'true' },
-      node('div', { class: 'lh', id: 'l' }, '这次用哪个引擎翻译'),
+      node('div', { class: 'lh', id: 'l' }, message('card.listTitle')),
       rows,
-      node('div', { class: 'lf' }, '只用于这一次，不改默认引擎'),
+      node('div', { class: 'lf' }, message('card.listNote')),
     );
     const card = node(
       'div',
@@ -537,6 +542,8 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     const element = doc.createElement(SELECTION_TAG.toLowerCase());
     for (const [prop, value] of HOST_STYLE) element.style.setProperty(prop, value, 'important');
     element.setAttribute('data-et-theme', 'light');
+    // The page's own language must not leak in: it picks fonts and the screen reader's voice.
+    element.setAttribute('lang', uiLocale());
     const shadow = element.attachShadow({ mode: env.shadowMode ?? 'closed' });
     adoptStyles(shadow);
     host = element;
@@ -895,7 +902,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     const { direction, engine, engineText } = els;
     const from = reliableLanguage(current?.detected);
     const to = targetLanguage();
-    const fromLabel = (from && languageLabel(from)) ?? '自动检测';
+    const fromLabel = (from && languageLabel(from)) ?? message('common.autoDetect');
     const toLabel = to ? languageName(to) : '';
     direction.replaceChildren(
       fromLabel,
@@ -906,7 +913,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     const id = currentEngine();
     const option = options?.options.find((item) => item.id === id);
     showMark(doc, engineText, option);
-    setAttr(engine, 'aria-label', `引擎：${option?.name ?? ''}（点击切换）`);
+    setAttr(engine, 'aria-label', message('card.engineSwitch', option?.name ?? ''));
     setAttr(engine, 'aria-expanded', String(listOpen));
   }
 
@@ -925,7 +932,8 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
   function renderText(value: string, streaming: boolean) {
     if (!els) return;
     if (!textWrap || !els.content.contains(textWrap) || !value.startsWith(shown)) {
-      textWrap = node('div', { class: 'tw' });
+      // The translation is in the target language, whatever the card's own is.
+      textWrap = node('div', { class: 'tw', lang: targetLanguage() ?? '' });
       els.content.replaceChildren(textWrap);
       shown = '';
     }
@@ -951,14 +959,14 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     const blocks: HTMLElement[] = [];
     if (phonetic?.lemma) blocks.push(node('span', { class: 'lm' }, phonetic.lemma));
     for (const [accent, label, name] of [
-      ['uk', 'UK', '英式'],
-      ['us', 'US', '美式'],
+      ['uk', 'UK', 'card.accentUk'],
+      ['us', 'US', 'card.accentUs'],
     ] as const) {
       const ipa = phonetic?.[accent];
       if (!ipa) continue;
       const say = button('pb', 'say', {
         'data-l': accent,
-        'aria-label': `${name}发音 /${ipa}/，点击朗读`,
+        'aria-label': message('card.sayPhonetic', message(name), ipa),
       });
       say.append(node('span', { class: 'pl' }, label), `/${ipa}/`, icon(16, PATH.speak));
       blocks.push(say);
@@ -976,6 +984,8 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     if (!els || !current) return;
     const { sourceLine, sourceText, phoneticText, content } = els;
     if (sourceText.textContent !== current.source) sourceText.textContent = current.source;
+    // The selected text is in its own language; unknown when the detection is unsure.
+    setAttr(sourceText, 'lang', reliableLanguage(current.detected) ?? '');
     renderPhonetic(phoneticText);
     setAttr(sourceText, 'aria-expanded', String(sourceOpen));
     sourceLine.toggleAttribute('data-open', sourceOpen);
@@ -992,15 +1002,20 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
       );
     } else if (status === 'partial') renderText(text, true);
     else if (status === 'too-long') {
-      renderNotice('选中的文字太长（超过 2000 字），请缩小选区，或用整页翻译。');
+      renderNotice(
+        message(
+          'card.tooLong',
+          MAX_SOURCE_LENGTH.toLocaleString(uiLocale(), { useGrouping: 'min2' }),
+        ),
+      );
     } else if (status === 'error') {
       textWrap = undefined;
       shown = '';
       const actions = node('div', { class: 'ea' }, button('bt', 'retry'));
-      (actions.firstElementChild as HTMLElement).textContent = '重试';
+      (actions.firstElementChild as HTMLElement).textContent = message('common.retry');
       if (currentEngine() !== 'google') {
         const google = button('bt ba', 'google');
-        google.textContent = '这次先用 Google 翻译';
+        google.textContent = message('common.useGoogleOnce', message('engine.googleName'));
         actions.append(google);
       }
       content.replaceChildren(
@@ -1013,8 +1028,8 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
       );
     } else if (disposition === 'same-language') {
       const to = targetLanguage();
-      renderNotice(`这段文字已经是 ${to ? languageName(to) : ''}，不需要翻译。`);
-    } else if (disposition === 'unchanged') renderNotice('这段文字不需要翻译。');
+      renderNotice(message('card.alreadyIn', to ? languageName(to) : ''));
+    } else if (disposition === 'unchanged') renderNotice(message('card.unchanged'));
     else renderText(text, false);
   }
 
@@ -1023,7 +1038,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     const { copy, speak, pin: pinButton, pinPath } = els;
     const canCopy = status === 'done' && disposition === 'translated' && !!text;
     setAttr(copy, 'aria-disabled', String(!canCopy));
-    setAttr(copy, 'aria-label', copied ? '已复制' : '复制译文');
+    setAttr(copy, 'aria-label', message(copied ? 'card.copied' : 'card.copy'));
     copy.toggleAttribute('data-ok', copied);
     setIcon(copy, copied ? 'ok' : 'copy', () =>
       copied ? icon(16, PATH.copied, { 'stroke-width': '1.6' }) : icon(16, PATH.copy),
@@ -1034,16 +1049,16 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     setAttr(
       speak,
       'aria-label',
-      voices === false ? '这台设备没有可用的朗读语音' : speaking ? '停止朗读' : '朗读原文',
+      message(voices === false ? 'card.noVoice' : speaking ? 'card.speakStop' : 'card.speak'),
     );
     setIcon(speak, speaking ? 'stop' : 'speak', () =>
       speaking ? icon(16, PATH.stop, SOLID) : icon(16, PATH.speak),
     );
     setAttr(pinButton, 'aria-pressed', String(pinned));
-    setAttr(pinButton, 'aria-label', pinned ? '取消固定' : '固定卡片');
+    setAttr(pinButton, 'aria-label', message(pinned ? 'card.unpin' : 'card.pin'));
     setAttr(pinPath, 'fill', pinned ? 'currentColor' : 'none');
     els.root.toggleAttribute('data-pin', pinned);
-    // A showing tip follows its button's words ("已复制", "停止朗读").
+    // A showing tip follows its button's words ("Copied", "Stop reading").
     if (tipButton && els.tip.textContent) {
       if (tipWords(tipButton) !== els.tip.textContent) placeTip();
     }
@@ -1054,7 +1069,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     const id = currentEngine();
     const rows: HTMLElement[] = [];
     if (!options) {
-      if (optionsFailed) rows.push(node('div', { class: 'lh' }, '暂时取不到引擎列表'));
+      if (optionsFailed) rows.push(node('div', { class: 'lh' }, message('card.listFailed')));
     } else {
       for (const option of options.options) {
         const selected = option.id === id;
@@ -1154,7 +1169,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
       text = '';
       if (announced.loading !== id) {
         announced.loading = id;
-        announce('正在翻译');
+        announce(message('card.translating'));
       }
     } else if (event.kind === 'partial') {
       status = 'partial';
@@ -1167,7 +1182,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
       if (event.disposition !== 'translated') sourceOpen = true;
       if (announced.done !== id) {
         announced.done = id;
-        announce('已翻译');
+        announce(message('card.translated'));
       }
     } else if (event.kind === 'error') {
       // Plan 1.2 rule 6: a failure also clears what had streamed.
@@ -1560,7 +1575,9 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
 
   /** A button's tip: its label, or that its reading just failed. */
   function tipWords(target: HTMLElement): string {
-    return target === speechFailed ? SPEECH_FAILED : (target.getAttribute('aria-label') ?? '');
+    return target === speechFailed
+      ? message(SPEECH_FAILED)
+      : (target.getAttribute('aria-label') ?? '');
   }
 
   /** Fades out at once; the words stay until it is transparent, then go (no empty shell). */
@@ -1603,7 +1620,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     if (!ok || !els) return;
     copied = true;
     renderFooter();
-    announce('已复制');
+    announce(message('card.copied'));
     clearTimeout(copiedTimer);
     copiedTimer = setTimeout(() => {
       copied = false;
@@ -1676,7 +1693,7 @@ export function createSelectionCard({ deps, port, env }: CardOptions): Selection
     renderFooter();
     if (!failed || !els || view !== 'card' || closing || !button.isConnected) return;
     speechFailed = button;
-    announce(SPEECH_FAILED);
+    announce(message(SPEECH_FAILED));
     showTip(button);
     clearTimeout(speechFailedTimer);
     speechFailedTimer = setTimeout(() => {

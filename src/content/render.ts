@@ -3,6 +3,7 @@ import type { LanguageCode } from '@/lib/languages';
 import { captureAnchor, restoreAnchor } from './anchor';
 import type { Unit } from './discover';
 import { isFlexOrGrid, isSkipped, OWN_TAG, type StyleReader, VERBATIM_TAGS } from './dom-rules';
+import { message, uiLocale } from './i18n';
 import { plainTranslation, restoreTranslation, segment } from './segment';
 
 // Puts translations into the page and takes them out again. Never rewrites or
@@ -39,7 +40,7 @@ export interface Result {
 export interface Renderer {
   /** Inserts translations; units that changed or left the page are skipped and returned. */
   insert(results: readonly Result[]): Promise<Unit[]>;
-  /** Shows "未译出 · 重试" where the translation would go. */
+  /** Shows "Not translated · Retry" where the translation would go. */
   fail(unit: Unit, onRetry: () => void, detail?: string): Promise<void>;
   /** Removes one unit's translation at once (source changed, retry). */
   drop(unit: Unit): void;
@@ -411,10 +412,12 @@ export function createRenderer(options: RenderOptions): Renderer {
       // non-translation content must carry a state too (docs/dom-contract.md).
       record.el.setAttribute('data-et-state', 'error');
       if (detail) record.el.title = detail;
-      record.el.append(doc.createTextNode('未译出'));
+      // Plugin UI, not translation: the interface language, not makeElement's target one.
+      record.el.setAttribute('lang', uiLocale());
+      record.el.append(doc.createTextNode(message('render.failed')));
       const button = doc.createElement('button');
       button.type = 'button';
-      button.textContent = '重试';
+      button.textContent = message('render.retry');
       button.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();

@@ -97,7 +97,7 @@ button{font:inherit;color:inherit;margin:0;padding:0;border:0;background:none;cu
 .lf{flex-shrink:0;padding:6px 10px 2px;font-size:11px;line-height:16px;color:var(--et-color-isle-dim)}
 .zn{position:absolute;width:28px;height:28px;border-radius:50%;display:none;cursor:pointer;pointer-events:auto}
 .r[data-view="dot"] .zn{display:block}
-.tp{white-space:nowrap;padding:4px 8px;border-radius:6px;background:var(--et-color-isle);font-size:12px;line-height:16px;box-shadow:var(--et-shadow-isle);transition:opacity .12s ease-out}
+.tp{white-space:normal;width:max-content;max-width:min(280px,calc(100vw - 16px));padding:4px 8px;border-radius:6px;background:var(--et-color-isle);font-size:12px;line-height:16px;box-shadow:var(--et-shadow-isle);transition:opacity .12s ease-out}
 .tp:empty{display:none}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .r[data-rm] *{animation:none!important;transition:none!important}

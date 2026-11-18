@@ -9,6 +9,7 @@ import type { EngineOptions, PageState } from '@/lib/messaging/protocol';
 import isleTokens from '@/styles/tokens-isle.css?inline';
 import { ISLE_TAG, SELECTION_TAG } from '../dom-rules';
 import { errorText } from '../error-text';
+import { message, type NoArgKey, pluralMessage, uiLocale } from '../i18n';
 import type { PageRuntimeDeps } from '../runtime-contract';
 import type { PageSession } from '../session';
 import { engineMark, SVG_NS, showMark } from '../svg-icon';
@@ -87,11 +88,18 @@ const HOST_STYLE: [string, string][] = [
   ['contain', 'layout paint style'],
 ];
 
-const MODES: { mode: PageMode | 'original'; glyph: string; label: string }[] = [
-  { mode: 'bilingual', glyph: '双', label: '双语对照' },
-  { mode: 'translation', glyph: '译', label: '只看译文' },
-  { mode: 'original', glyph: '原', label: '显示原文（结束本次翻译）' },
+// Key table: the copy is looked up when the isle is built (docs/plans/i18n.md 4.2).
+const MODES: { mode: PageMode | 'original'; glyph: NoArgKey; label: NoArgKey }[] = [
+  { mode: 'bilingual', glyph: 'isle.glyphBilingual', label: 'isle.modeBilingual' },
+  { mode: 'translation', glyph: 'isle.glyphTranslation', label: 'isle.modeTranslation' },
+  { mode: 'original', glyph: 'isle.glyphOriginal', label: 'isle.modeOriginal' },
 ];
+/** Icon strokes for the mode buttons outside Chinese UIs: `[path, stroke-opacity?]`. */
+const MODE_ICONS: Record<string, [string, string?][]> = {
+  'isle.glyphBilingual': [['M2.5 4.5h9'], ['M2.5 9.5h6', '.55']],
+  'isle.glyphTranslation': [['M2.5 7h9']],
+  'isle.glyphOriginal': [['M5 4 2.5 6.5 5 9'], ['M2.5 6.5h6a3 3 0 0 1 0 6H7']],
+};
 /** Mode button pitch: 28px button + 2px gap. */
 const MODE_PITCH = 30;
 /** The open isle tolerates the pointer this far outside its shape. */
@@ -114,7 +122,7 @@ function isActive(state: PageState): boolean {
   return state.phase !== 'idle' && !state.halted;
 }
 
-/** Failed paragraphs or an engine-level error: the dot turns coral and "重试" shows. */
+/** Failed paragraphs or an engine-level error: the dot turns coral and "Retry" shows. */
 function hasRetry(state: PageState): boolean {
   return state.failed > 0 || !!state.engineError;
 }
@@ -297,9 +305,31 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
       const mode = button('md', `mode-${index}`, {
         role: 'radio',
         'aria-checked': 'false',
-        'aria-label': item.label,
+        'aria-label': message(item.label),
       });
-      mode.append(item.glyph);
+      // Chinese UIs keep the single character; other languages get a line icon.
+      if (uiLocale().startsWith('zh')) mode.append(message(item.glyph));
+      else {
+        mode.append(
+          svg(
+            {
+              width: '14',
+              height: '14',
+              viewBox: '0 0 14 14',
+              stroke: 'currentColor',
+              'stroke-width': '1.5',
+              'stroke-linecap': 'round',
+              'stroke-linejoin': 'round',
+            },
+            ...(MODE_ICONS[item.glyph] ?? []).map(
+              ([d, opacity]): [string, Record<string, string>] => [
+                'path',
+                opacity ? { d, 'stroke-opacity': opacity } : { d },
+              ],
+            ),
+          ),
+        );
+      }
       return mode;
     });
     const count = node('b');
@@ -323,10 +353,10 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
     });
     const bar = node(
       'div',
-      { class: 'bar', role: 'toolbar', 'aria-label': '翻译控制' },
+      { class: 'bar', role: 'toolbar', 'aria-label': message('isle.toolbar') },
       node(
         'div',
-        { class: 'seg', role: 'radiogroup', 'aria-label': '显示方式' },
+        { class: 'seg', role: 'radiogroup', 'aria-label': message('isle.modes') },
         indicator,
         ...modes,
       ),
@@ -334,13 +364,17 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
       retry,
       engine,
     );
-    const rows = node('div', { class: 'op', role: 'listbox', 'aria-label': '本页翻译引擎' });
+    const rows = node('div', {
+      class: 'op',
+      role: 'listbox',
+      'aria-label': message('isle.engines'),
+    });
     const list = node(
       'div',
       { class: 'ls' },
-      node('div', { class: 'lh' }, '这次用哪个引擎翻译'),
+      node('div', { class: 'lh' }, message('isle.listTitle')),
       rows,
-      node('div', { class: 'lf' }, '只用于这一页，不改默认引擎'),
+      node('div', { class: 'lf' }, message('isle.listNote')),
     );
     const shell = node('div', { class: 'sl' }, bar, list);
     // Above the shell, not clipped by it: at rest the dot stays 10px over the 8px
@@ -778,6 +812,8 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
     const element = doc.createElement(ISLE_TAG.toLowerCase());
     for (const [prop, value] of HOST_STYLE) element.style.setProperty(prop, value, 'important');
     element.setAttribute('data-et-theme', 'light');
+    // The page's own language must not leak in: it picks fonts and the screen reader's voice.
+    element.setAttribute('lang', uiLocale());
     const shadow = element.attachShadow({ mode: env.shadowMode ?? 'closed' });
     adoptStyles(shadow);
     host = element;
@@ -842,7 +878,7 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
     if (announceFrame) cancelRaf(announceFrame);
     announceFrame = raf(() => {
       announceFrame = 0;
-      if (els?.live === live) live.textContent = '开始翻译';
+      if (els?.live === live) live.textContent = message('isle.started');
     });
   }
 
@@ -872,7 +908,7 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
       }
       if (state.phase === 'done' && !announcedDone && els) {
         announcedDone = true;
-        els.live.textContent = '翻译完成';
+        els.live.textContent = message('isle.finished');
       }
       return;
     }
@@ -911,15 +947,16 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
     if (!failing && tipButton === retry) hideTip();
     retry.toggleAttribute('hidden', !failing);
     setText(count, last.failed > 0 ? String(last.failed) : '');
-    const label = last.failed > 0 ? `重试 ${last.failed} 段未译出的段落` : '重试';
+    const label =
+      last.failed > 0 ? pluralMessage('isle.retryCount', last.failed) : message('common.retry');
     setAttr(retry, 'aria-label', label);
     const current = currentEngine();
     const option = options?.options.find((item) => item.id === current);
     showMark(doc, engine, option);
     const name = option?.name ?? '';
     const engineLabel = last.engineError
-      ? `本页引擎：${name}（${errorText(last.engineError)}）`
-      : `本页引擎：${name}（点击切换）`;
+      ? message('isle.engineError', name, errorText(last.engineError))
+      : message('isle.engineSwitch', name);
     setAttr(engine, 'aria-label', engineLabel);
     engine.toggleAttribute('data-err', !!last.engineError);
     // The side docks show the native title; the bottom dock draws its own tip.
@@ -951,7 +988,7 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
     const current = currentEngine();
     const rows: HTMLElement[] = [];
     if (!options) {
-      if (optionsFailed) rows.push(node('div', { class: 'lh' }, '暂时取不到引擎列表'));
+      if (optionsFailed) rows.push(node('div', { class: 'lh' }, message('isle.listFailed')));
     } else {
       for (const option of options.options) {
         const selected = option.id === current;

@@ -320,7 +320,7 @@ function IdleActions({
       {blocked ? (
         <button type="button" className={styles.primary} onClick={() => onStart('google')}>
           <span className={styles.grow}>
-            {i18n.t('popup.useGoogleOnce', [builtinName('google')])}
+            {i18n.t('common.useGoogleOnce', [builtinName('google')])}
           </span>
         </button>
       ) : (
@@ -394,12 +394,12 @@ function SessionActions({
         </div>
         {engine === 'google' ? (
           <button type="button" className={styles.primary} onClick={onRetry}>
-            <span className={styles.grow}>{i18n.t('popup.retry')}</span>
+            <span className={styles.grow}>{i18n.t('common.retry')}</span>
           </button>
         ) : (
           <button type="button" className={styles.primary} onClick={onGoogle}>
             <span className={styles.grow}>
-              {i18n.t('popup.useGoogleOnce', [builtinName('google')])}
+              {i18n.t('common.useGoogleOnce', [builtinName('google')])}
             </span>
           </button>
         )}
@@ -427,7 +427,7 @@ function SessionActions({
           <span aria-hidden="true" className={styles.warnDot} />
           <span className={styles.grow}>{failedText(state.failed)}</span>
           <button type="button" className={styles.textButton} onClick={onRetry}>
-            {i18n.t('popup.retry')}
+            {i18n.t('common.retry')}
           </button>
         </div>
       )}
