@@ -161,6 +161,131 @@ describe('renderer: translation only', () => {
     }
   });
 
+  describe('page edits while translation-only is on', () => {
+    // happy-dom resolves neither ch/em nor the Typed OM: answer like a browser so that
+    // max-width, text-indent, margin-left and width are pinned.
+    const PINS = ['max-width', 'text-indent', 'margin-left', 'width'];
+    async function pinned(markup: string, translate = '译文') {
+      const { units, renderer } = await setup(markup);
+      const [unit] = units;
+      if (!unit) throw new Error('no unit');
+      const root = unit.root as HTMLElement;
+      await renderer.insert([{ unit, translation: translate }]);
+      const computed: Record<string, string> = {
+        'max-width': '600px',
+        'text-indent': '20px',
+      };
+      const typed: Record<string, string> = { 'margin-left': '12px', width: '400px' };
+      const real = window.getComputedStyle.bind(window);
+      const spy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) =>
+        el === root
+          ? ({
+              fontSize: '16px',
+              lineHeight: '24px',
+              getPropertyValue: (name: string) => computed[name] ?? 'auto',
+            } as unknown as CSSStyleDeclaration)
+          : real(el, pseudo),
+      );
+      Object.defineProperty(root, 'computedStyleMap', {
+        configurable: true,
+        value: () => ({ get: (name: string) => typed[name] ?? 'auto' }),
+      });
+      await renderer.setMode('translation');
+      for (const name of PINS) expect(root.style.getPropertyValue(name)).not.toBe('');
+      return { root, renderer, spy };
+    }
+    const unpinned = (root: HTMLElement, except: string[] = []) => {
+      for (const name of PINS) {
+        if (!except.includes(name)) expect(root.style.getPropertyValue(name)).toBe('');
+      }
+    };
+
+    it('keeps a color the page changed, on both ways out', async () => {
+      const { root, renderer, spy } = await pinned('<p style="color: red;">Paragraph text.</p>');
+      try {
+        root.style.setProperty('color', 'blue');
+        await renderer.setMode('bilingual');
+        expect(root.style.getPropertyValue('color')).toBe('blue');
+        expect(root.hasAttribute('data-et-only')).toBe(false);
+        unpinned(root);
+
+        await renderer.setMode('translation');
+        root.style.setProperty('color', 'green');
+        await renderer.restoreAll();
+        expect(root.style.getPropertyValue('color')).toBe('green');
+        unpinned(root);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('leaves only the added color when the root had no style', async () => {
+      const { root, renderer, spy } = await pinned('<p>Paragraph text.</p>');
+      try {
+        root.style.setProperty('color', 'blue');
+        await renderer.setMode('bilingual');
+        expect(root.style.length).toBe(1);
+        expect(root.style.getPropertyValue('color')).toBe('blue');
+        unpinned(root);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('keeps the value the page gave a pinned property', async () => {
+      const { root, renderer, spy } = await pinned('<p style="color: red;">Paragraph text.</p>');
+      try {
+        root.style.setProperty('margin-left', '30px');
+        await renderer.setMode('bilingual');
+        expect(root.style.getPropertyValue('margin-left')).toBe('30px');
+        expect(root.style.getPropertyValue('color')).toBe('red');
+        unpinned(root, ['margin-left']);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('drops a pinned property the page removed, and the attribute if nothing is left', async () => {
+      const { root, renderer, spy } = await pinned('<p>Paragraph text.</p>');
+      try {
+        root.style.removeProperty('text-indent');
+        await renderer.setMode('bilingual');
+        expect(root.hasAttribute('style')).toBe(false);
+        expect(root.style.getPropertyValue('text-indent')).toBe('');
+        unpinned(root);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('stays without a style attribute when the page removed it', async () => {
+      const { root, renderer, spy } = await pinned('<p style="color: red;">Paragraph text.</p>');
+      try {
+        root.removeAttribute('style');
+        await renderer.setMode('bilingual');
+        expect(root.hasAttribute('style')).toBe(false);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('restores width with its !important while keeping a color the page changed', async () => {
+      const { root, renderer, spy } = await pinned(
+        '<p style="width: 50% !important; color: red;">Paragraph text.</p>',
+      );
+      try {
+        root.style.setProperty('color', 'blue');
+        await renderer.setMode('bilingual');
+        expect(root.style.getPropertyValue('width')).toBe('50%');
+        expect(root.style.getPropertyPriority('width')).toBe('important');
+        expect(root.style.getPropertyValue('color')).toBe('blue');
+        unpinned(root, ['width']);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
   it('keeps auto margins and % padding responsive, and carries the root text spacing', async () => {
     // A centred `margin: 0 auto; padding: 5%` paragraph froze at its pixel margins (no longer
     // centred after a resize), and `letter-spacing: .2em` on the root reached the translation
