@@ -69,8 +69,7 @@ jobs:
           retention-days: 7
 
   # Smoke e2e: the built extension in a real Chrome for Testing (docs/plans/e2e-smoke.md).
-  # First release is observation only: the job reports red or green as usual, but it is not a
-  # required check yet. Make it required after about 10 consecutive green runs.
+  # To be made required in the main ruleset after about 10 consecutive green runs with no retries.
   e2e:
     needs: check
     runs-on: ubuntu-latest
@@ -106,8 +105,9 @@ jobs:
         env:
           CI: true
           CHROME: ${{ steps.chrome.outputs.chrome-path }}
+      # Not on cancel: a test that failed and then passed on retry leaves artifacts too.
       - name: Upload e2e failure artifacts
-        if: failure()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: e2e-results-${{ github.sha }}

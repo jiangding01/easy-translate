@@ -52,13 +52,22 @@ export interface LaunchOptions {
 
 /**
  * Per text: a translation, an HTTP status for the whole request, or undefined for the default.
- * May return a promise: the request then waits (a slow service) until it settles.
+ * May return a promise: the request then waits (a slow service) until it settles. The second
+ * argument tells the endpoint apart: `html` for POST /t with format=html, `single` for GET /single.
  */
 type GoogleReply = string | number | undefined;
-export type GoogleHandler = (text: string) => GoogleReply | Promise<GoogleReply>;
+export type GoogleHandler = (
+  text: string,
+  request: { html: boolean; single: boolean },
+) => GoogleReply | Promise<GoogleReply>;
 type Point = { x: number; y: number };
 // biome-ignore lint/suspicious/noExplicitAny: CDP payloads are untyped JSON
 type Json = Record<string, any>;
+
+export interface ExtPageOptions {
+  /** Script run in the page before any of its own (Page.addScriptToEvaluateOnNewDocument). */
+  preload?: string;
+}
 
 export interface ExtPage {
   evaluate<T = unknown>(expression: string): Promise<T>;
@@ -69,6 +78,8 @@ export interface ExtPage {
 
 export interface Harness {
   extensionId: string;
+  /** The id of the test page's tab. */
+  tabId: number;
   /** Google requests seen (POST /t and GET /single) and every `q` they carried. */
   google: { count: number; texts: string[] };
   /** Replaces the Google handler; no argument restores the default. */
@@ -79,12 +90,15 @@ export interface Harness {
   openPage(fixture: string): Promise<void>;
   /** Evaluates in the test page's main world (awaits promises, returns by value). */
   evaluate<T = unknown>(expression: string): Promise<T>;
+  /** Overrides the test page's viewport size (CDP device metrics) until clearViewport(). */
+  setViewport(width: number, height: number): Promise<void>;
+  clearViewport(): Promise<void>;
   /** Evaluates in the extension service worker. */
   sw<T = unknown>(expression: string): Promise<T>;
   /** tabs.sendMessage to the test page's top frame; resolves to the handler's Result. */
   tell<T = unknown>(type: string, data?: unknown): Promise<T>;
   /** Opens an extension page (e.g. options.html) in its own window. */
-  extPage(path: string): Promise<ExtPage>;
+  extPage(path: string, options?: ExtPageOptions): Promise<ExtPage>;
   /** Waits for a page the browser opened itself (e.g. the popup) and attaches to it. */
   waitForExtPage(path: string): Promise<ExtPage>;
   /**
@@ -323,19 +337,26 @@ async function start(
   const fulfillGoogle = async (requestId: string, request: Json, sessionId: string) => {
     const url = new URL(request.url);
     const single = url.pathname.endsWith('/single');
+    const html = !single && url.searchParams.get('format') === 'html';
     const query = single ? url.searchParams : new URLSearchParams(request.postData ?? '');
     const texts = query.getAll('q');
     google.count += 1;
     google.texts.push(...texts);
     const replies = await Promise.all(
-      texts.map(async (text) => (await handler?.(text)) ?? mockTranslate(text)),
+      texts.map(async (text) => (await handler?.(text, { html, single })) ?? mockTranslate(text)),
     );
     const status = replies.find((reply) => typeof reply === 'number');
     const body = status ? '' : JSON.stringify(single ? [[[replies[0], 'en']]] : replies);
     const headers = [{ name: 'content-type', value: 'application/json; charset=utf-8' }];
     const reply = { requestId, responseCode: status ?? 200, responseHeaders: headers };
     const encoded = Buffer.from(body).toString('base64');
-    return cdp.send('Fetch.fulfillRequest', { ...reply, body: encoded }, sessionId);
+    // A slow reply can arrive after its request was cancelled (the page stopped): not an error.
+    return cdp
+      .send('Fetch.fulfillRequest', { ...reply, body: encoded }, sessionId)
+      .catch((error: Error) => {
+        if (!/Invalid InterceptionId/.test(error.message)) throw error;
+        return {};
+      });
   };
 
   const intercept = (sessionId: string) =>
@@ -440,8 +461,10 @@ async function start(
   });
   // The only tab at start-up is the test page; extension pages open in windows of their own.
   const tabIds = await sw<number[]>('chrome.tabs.query({}).then((tabs) => tabs.map((t) => t.id))');
-  if (tabIds.length !== 1) throw new Error(`expected one tab at start, found ${tabIds.length}`);
-  const tabId = tabIds[0];
+  const [tabId] = tabIds;
+  if (tabIds.length !== 1 || tabId === undefined) {
+    throw new Error(`expected one tab at start, found ${tabIds.length}`);
+  }
 
   const message = (type: string, data: unknown) =>
     `{ id: Date.now(), type: ${JSON.stringify(type)}, data: ${JSON.stringify(data ?? null)}, timestamp: Date.now() }`;
@@ -451,12 +474,23 @@ async function start(
   };
 
   /** Waits for a page target's session and wraps it as an ExtPage. */
-  const attachExtPage = async (targetId: string, path: string): Promise<ExtPage> => {
+  const attachExtPage = async (
+    targetId: string,
+    path: string,
+    preload?: string,
+  ): Promise<ExtPage> => {
     const sessionId = await waitFor(
       () => [...sessions].find(([, s]) => s.targetId === targetId)?.[0],
       { message: `${path} to attach` },
     );
     const run = <T>(expression: string) => evaluateIn<T>(sessionId, expression);
+    if (preload !== undefined) {
+      // The target was created blank: the script is in place before the page itself loads.
+      await cdp.send('Page.enable', {}, sessionId);
+      await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: preload }, sessionId);
+      const url = `chrome-extension://${extensionId}/${path}`;
+      await cdp.send('Page.navigate', { url }, sessionId);
+    }
     // A new target starts on about:blank, which is already "complete": wait for the page.
     const loaded = `location.pathname === '/${path}' && document.readyState === 'complete' && !!globalThis.chrome?.runtime?.id`;
     await waitFor(() => run(loaded), { message: `${path} to load` });
@@ -465,13 +499,17 @@ async function start(
       send: async <T>(type: string, data?: unknown) =>
         unwrap<T>(await run<Json>(`chrome.runtime.sendMessage(${message(type, data)})`)),
       close: async () => {
-        await cdp.send('Target.closeTarget', { targetId });
+        // The page may have closed itself (the panel does once translation starts).
+        await cdp.send('Target.closeTarget', { targetId }).catch((error: unknown) => {
+          if (!/No target with given id|Target closed/i.test(String(error))) throw error;
+        });
       },
     };
   };
 
   return {
     extensionId,
+    tabId,
     google,
     errors,
     unmocked,
@@ -491,6 +529,13 @@ async function start(
       });
     },
     evaluate,
+    async setViewport(width, height) {
+      const metrics = { width, height, deviceScaleFactor: 1, mobile: false };
+      await cdp.send('Emulation.setDeviceMetricsOverride', metrics, page());
+    },
+    async clearViewport() {
+      await cdp.send('Emulation.clearDeviceMetricsOverride', {}, page());
+    },
     sw,
     async tell<T>(type: string, data?: unknown) {
       // Retried only while the content script is not listening yet; once the message was
@@ -514,10 +559,11 @@ async function start(
       if ('error' in reply) throw reply.error;
       return unwrap<T>(reply.value);
     },
-    async extPage(path) {
-      const url = `chrome-extension://${extensionId}/${path}`;
+    async extPage(path, { preload } = {}) {
+      const url =
+        preload === undefined ? `chrome-extension://${extensionId}/${path}` : 'about:blank';
       const { targetId } = await cdp.send('Target.createTarget', { url, newWindow: true });
-      return attachExtPage(targetId, path);
+      return attachExtPage(targetId, path, preload);
     },
     async waitForExtPage(path) {
       const url = `chrome-extension://${extensionId}/${path}`;
@@ -609,17 +655,24 @@ async function start(
 }
 
 /**
- * Per-test hooks: fresh logs before each test; after a failure, artifacts in
- * test-results/e2e/<test>; then, with `closeAfterEach`, the browser closed (one hook, so the
- * order is fixed).
+ * Per-test hooks: fresh logs and the default Google mock before each test (a handler left
+ * behind by a failed test must not reach the next one); after a failed attempt (a retry that passes
+ * later included), artifacts in test-results/e2e/<test>, or <test>_retry_<n> for a retry, so
+ * a failing retry keeps the first failure's; then, with `closeAfterEach`, the browser closed
+ * (one hook, so the order is fixed).
  */
 export function trackTests(current: () => Harness | undefined, { closeAfterEach = false } = {}) {
-  beforeEach(() => current()?.resetLogs());
+  beforeEach(() => {
+    current()?.resetLogs();
+    current()?.mockGoogle();
+  });
   afterEach(async (context) => {
     const h = current();
     if (!h) return;
     try {
-      if (context.task.result?.state === 'fail') await h.saveArtifacts(context.task.name);
+      const { state, retryCount = 0 } = context.task.result ?? {};
+      const name = retryCount ? `${context.task.name} retry ${retryCount}` : context.task.name;
+      if (state === 'fail') await h.saveArtifacts(name);
     } finally {
       if (closeAfterEach) await h.close();
     }

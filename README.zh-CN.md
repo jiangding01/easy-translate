@@ -178,7 +178,7 @@ npm run dev
 - 校验已安装依赖包的仓库签名。
 - CodeQL 安全扫描，使用 `security-extended` 规则集（`.github/workflows/codeql.yml`），在 PR、推送到 `main` 时运行，每周也会运行一次。
 - 把通过检查的构建产物作为 artifact 上传，保留 7 天。
-- `e2e` job：用 Chrome for Testing 对这份构建产物跑冒烟 e2e（`npm run test:e2e`）。暂不阻断合并；失败时上传 `test-results/e2e/`。
+- `e2e` job：用 Chrome for Testing 对这份构建产物跑冒烟 e2e（`npm run test:e2e`）。用例覆盖整页翻译、显示模式、重试、缓存、划词、设置页、面板、403 引擎错误、重启与布局。靠重试才通过的用例会在运行页留下警告注解；失败或重试过的用例上传 `test-results/e2e/`。暂不阻断合并，等不靠重试稳定全绿后再设为必过。
 
 依赖更新由 Dependabot（`.github/dependabot.yml`）每周检查 npm 和 GitHub Actions，小版本与补丁更新分组提 PR。
 
@@ -337,7 +337,7 @@ node scripts/screenshots/shoot.mjs --ui zh_CN --article en
 | ✅ 已完成 | 界面多语言（en / zh_CN / zh_TW） |
 | ✅ 已完成 | 双语 README |
 | ✅ 已完成 | 改名「译屿 / Islet Translate」 |
-| 🔨 进行中 | 冒烟 e2e（PR1 已完成，PR2 待做） |
+| 🔨 进行中 | 冒烟 e2e（PR1 已合并，PR2 待合并） |
 | 🔨 下一步 | v0.2.0（GitHub Release） |
 | 之后 | M3d 动态页与站点规则 |
 | 之后 | M3b 段落级交互 |
