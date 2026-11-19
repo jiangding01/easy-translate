@@ -6,6 +6,16 @@
 
 ## [未发布]
 
+## [0.3.0] - 2026-11-19
+
+### 本版要点
+- 整页翻译遇到超过 5000 字的段落，不再悄悄跳过：段末显示「此段过长，未翻译」，工具栏面板显示共几段。
+- 动态页面更稳：开始翻译时还在加载的内容不再漏翻，动态追加的多个段落不再被并成一段翻译。
+- 单页应用（如文档站）连续切换页面时，新页面约 1 秒内就开始翻译，不再越切越慢。
+- 改默认引擎不再影响已经打开的页面，灵岛与面板显示当前页实际使用的引擎。
+- 代码块上方的语言标签、复制按钮栏，以及图示里的文字不再被翻译。
+- 设置页字号恢复正常，工具栏面板与页面里的提示排版更整齐。
+
 ### 新增
 - 整页翻译：超过 5000 字符、因此不会被翻译的段落，段末显示「此段过长，未翻译」，不再悄悄跳过；工具栏面板显示「N 段过长，未翻译」（仅大于 0 时）；读屏在翻译完成时播报该数量。URL、数字等本来就不该翻译的内容不计入。方案与实施记录见 `docs/plans/skipped-count.md`。
 - DOM 约定补充（兼容）：`et-tr[data-et-state]` 新增 `skipped`（过长未翻译的段末提示，文字随界面语言变化，无按钮）。按「删掉所有 `data-et-state` 的 `et-tr`」导出的做法无需改动。见 `docs/dom-contract.md`。
@@ -202,6 +212,7 @@
 ### 文档
 - 2026-11-12：整理分模块技术方案 `docs/design/00–15`，把前期逆向研究资料归档。
 
-[未发布]: https://github.com/jiangding01/islet-translate/compare/v0.2.0...HEAD
+[未发布]: https://github.com/jiangding01/islet-translate/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jiangding01/islet-translate/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jiangding01/islet-translate/compare/51cdccd...v0.2.0
 [0.1.0]: https://github.com/jiangding01/islet-translate/commit/51cdccd
