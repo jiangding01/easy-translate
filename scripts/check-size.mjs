@@ -44,8 +44,9 @@ const entries = [
     // Session, scanner, renderer and the page isle (M2b PR2). Tightened from 26KB in M3a:
     // the full error copy table left the content bundles (the background now attaches
     // `userMessage`), so the old headroom would hide it creeping back. Raise explicitly,
-    // never quietly.
-    budget: 24 * KB,
+    // never quietly. Raised to 25KB (2026-11-19, user approved, pre-release polish) when the
+    // status-note layout rule (one line, not squeezed in a flex box) took it to 24.03KB.
+    budget: 25 * KB,
     files: runtimeFiles('page-runtime'),
   },
   {
