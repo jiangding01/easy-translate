@@ -68,6 +68,8 @@ export interface Renderer {
   isCurrent(unit: Unit): boolean;
   /** Units whose translation is no longer in the page (framework re-render). */
   detached(): Unit[];
+  /** A translation this renderer took out of the page itself: not a change to react to. */
+  removedByUs(node: Node): boolean;
   readonly mode: PageMode;
 }
 
@@ -142,6 +144,8 @@ export function createRenderer(options: RenderOptions): Renderer {
   const { win, readStyle } = options;
   const doc = win.document;
   const rendered = new Map<Unit, Rendered>();
+  /** Translations detach() removed from the live page; the mutation watch skips their removal. */
+  const removedOurselves = new WeakSet<Node>();
   /**
    * Loading dots live apart from `rendered`: they are not translations, so has / canBeOnly /
    * detached / setMode never see them. `token` is the registration of the latest showLoading;
@@ -375,6 +379,7 @@ export function createRenderer(options: RenderOptions): Renderer {
   function detach(record: Rendered) {
     record.animation?.cancel();
     removeOnly(record);
+    if (record.el.isConnected) removedOurselves.add(record.el);
     record.el.remove();
     record.unclamped?.removeAttribute('data-et-unclamp');
   }
@@ -494,6 +499,8 @@ export function createRenderer(options: RenderOptions): Renderer {
     has,
     isFailed: (unit) => rendered.get(unit)?.failed === true,
     isCurrent: (unit) => stillSame(unit),
+
+    removedByUs: (node) => removedOurselves.has(node),
 
     detached: () =>
       [...rendered.values()].filter((record) => !record.el.isConnected).map((r) => r.unit),

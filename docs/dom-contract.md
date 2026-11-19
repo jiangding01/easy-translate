@@ -4,6 +4,8 @@
 
 **下表是对外约定**：第三方工具依赖这些标记，改名、改结构或改语义都属于不兼容变更，必须在 `CHANGELOG.md` 里单独标出「DOM 约定变更」。代码里设置这些标记的位置（`src/content/render.ts`、`src/content/styles.ts`）都有注释指向本文。锁定测试在 `src/content/render.test.ts` 的「DOM contract」一组。
 
+`et` 是历史前缀，来自旧名 Easy Translate，长期稳定，不随产品名变化（2026-11-19 决定保留）。
+
 ## 约定的标记
 
 | 标记 | 语义 |

@@ -18,7 +18,7 @@ import {
   type StyleReader,
 } from './dom-rules';
 import { errorText } from './error-text';
-import { watchMutations } from './mutations';
+import { routeKeyOf, watchMutations } from './mutations';
 import { createRenderer, inViewport, type Renderer } from './render';
 import { injectStyles, removeStyles } from './styles';
 
@@ -827,7 +827,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
       stopWatching = watch({
         root: doc.body,
         isOwn,
-        ignoreRemoved: isLoadingDot,
+        ignoreRemoved: (node) => isLoadingDot(node) || !!renderer?.removedByUs(node),
+        routeKey: () => routeKeyOf(win.location),
         onDirty: (elements) => {
           if (held) {
             held.push(...elements);

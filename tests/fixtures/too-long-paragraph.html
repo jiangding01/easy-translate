@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Too-long paragraph fixture</title>
+    <!--
+      Manual check for the "too long" note and the skipped count (docs/plans/skipped-count.md,
+      docs/dom-contract.md). Content scripts run on http(s) only, so serve this folder:
+        python3 -m http.server 8765 --directory tests/fixtures
+      then open http://localhost:8765/too-long-paragraph.html with the dev build loaded.
+      Steps: translate the page -> look for the grey note at the end of each long paragraph ->
+      open the panel and read the skipped count -> switch to translation only -> switch back to
+      bilingual -> use the two buttons in section 8 -> stop.
+      Unlike translation-only-layout.html this page has a small inline script: the long texts
+      are generated with repeat() instead of pasting thousands of characters. The server sends
+      no CSP, so the script runs. The grey notes and the buttons are marked translate="no".
+    -->
+    <style>
+      body {
+        margin: 0;
+        padding: 24px 16px 64px;
+        font: 16px/1.6 system-ui, -apple-system, sans-serif;
+        color: #222;
+      }
+      section {
+        margin: 0 0 40px;
+      }
+      .note {
+        margin: 6px 0 0;
+        padding: 6px 10px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #555;
+        background: #f2f2f2;
+        border-radius: 4px;
+      }
+      .note b {
+        color: #222;
+      }
+      .dark {
+        padding: 12px 16px;
+        color: #e6e6e6;
+        background: #14181f;
+        border-radius: 6px;
+      }
+      .row {
+        display: flex;
+      }
+      button {
+        margin: 0 8px 8px 0;
+        padding: 4px 10px;
+        font: inherit;
+      }
+      /* Long text should not stretch the page sideways. */
+      p,
+      div {
+        overflow-wrap: anywhere;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Too-long paragraph fixture</h1>
+    <p class="note" translate="no">
+      A paragraph whose text sent to the service is over 5000 characters is not translated;
+      a short grey note is written at its end instead and the panel counts it as skipped.
+      <b>Expected total after translating the page: 6</b> (sections 1, 4 twice, 5, 6 and 8's
+      first paragraph).
+    </p>
+
+    <section>
+      <h2>1. A plain long paragraph</h2>
+      <p id="long-plain" data-long="120"></p>
+      <p class="note" translate="no">
+        <b>Expected:</b> a grey note at the end of the paragraph, the text itself untouched.
+        Counts 1.
+      </p>
+    </section>
+
+    <section>
+      <h2>2. A short paragraph around a huge inline code</h2>
+      <p id="long-code">The command is <code id="code-body"></code> and nothing more.</p>
+      <p class="note" translate="no">
+        The 6000 characters in the inline <code>code</code> are not sent. <b>Expected:</b>
+        translated like any short paragraph, no note. Counts 0.
+      </p>
+    </section>
+
+    <section>
+      <h2>3. Noise: a long URL and a long number on their own</h2>
+      <p id="long-url"></p>
+      <p id="long-number"></p>
+      <p class="note" translate="no">
+        <b>Expected:</b> neither is translated and neither gets a note (they are noise, not
+        "too long"). Counts 0.
+      </p>
+    </section>
+
+    <section>
+      <h2>4. Two long texts in one block, split by a block child</h2>
+      <div id="long-split">
+        <span data-long="120"></span>
+        <div>A short block between the two long texts.</div>
+        <span data-long="120"></span>
+      </div>
+      <p class="note" translate="no">
+        <b>Expected:</b> the short block is translated and each long text gets its own note:
+        two notes. Counts 2.
+      </p>
+    </section>
+
+    <section>
+      <h2>5. Long text directly inside a flex container</h2>
+      <div id="long-flex" class="row" data-long="120"></div>
+      <p class="note" translate="no">
+        No <code>&lt;p&gt;</code> around the text. <b>Expected:</b> one note, laid out inline
+        (its element carries <code>data-et-inline</code>). Counts 1.
+      </p>
+    </section>
+
+    <section>
+      <h2>6. A long paragraph on a dark background</h2>
+      <div class="dark">
+        <p id="long-dark" data-long="120"></p>
+      </div>
+      <p class="note" translate="no">
+        <b>Expected:</b> the note is clearly readable on the dark background (its element
+        carries <code>data-et-host="dark"</code>). Counts 1.
+      </p>
+    </section>
+
+    <section>
+      <h2>7. Translation only</h2>
+      <p class="note" translate="no">
+        Switch to translation only with section 1 on screen. <b>Expected:</b> the long
+        paragraph stays visible, is not hidden and has no <code>data-et-only</code>; the note
+        stays. Switch back to bilingual: nothing changes. Counts 0 more.
+      </p>
+    </section>
+
+    <section id="dynamic">
+      <h2>8. Content that changes</h2>
+      <div id="dynamic-body">
+        <p class="dyn" data-long="120"></p>
+      </div>
+      <p>
+        <button id="shorten" type="button" translate="no">Shorten</button>
+        <button id="again" type="button" translate="no">Add a long paragraph</button>
+      </p>
+      <p class="note" translate="no">
+        Starts with one long paragraph (counts 1). <b>Expected:</b> after <b>Shorten</b> its
+        note goes away, the paragraph is translated and the total becomes 5. After <b>Add a
+        long paragraph</b> there is one more note and the total becomes 6; adding sends no
+        request, so the translation stays "done". The panel does not refresh itself: close
+        and reopen it to read the new count (known limit, see docs/plans/skipped-count.md).
+      </p>
+    </section>
+
+    <script>
+      const sentence = 'This sentence is one more piece of a very long paragraph. ';
+      const longText = (times) => sentence.repeat(Number(times));
+      const fill = (root) => {
+        for (const el of root.querySelectorAll('[data-long]')) {
+          el.textContent = longText(el.dataset.long);
+        }
+      };
+      fill(document);
+      document.getElementById('code-body').textContent = 'code_token_'.repeat(550);
+      document.getElementById('long-url').textContent =
+        'https://example.com/' + 'segment/'.repeat(800);
+      document.getElementById('long-number').textContent = '1234567890'.repeat(600);
+
+      const body = document.getElementById('dynamic-body');
+      document.getElementById('shorten').addEventListener('click', () => {
+        for (const p of body.querySelectorAll('p.dyn')) {
+          p.textContent = 'This paragraph is short now, so it is translated as usual.';
+        }
+      });
+      document.getElementById('again').addEventListener('click', () => {
+        const p = document.createElement('p');
+        p.className = 'dyn';
+        p.textContent = longText(120);
+        body.append(p);
+      });
+    </script>
+  </body>
+</html>

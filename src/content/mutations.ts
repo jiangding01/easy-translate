@@ -5,7 +5,7 @@
 export interface MutationWatchOptions {
   root: Element;
   isOwn: (node: Node) => boolean;
-  /** Removed nodes that never count as a page change (our loading dots going away). */
+  /** Removed nodes that never count as a page change (our loading dots, translations we detached). */
   ignoreRemoved?: (node: Node) => boolean;
   /** Called with the coalesced dirty elements (or [root] after a burst). */
   onDirty: (elements: Element[]) => void;
@@ -14,6 +14,17 @@ export interface MutationWatchOptions {
   burstLimit?: number;
   createObserver?: (callback: MutationCallback) => Pick<MutationObserver, 'observe' | 'disconnect'>;
   now?: () => number;
+  /**
+   * Identifies the page's current route. A whole-root rescan that finds a different key than
+   * the last one drops the raised cooldown back to the lowest level: moving between routes
+   * is not the endless churn the cooldown guards against.
+   */
+  routeKey?: () => string;
+}
+
+/** `pathname + search`; the hash only when it is a route (`#/` or `#!`), not an anchor. */
+export function routeKeyOf(loc: Pick<Location, 'pathname' | 'search' | 'hash'>): string {
+  return loc.pathname + loc.search + (/^#[/!]/.test(loc.hash) ? loc.hash : '');
 }
 
 const COOLDOWNS = [1000, 2000, 4000];
@@ -29,6 +40,7 @@ export function watchMutations(options: MutationWatchOptions): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let broadLevel = 0;
   let lastBroad = Number.NEGATIVE_INFINITY;
+  let lastRoute = options.routeKey?.();
 
   const relevant = (nodes: NodeList) => [...nodes].some((node) => !isOwn(node));
   const removedRelevant = (nodes: NodeList) => [...nodes].some((node) => !ignoreRemoved(node));
@@ -39,9 +51,15 @@ export function watchMutations(options: MutationWatchOptions): () => void {
     if (dirty.size > burstLimit) {
       const at = now();
       if (at - lastBroad > QUIET_RESET_MS) broadLevel = 0;
+      const route = options.routeKey?.();
+      if (route !== lastRoute) {
+        lastRoute = route;
+        broadLevel = 0;
+      }
       const cooldown = COOLDOWNS[Math.min(broadLevel, COOLDOWNS.length - 1)] ?? 4000;
       if (at - lastBroad < cooldown) {
-        timer = setTimeout(fire, cooldown - (at - lastBroad));
+        // In steps, so a route change during the wait is noticed on the next one.
+        timer = setTimeout(fire, Math.min(debounceMs, cooldown - (at - lastBroad)));
         return;
       }
       lastBroad = at;
@@ -65,7 +83,8 @@ export function watchMutations(options: MutationWatchOptions): () => void {
       if (record.type === 'childList') {
         // Any removal counts, ours included: a framework dropping only our <et-tr>
         // is how we notice a translation that needs to come back. Except what the caller
-        // says is a removal of its own making (a loading dot swapped for the translation).
+        // says is a removal of its own making (a loading dot swapped for the translation,
+        // a translation it detached itself).
         if (!relevant(record.addedNodes) && !removedRelevant(record.removedNodes)) continue;
         if (target.nodeType === Node.ELEMENT_NODE) dirty.add(target as Element);
       } else if (record.type === 'characterData') {
