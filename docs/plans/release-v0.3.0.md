@@ -1,6 +1,6 @@
 # 发版 v0.3.0 方案
 
-> 状态：发版 PR #PRNUM 已合并；`v0.3.0` 标签经用户确认后推送（第 2 步）。「本版要点」与版本号 2026-11-19 用户确认。依据：2026-11-19 用户确认的发版节奏（M3d 收尾后发 v0.3.0）；做法沿用 `docs/plans/release-v0.2.0.md`（发版工作流 `.github/workflows/release.yml` 已就绪，本次不改）。
+> 状态：发版 PR #60 已合并；`v0.3.0` 标签经用户确认后推送（第 2 步）。「本版要点」与版本号 2026-11-19 用户确认。依据：2026-11-19 用户确认的发版节奏（M3d 收尾后发 v0.3.0）；做法沿用 `docs/plans/release-v0.2.0.md`（发版工作流 `.github/workflows/release.yml` 已就绪，本次不改）。
 
 ## 现状（2026-11-19，main `bff5ed2`）
 - `package.json` / `package-lock.json` 版本 `0.2.0`；已有 `v0.2.0` 标签与 GitHub Release。
