@@ -205,7 +205,8 @@ npm run dev
 8. 在 `chrome://serviceworker-internals` 停止 Service Worker 后再修改设置或测试连接，确认仍能正常工作。
 9. 整页翻译的完整验收清单（含 4 倍 CPU 降速下的动效检查）见 [`docs/plans/m2-page-translation.md`](docs/plans/m2-page-translation.md) 第 10 节。
 10. 「仅译文」的版面：运行 `python3 -m http.server 8765 --directory tests/fixtures`，打开 `http://localhost:8765/translation-only-layout.html`（内容脚本只在 http/https 页面运行，不能直接打开文件），翻译整页、切到仅译文、拖动窗口宽度，按每个用例下方的灰色说明核对，再切回双语确认原样恢复。
-11. 界面语言：把 Chrome 语言改为英文并重启，再到 `chrome://extensions` 重新加载扩展，界面应为英文。再改为繁体中文（台湾）重复一次，界面应显示「譯嶼」，中文使用繁体字形。
+11. 超长段落提示：运行 `python3 -m http.server 8765 --directory tests/fixtures`，打开 `http://localhost:8765/too-long-paragraph.html`，翻译整页，确认超过 5000 字符的段落段末显示提示，面板显示的总数为 6。
+12. 界面语言：把 Chrome 语言改为英文并重启，再到 `chrome://extensions` 重新加载扩展，界面应为英文。再改为繁体中文（台湾）重复一次，界面应显示「譯嶼」，中文使用繁体字形。
 
 </details>
 
@@ -310,7 +311,7 @@ node scripts/screenshots/shoot.mjs --ui zh_CN --article en
 │   └── lib/                     # 脚本共用工具，如 find-chrome.mjs
 ├── tests/
 │   ├── e2e/                     # 冒烟 e2e（真实 Chrome，翻译请求用 mock）
-│   └── fixtures/                # 测试页：translation-only-layout.html（手动）、e2e-article.html 与 e2e-native.html（e2e）
+│   └── fixtures/                # 测试页：translation-only-layout.html 与 too-long-paragraph.html（手动）、e2e-article.html 与 e2e-native.html（e2e）
 ├── .npmrc                       # 固定使用 npm 官方源
 ├── .nvmrc                       # Node.js 版本（24）
 ├── biome.json                   # Biome 配置

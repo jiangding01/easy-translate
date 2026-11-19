@@ -481,6 +481,27 @@ describe('renderer: failures and lifecycle', () => {
     expect(document.body.innerHTML).toBe(before);
     expect(renderer.has(unit)).toBe(false);
   });
+
+  it('recognises the translations it removed itself, not the ones a framework removed', async () => {
+    const { units, renderer } = await setup('<p>One own line.</p><p>Two own line.</p>');
+    const [first, second] = units;
+    if (!first || !second) throw new Error('no units');
+    await renderer.insert([
+      { unit: first, translation: '一' },
+      { unit: second, translation: '二' },
+    ]);
+    const [ours, theirs] = [...document.querySelectorAll('et-tr')];
+    if (!ours || !theirs) throw new Error('no translations');
+    expect(renderer.removedByUs(ours)).toBe(false);
+    renderer.drop(first);
+    theirs.remove();
+    // The framework removed it before we let go of the unit: still not ours to ignore.
+    renderer.drop(second);
+    expect(ours.isConnected).toBe(false);
+    expect(renderer.removedByUs(ours)).toBe(true);
+    expect(renderer.removedByUs(theirs)).toBe(false);
+    expect(renderer.removedByUs(document.body)).toBe(false);
+  });
 });
 
 const LONG = 'word '.repeat(1100);

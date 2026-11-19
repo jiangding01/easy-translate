@@ -234,3 +234,6 @@ page-runtime 当前 23.63 / 24 KB。新增分类、`skip` 渲染（与 `fail` �
 **体积**：content 6.99 / 7.00 KB，page-runtime 23.89 / 24.00 KB（未提预算），popup 83.20 / 90.00 KB。
 
 **check 结论**：第 1 轮（两位 Opus 分领域审）无阻断，修复 8 项：空转测试 4 处、完成播报覆盖、播报数字本地化、`afterEach` 不再吞异常、补 2 条测试。第 2 轮（主会话审增量）补强并发重扫用例的等待，无新问题。
+
+## 手工验收
+验收页 `tests/fixtures/too-long-paragraph.html`（PR-E #PRNUM 加入）。运行 `python3 -m http.server 8765 --directory tests/fixtures`，打开 `http://localhost:8765/too-long-paragraph.html`，翻译整页，预期总数 6。

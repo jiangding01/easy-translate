@@ -205,7 +205,8 @@ Run `npm run test:e2e` first. The items it covers automatically are listed in [`
 8. Stop the service worker at `chrome://serviceworker-internals`, then change a setting or test a connection. It should still work.
 9. The full checklist for page translation, including motion checks at 4x CPU slowdown, is in section 10 of [`docs/plans/m2-page-translation.md`](docs/plans/m2-page-translation.md).
 10. Layout of Translation only: run `python3 -m http.server 8765 --directory tests/fixtures`, open `http://localhost:8765/translation-only-layout.html` (content scripts run only on http and https pages, so the file cannot be opened directly), translate the page, switch to Translation only, drag the window width, and check each case against the gray note under it. Then switch back to Bilingual and check that the page is restored exactly.
-11. Interface language: set Chrome's language to English and restart it, then reload the extension at `chrome://extensions`. The interface should be in English. Do the same with Traditional Chinese (Taiwan): the interface should read 譯嶼, and Chinese text should use Traditional font forms.
+11. Too-long paragraph notice: run `python3 -m http.server 8765 --directory tests/fixtures`, open `http://localhost:8765/too-long-paragraph.html`, translate the page, and check that the paragraphs over 5000 characters show the end-of-paragraph notice and the panel shows 6 in total.
+12. Interface language: set Chrome's language to English and restart it, then reload the extension at `chrome://extensions`. The interface should be in English. Do the same with Traditional Chinese (Taiwan): the interface should read 譯嶼, and Chinese text should use Traditional font forms.
 
 </details>
 
@@ -310,7 +311,7 @@ It finds the newest Playwright Chrome for Testing, or takes a path from `CHROME`
 │   └── lib/                     # Shared script helpers, such as find-chrome.mjs
 ├── tests/
 │   ├── e2e/                     # Smoke end-to-end tests (real Chrome, mocked translation)
-│   └── fixtures/                # Test pages: translation-only-layout.html (manual), e2e-article.html and e2e-native.html (e2e)
+│   └── fixtures/                # Test pages: translation-only-layout.html and too-long-paragraph.html (manual), e2e-article.html and e2e-native.html (e2e)
 ├── .npmrc                       # Pins the official npm registry
 ├── .nvmrc                       # Node.js version (24)
 ├── biome.json                   # Biome config

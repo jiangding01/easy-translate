@@ -1728,6 +1728,48 @@ function midScan(
   };
 }
 
+describe('page session: removing our own translations', () => {
+  it('does not count the translations it removes itself as a page change', async () => {
+    let clock = 100_000;
+    const rounds: Element[][] = [];
+    const { session, port, show } = setup(
+      Array.from({ length: 40 }, (_, i) => `<p>Card ${i} about the old route.</p>`).join(''),
+      undefined,
+      {
+        createMutationWatch: (options) =>
+          watchMutations({
+            ...options,
+            debounceMs: 5,
+            now: () => clock,
+            onDirty: (elements) => {
+              rounds.push(elements);
+              options.onDirty(elements);
+            },
+          }),
+      },
+    );
+    const wholePage = () => rounds.filter((round) => round.includes(document.body));
+    await session.start();
+    show();
+    await vi.waitFor(() => expect(port.calls.length).toBeGreaterThan(0));
+    for (const call of port.calls) call.answer();
+    await vi.waitFor(() => expect(translations()).toHaveLength(40));
+    rounds.length = 0;
+
+    // The route changes: every paragraph gets new text, more than one round takes.
+    document.querySelectorAll('p').forEach((p, i) => {
+      (p.firstChild as Text).nodeValue = `Card ${i} about the new route.`;
+    });
+    await vi.waitFor(() => expect(wholePage()).toHaveLength(1));
+    // The rescan forgets the 40 old units and removes their translations.
+    await vi.waitFor(() => expect(translations()).toHaveLength(0));
+    // Past the raised cooldown, with time to spare for a second round that should not come.
+    clock += 2500;
+    await wait(80);
+    expect(wholePage()).toHaveLength(1);
+  });
+});
+
 describe('page session: watching before the initial scan', () => {
   const NEW_BLOCKS = '<div id="n"><div>New heading text.</div><div>New body text.</div></div>';
 
