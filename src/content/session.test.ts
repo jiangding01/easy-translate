@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultConfig } from '@/lib/config/defaults';
 import { type AppError, appError } from '@/lib/errors';
 import type { Outcome, PortClient } from '@/lib/messaging/port';
@@ -158,6 +158,10 @@ function setup(
     dirtyRounds,
   };
 }
+
+/** happy-dom's own handle on the window; the page's hostname follows its URL. */
+const setURL = (url: string) =>
+  (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM.setURL(url);
 
 const wait = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
 const translations = () => [...document.querySelectorAll('et-tr')].map((el) => el.textContent);
@@ -1362,6 +1366,54 @@ describe('page session: dynamic content', () => {
       await wait();
       show();
       await vi.waitFor(() => expect(sentTexts()).toContain('Golf ordinary area paragraph.'));
+    });
+  });
+
+  describe('site skips', () => {
+    const MARKUP =
+      '<div id="feed"><p>Existing post text.</p><figure class="efx-fig"><div class="efx-slot" role="group"></div></figure></div>';
+
+    let originalHref = '';
+    beforeEach(() => {
+      originalHref = location.href;
+    });
+    afterEach(() => {
+      setURL(originalHref);
+    });
+
+    async function lazyFill(url: string) {
+      setURL(url);
+      const ctx = setup(MARKUP);
+      await ctx.session.start();
+      ctx.show();
+      await vi.waitFor(() => expect(ctx.port.calls).toHaveLength(1));
+      ctx.port.calls[0]?.answer();
+      await vi.waitFor(() => expect(translations().length).toBeGreaterThan(0));
+      await wait();
+      const slot = document.querySelector('.efx-slot') as HTMLElement;
+      const lazy = document.createElement('div');
+      lazy.textContent = 'Lazy mock-up label.';
+      slot.append(lazy);
+      // Let the slot be reported (and rescanned) on its own before #feed changes too.
+      await wait();
+      const control = document.createElement('p');
+      control.textContent = 'Control paragraph hotel.';
+      document.getElementById('feed')?.append(control);
+      await wait();
+      ctx.show();
+      await vi.waitFor(() => expect(ctx.sentTexts()).toContain('Control paragraph hotel.'));
+      await wait();
+      return ctx;
+    }
+
+    it('does not translate lazily filled content inside a claude.dev mock-up', async () => {
+      const ctx = await lazyFill('https://claude.dev/blog');
+      expect(ctx.sentTexts().filter((text) => text.includes('Lazy mock-up'))).toEqual([]);
+    });
+
+    it('translates the same content on other sites', async () => {
+      const ctx = await lazyFill('https://example.com/blog');
+      expect(ctx.sentTexts()).toContain('Lazy mock-up label.');
     });
   });
 

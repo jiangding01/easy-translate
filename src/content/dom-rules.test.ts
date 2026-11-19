@@ -1,6 +1,10 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest';
-import { protectedAncestor } from './dom-rules';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { isProtected, protectedAncestor } from './dom-rules';
+
+/** happy-dom's own handle on the window; the page's hostname follows its URL. */
+const setURL = (url: string) =>
+  (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM.setURL(url);
 
 /** Builds the markup in the body and returns the element matching `selector`. */
 function find(markup: string, selector: string): Element {
@@ -71,5 +75,89 @@ describe('protectedAncestor', () => {
     } finally {
       document.body.className = '';
     }
+  });
+});
+
+describe('role=img', () => {
+  it('is protected', () => {
+    expect(isProtected(find('<div role="img" aria-label="chart">x</div>', 'div'))).toBe(true);
+  });
+});
+
+describe('code block toolbars', () => {
+  it.each([
+    [
+      'claude.dev',
+      '<div class="art-code"><div class="ch"><span>CODE<span class="lang">Python</span></span><button>Copy</button></div><pre>x = 1</pre></div>',
+      '.ch',
+    ],
+    [
+      'MDN',
+      '<div class="code-example"><div class="example-header"><span class="language-name">js</span></div><pre>x</pre></div>',
+      '.example-header',
+    ],
+    [
+      'VitePress',
+      '<div class="language-sh"><button class="copy"></button><span class="lang">sh</span><pre>ls</pre></div>',
+      '.lang',
+    ],
+    [
+      'Docusaurus',
+      '<div><div class="codeBlockTitle">/src/components/HelloCodeTitle/index.js</div><div class="codeBlockContent"><pre>x</pre></div></div>',
+      '.codeBlockTitle',
+    ],
+    [
+      'Tailwind',
+      '<div><div class="relative"><div>Terminal</div><button>Copy</button></div><div><pre>npm i</pre></div></div>',
+      '.relative',
+    ],
+  ])('protects the %s toolbar', (_site, markup, selector) => {
+    expect(isProtected(find(markup, selector))).toBe(true);
+  });
+
+  it.each([
+    ['a heading', '<h3 class="title">Setup</h3><pre>x</pre>', '.title'],
+    ['a label after the block', '<pre>x</pre><div class="lang">py</div>', '.lang'],
+    [
+      'a span inside a sentence',
+      '<ul><li>Install <span class="lang">Python</span> first:<pre>x</pre></li></ul>',
+      '.lang',
+    ],
+    [
+      'a long text with a button',
+      `<div>${'long text '.repeat(6)}<button>Copy</button></div><pre>x</pre>`,
+      'div',
+    ],
+    [
+      'a titled sentence',
+      '<div class="title">Example 1. Configuring the server</div><div><pre>x</pre></div>',
+      '.title',
+    ],
+    ['a paragraph', '<p>Run:</p><pre>x</pre>', 'p'],
+    ['a plain div', '<div>Output:</div><pre>x</pre>', 'div'],
+  ])('leaves %s alone', (_name, markup, selector) => {
+    expect(isProtected(find(markup, selector))).toBe(false);
+  });
+});
+
+describe('site skips', () => {
+  let originalHref = '';
+  beforeEach(() => {
+    originalHref = location.href;
+  });
+  afterEach(() => {
+    setURL(originalHref);
+  });
+
+  const figure = () => find('<figure class="efx-fig"><div class="in">x</div></figure>', '.efx-fig');
+
+  it.each([
+    ['https://www.claude.dev/blog', true],
+    ['https://claude.dev/', true],
+    ['https://notclaude.dev/', false],
+    ['https://example.com/', false],
+  ])('on %s the mock-up is protected: %s', (url, expected) => {
+    setURL(url);
+    expect(isProtected(figure())).toBe(expected);
   });
 });

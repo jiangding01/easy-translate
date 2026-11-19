@@ -56,6 +56,23 @@ describe('segment', () => {
   });
 });
 
+describe('role=img inline icons', () => {
+  const source = (extra = '') =>
+    segment(nodesOf(`Launch <span role="img" aria-label="rocket"${extra}>🚀</span> today`));
+
+  it.each([
+    ['', 'role=img'],
+    [' aria-hidden="true"', 'role=img with aria-hidden'],
+  ])('sends %s as an empty mark and clones it back (%s)', (extra) => {
+    const seg = source(extra);
+    expect(seg.text).toBe('Launch <t0/> today');
+    const fragment = restoreTranslation('今天发射 <t0/>', seg, document);
+    const restored = fragment ? html(fragment) : '';
+    expect(restored).toContain('role="img"');
+    expect(restored).toContain('🚀');
+  });
+});
+
 describe('restoreTranslation', () => {
   const seg = () =>
     segment(
