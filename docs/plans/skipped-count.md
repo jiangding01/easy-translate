@@ -1,6 +1,6 @@
 # M3d PR-C：过长段落的占位与计数
 
-> 状态：已合并（#PRNUM，2026-11-19）。方案按 Fable 5.2 的 UI 裁决重写，经两轮 Opus 对抗式审查后修订，用户批准。上一版（onLong 回调 + `longByRoot` 计数、灵岛引擎按钮说明）经 Opus 对抗式审查，其中判断顺序、`classifyText`、字母计数写法、测试写法与已知限制的结论在本版保留。总方案见 `docs/plans/m3d.md`（C 行，决定 3）；问题来源 Codex 评审第 6 条（`docs/reviews/2026-11-18-codex-review-verification.md:13,32`）。
+> 状态：已合并（#57，2026-11-19）。方案按 Fable 5.2 的 UI 裁决重写，经两轮 Opus 对抗式审查后修订，用户批准。上一版（onLong 回调 + `longByRoot` 计数、灵岛引擎按钮说明）经 Opus 对抗式审查，其中判断顺序、`classifyText`、字母计数写法、测试写法与已知限制的结论在本版保留。总方案见 `docs/plans/m3d.md`（C 行，决定 3）；问题来源 Codex 评审第 6 条（`docs/reviews/2026-11-18-codex-review-verification.md:13,32`）。
 
 ## 问题（行号为 main `7039399`）
 1. **超长段落被静默丢弃**：`src/content/text.ts:15` 定义了 `MAX_UNIT_CHARS = 5000`。`isTranslatableText`（`:23-29`）先折叠空白，`length > 5000` 时直接返回 false（`:25`），之后才判断字母数（`:26-27`）和 `NOT_PROSE` 噪声（`:28`）。唯一的调用点是 `discover.ts:53` 的 `makeUnit`，它按 `seg.plain`（纯文本、空白已折叠）判断，不通过就返回 undefined。这一段不产生单元，页面上没有任何痕迹，用户以为漏翻了。
