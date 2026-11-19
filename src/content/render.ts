@@ -26,6 +26,8 @@ interface Rendered {
   el: HTMLElement;
   inline: boolean;
   failed: boolean;
+  /** A "too long" note: not a translation, not a failure (nothing to retry). */
+  skipped?: boolean;
   /** Translation-only patch: the root's style attribute before, and right after, the pins. */
   only?: { original: string | null; applied: string | null };
   unclamped?: Element;
@@ -42,6 +44,8 @@ export interface Renderer {
   insert(results: readonly Result[]): Promise<Unit[]>;
   /** Shows "Not translated · Retry" where the translation would go. */
   fail(unit: Unit, onRetry: () => void, detail?: string): Promise<void>;
+  /** Shows "Too long to translate" where the translation would go. No button, no animation. */
+  skip(unit: Unit): Promise<void>;
   /**
    * Puts a small loading dot where the translation will go. Written on the next frame, and
    * only if nothing else (a translation, a failure, hideLoading) claimed the unit meanwhile.
@@ -153,6 +157,8 @@ export function createRenderer(options: RenderOptions): Renderer {
    * fail, a mode switch) must not land after it, or they would outlive the session.
    */
   let disposed = false;
+  /** Units whose "too long" note waits for its frame; drop() cancels by removing the unit. */
+  const skipping = new Set<Unit>();
   /** The mode switch in flight, and the mode the last request asked for. */
   let switching: Promise<void> | undefined;
   let wanted: PageMode = mode;
@@ -236,7 +242,7 @@ export function createRenderer(options: RenderOptions): Renderer {
   // A paragraph whose link tags did not survive is hidden too: in translation-only
   // its links are unreachable until the reader switches back to bilingual.
   function canBeOnly(record: Rendered): boolean {
-    return record.unit.kind === 'block' && !record.inline && !record.failed;
+    return record.unit.kind === 'block' && !record.inline && !record.failed && !record.skipped;
   }
 
   type OnlyReading = {
@@ -384,7 +390,10 @@ export function createRenderer(options: RenderOptions): Renderer {
     return segment(nodes).digest === unit.seg.digest;
   }
 
-  const has = (unit: Unit) => rendered.has(unit) && !rendered.get(unit)?.failed;
+  const has = (unit: Unit) => {
+    const record = rendered.get(unit);
+    return !!record && !record.failed && !record.skipped;
+  };
 
   async function swapMode(): Promise<void> {
     const switchable = () =>
@@ -431,6 +440,50 @@ export function createRenderer(options: RenderOptions): Renderer {
         root.animate([{ opacity: 0 }, {}], { duration: SWAP_HALF_MS, easing: 'ease-out' });
       }
     }
+  }
+
+  /**
+   * A placeholder that is plugin UI, not translation: a failure (with a retry button, fades
+   * in) or a "too long" note (plain text, no animation). Written on the next frame.
+   */
+  async function note(unit: Unit, skippedNote: boolean, fill: (el: HTMLElement) => void) {
+    cancelLoading(unit);
+    if (!unit.root.isConnected) {
+      clearLoading(unit);
+      return;
+    }
+    const dark = isDark(unit.root);
+    const flexRoot = unit.kind === 'block' && isFlexOrGrid(unit.root, readStyle);
+    if (disposed) return;
+    if (skippedNote) skipping.add(unit);
+    await frame();
+    if (disposed) return;
+    if (skippedNote) {
+      // Forgotten while waiting (drop removed it), or its place is gone: no orphan note.
+      if (!skipping.delete(unit) || !unit.root.isConnected) return;
+      const last = unit.nodes[unit.nodes.length - 1];
+      if (unit.kind === 'run' && last?.parentNode !== unit.root) return;
+    }
+    const previous = rendered.get(unit);
+    if (previous) detach(previous);
+    clearLoading(unit);
+    const inline = unit.kind === 'run' || flexRoot;
+    const record: Rendered = {
+      unit,
+      el: makeElement(dark, inline),
+      inline,
+      failed: !skippedNote,
+      skipped: skippedNote,
+    };
+    // Contract: an <et-tr> with data-et-state holds plugin UI, not translation. Any new
+    // non-translation content must carry a state too (docs/dom-contract.md).
+    record.el.setAttribute('data-et-state', skippedNote ? 'skipped' : 'error');
+    // Plugin UI, not translation: the interface language, not makeElement's target one.
+    record.el.setAttribute('lang', uiLocale());
+    fill(record.el);
+    place(record, flexRoot);
+    rendered.set(unit, record);
+    if (!skippedNote) appear(record, 0);
   }
 
   return {
@@ -513,47 +566,25 @@ export function createRenderer(options: RenderOptions): Renderer {
       return stale;
     },
 
-    async fail(unit, onRetry, detail) {
-      cancelLoading(unit);
-      if (!unit.root.isConnected) {
-        clearLoading(unit);
-        return;
-      }
-      const dark = isDark(unit.root);
-      const flexRoot = unit.kind === 'block' && isFlexOrGrid(unit.root, readStyle);
-      if (disposed) return;
-      await frame();
-      if (disposed) return;
-      const previous = rendered.get(unit);
-      if (previous) detach(previous);
-      clearLoading(unit);
-      const inline = unit.kind === 'run' || flexRoot;
-      const record: Rendered = {
-        unit,
-        el: makeElement(dark, inline),
-        inline,
-        failed: true,
-      };
-      // Contract: an <et-tr> with data-et-state holds plugin UI, not translation. Any new
-      // non-translation content must carry a state too (docs/dom-contract.md).
-      record.el.setAttribute('data-et-state', 'error');
-      if (detail) record.el.title = detail;
-      // Plugin UI, not translation: the interface language, not makeElement's target one.
-      record.el.setAttribute('lang', uiLocale());
-      record.el.append(doc.createTextNode(message('render.failed')));
-      const button = doc.createElement('button');
-      button.type = 'button';
-      button.textContent = message('render.retry');
-      button.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onRetry();
-      });
-      record.el.append(doc.createTextNode(' ·'), button);
-      place(record, flexRoot);
-      rendered.set(unit, record);
-      appear(record, 0);
-    },
+    fail: (unit, onRetry, detail) =>
+      note(unit, false, (el) => {
+        if (detail) el.title = detail;
+        el.append(doc.createTextNode(message('render.failed')));
+        const button = doc.createElement('button');
+        button.type = 'button';
+        button.textContent = message('render.retry');
+        button.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onRetry();
+        });
+        el.append(doc.createTextNode(' ·'), button);
+      }),
+
+    skip: (unit) =>
+      note(unit, true, (el) => {
+        el.append(doc.createTextNode(message('render.skipped')));
+      }),
 
     setStyle(next) {
       style = next;
@@ -607,6 +638,7 @@ export function createRenderer(options: RenderOptions): Renderer {
     },
 
     drop(unit) {
+      skipping.delete(unit);
       clearLoading(unit);
       const record = rendered.get(unit);
       if (!record) return;

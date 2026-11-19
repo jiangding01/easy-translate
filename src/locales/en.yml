@@ -101,6 +101,10 @@ common:
   # $1: the Google engine's name (engine.googleName).
   useGoogleOnce: Use $1 this time
   retry: Retry
+  # $1: the number of paragraphs too long to translate.
+  skippedCount:
+    1: $1 paragraph too long to translate
+    n: $1 paragraphs too long to translate
 
 # The toolbar panel (src/entrypoints/popup).
 popup:
@@ -321,6 +325,8 @@ isle:
   listFailed: Couldn't load the engine list
   started: Translation started
   finished: Translation finished
+  # $1: the main sentence (e.g. "Translation finished"), $2: an added note.
+  withNote: "$1. $2"
   # $1: the number of paragraphs not translated.
   retryCount:
     1: Retry $1 paragraph that wasn't translated
@@ -363,3 +369,5 @@ card:
 render:
   failed: Not translated
   retry: Retry
+  # A paragraph too long to translate is not sent; this note stays in its place.
+  skipped: Too long to translate

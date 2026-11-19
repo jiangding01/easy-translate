@@ -908,7 +908,21 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
       }
       if (state.phase === 'done' && !announcedDone && els) {
         announcedDone = true;
-        els.live.textContent = message('isle.finished');
+        // The start announcement queued for the next frame must not overwrite this one.
+        if (announceFrame) cancelRaf(announceFrame);
+        announceFrame = 0;
+        els.live.textContent =
+          (state.skipped ?? 0) > 0
+            ? message(
+                'isle.withNote',
+                message('isle.finished'),
+                pluralMessage(
+                  'common.skippedCount',
+                  state.skipped ?? 0,
+                  (state.skipped ?? 0).toLocaleString(uiLocale()),
+                ),
+              )
+            : message('isle.finished');
       }
       return;
     }

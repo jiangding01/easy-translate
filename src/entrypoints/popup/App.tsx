@@ -31,6 +31,7 @@ import { type ActivePage, inspectActivePage } from './inspect-page';
 import {
   failedText,
   pausedReason,
+  skippedText,
   usePageSession,
   useShortcut,
   useSiteAlways,
@@ -398,6 +399,7 @@ function SessionActions({
   useEffect(() => setMode(state.mode), [state.mode]);
   const engine = state.engine ?? config.translation.engine;
   const running = state.phase === 'running' && !state.engineError;
+  const skipped = state.skipped ?? 0;
 
   if (state.engineError) {
     return (
@@ -451,6 +453,12 @@ function SessionActions({
           <button type="button" className={styles.textButton} onClick={onRetry}>
             {i18n.t('common.retry')}
           </button>
+        </div>
+      )}
+      {skipped > 0 && (
+        <div className={styles.failRow}>
+          <span aria-hidden="true" className={styles.dot} />
+          <span className={styles.grow}>{skippedText(skipped)}</span>
         </div>
       )}
       {state.translated > 0 && (

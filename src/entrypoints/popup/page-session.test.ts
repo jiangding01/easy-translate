@@ -3,7 +3,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { i18n } from '#i18n';
 import { appError } from '@/lib/errors';
 import { createGetMessage, loadLocales } from '../../../scripts/i18n-messages.mjs';
-import { failedText, pausedReason } from './page-session';
+import { failedText, pausedReason, skippedText } from './page-session';
 
 /** Switches the getMessage stub to the en copy (vitest.setup puts zh_CN back before each test). */
 async function useEnglish() {
@@ -40,6 +40,14 @@ describe('panel copy', () => {
     expect(failedText(1)).toBe('1 paragraph not translated');
     expect(failedText(3)).toBe('3 paragraphs not translated');
     expect(failedText(1234)).toBe('1,234 paragraphs not translated');
+  });
+
+  it('counts too-long paragraphs with the plural and number format of the UI language', async () => {
+    expect(skippedText(3)).toBe('3 段过长，未翻译');
+    await useEnglish();
+    expect(skippedText(1)).toBe('1 paragraph too long to translate');
+    expect(skippedText(3)).toBe('3 paragraphs too long to translate');
+    expect(skippedText(1234)).toBe('1,234 paragraphs too long to translate');
   });
 
   it('keeps the engine name and its reason apart', async () => {

@@ -1,6 +1,5 @@
 // Text filters and digests for translation units. Pure.
 
-const LETTER = /\p{L}/gu;
 const NOT_PROSE = [
   /^(https?:\/\/|www\.)\S+$/i, // URL
   /^[\w.+-]+@[\w-]+(\.[\w-]+)+$/, // email
@@ -19,13 +18,18 @@ export function collapseWhitespace(text: string): string {
   return text.replace(/\s+/g, ' ');
 }
 
-/** Worth sending: at least two letters, not an identifier-like token, not oversized. */
-export function isTranslatableText(text: string): boolean {
-  const trimmed = collapseWhitespace(text).trim();
-  if (trimmed.length === 0 || trimmed.length > MAX_UNIT_CHARS) return false;
-  const letters = trimmed.match(LETTER);
-  if (!letters || letters.length < 2) return false;
-  return !NOT_PROSE.some((pattern) => pattern.test(trimmed));
+/** At least two letters, with anything between them (no array allocated for huge text). */
+const TWO_LETTERS = /\p{L}\P{L}*\p{L}/u;
+
+/**
+ * Worth sending? `plain` (the source text) decides noise; `sentLength` (what is actually
+ * sent, inline tags included) decides "long". Noise first: a huge URL is not "too long".
+ */
+export function classifyText(plain: string, sentLength: number): 'ok' | 'noise' | 'long' {
+  const trimmed = collapseWhitespace(plain).trim();
+  if (trimmed.length === 0 || !TWO_LETTERS.test(trimmed)) return 'noise';
+  if (NOT_PROSE.some((pattern) => pattern.test(trimmed))) return 'noise';
+  return sentLength > MAX_UNIT_CHARS ? 'long' : 'ok';
 }
 
 /** FNV-1a 32-bit, hex. For change detection and loop guards, never for cache keys. */

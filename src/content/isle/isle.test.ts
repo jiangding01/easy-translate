@@ -775,6 +775,34 @@ describe('motion and announcements', () => {
     expect(live.textContent).toBe('');
   });
 
+  it('adds the too-long count to the completion announcement, and nothing else changes', async () => {
+    const t = await setup();
+    t.emit({ phase: 'running' });
+    t.frame();
+    const label = t.$('.eg').getAttribute('aria-label');
+    t.emit({ skipped: 2, phase: 'done' });
+    expect(t.$('[aria-live="polite"]').textContent).toBe('翻译完成；2 段过长，未翻译');
+    t.frame();
+    expect(t.$('[aria-live="polite"]').textContent).toBe('翻译完成；2 段过长，未翻译');
+    expect(t.$('.eg').getAttribute('aria-label')).toBe(label);
+    expect(t.$<HTMLButtonElement>('.rt').hidden).toBe(true);
+  });
+
+  it('keeps the completion announcement when done follows running within one frame', async () => {
+    const t = await setup();
+    t.emit({ phase: 'running' });
+    t.emit({ phase: 'done' });
+    t.frame();
+    expect(t.$('[aria-live="polite"]').textContent).toBe('翻译完成');
+  });
+
+  it('keeps the completion announcement when the first state seen is done', async () => {
+    const t = await setup();
+    t.emit({ phase: 'done' });
+    t.frame();
+    expect(t.$('[aria-live="polite"]').textContent).toBe('翻译完成');
+  });
+
   it('sets will-change and hides the shadow only while moving', async () => {
     const t = await setup();
     t.emit({ phase: 'running' });
@@ -1575,6 +1603,18 @@ async function switchToEnglish() {
 }
 
 describe('English copy', () => {
+  it('announces the too-long count in the singular and finishes with a note', async () => {
+    await switchToEnglish();
+    const t = await setup();
+    t.emit({ phase: 'running' });
+    t.frame();
+    t.emit({ skipped: 1, phase: 'done' });
+    t.frame();
+    expect(t.$('[aria-live="polite"]').textContent).toBe(
+      'Translation finished. 1 paragraph too long to translate',
+    );
+  });
+
   it('picks the singular or plural retry label by the failure count', async () => {
     await switchToEnglish();
     const t = await setup();
