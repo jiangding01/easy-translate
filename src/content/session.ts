@@ -208,8 +208,12 @@ export function createPageSession(deps: SessionDeps): PageSession {
 
   function state(): PageState {
     let translated = 0;
+    let skipped = 0;
     for (const units of unitsByRoot.values()) {
-      for (const unit of units) if (renderer?.has(unit)) translated += 1;
+      for (const unit of units) {
+        if (unit.skipped) skipped += 1;
+        if (renderer?.has(unit)) translated += 1;
+      }
     }
     return {
       phase,
@@ -218,6 +222,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
       failed: failed.size,
       engineError,
       engine,
+      ...(skipped > 0 ? { skipped } : {}),
       ...(halted ? { halted: true as const } : {}),
     };
   }
@@ -311,6 +316,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
 
   /** A unit came into range: render from memory, or queue it for the network. */
   function want(unit: Unit): boolean {
+    // Too long: counted and marked in the page, never sent (before any cache lookup).
+    if (unit.skipped) return false;
     if (
       queued.has(unit) ||
       sent.has(unit) ||
@@ -345,6 +352,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
       }
       // Already-observed roots get no new observer callback: queue them here.
       if (visibleRoots.has(unit.root) && want(unit)) added = true;
+      // Nothing to wait for: the note goes in at once, in or out of the viewport.
+      if (unit.skipped) void renderer?.skip(unit);
     }
     if (added) scheduleFlush();
   }

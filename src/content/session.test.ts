@@ -64,6 +64,20 @@ function fakePort() {
   return port;
 }
 
+/**
+ * Every session a test created. Most tests never stop theirs, and a session keeps watching
+ * the document: the next test's page would be scanned by all of them, and the too-long
+ * notes (written whether or not a viewport reports the paragraph) would pile up.
+ */
+const startedSessions: { stop(): Promise<unknown> }[] = [];
+
+afterEach(async () => {
+  const sessions = startedSessions.splice(0);
+  const results = await Promise.allSettled(sessions.map((session) => session.stop()));
+  const failed = results.find((result) => result.status === 'rejected');
+  if (failed) throw failed.reason;
+});
+
 function setup(
   markup: string,
   getConfig = async () => createDefaultConfig('zh-CN'),
@@ -129,6 +143,7 @@ function setup(
       return () => frames.delete(id);
     },
   });
+  startedSessions.push(session);
   /** Reports every observed root (or the given ones) as in range. */
   const show = (targets: Element[] = [...observed]) =>
     notify?.(
@@ -1674,47 +1689,47 @@ describe('page session: subscribe', () => {
   });
 });
 
+/**
+ * The mutation watch is a fake that keeps its options. The first element of `tag` the
+ * scan asks about runs `hook` synchronously (once, and only after the watch exists,
+ * so a start that watches too late changes the DOM without telling anyone).
+ */
+function midScan(
+  markup: string,
+  tag: string,
+  hook: (options: MutationWatchOptions, ctx: ReturnType<typeof setup>) => void,
+  getConfig?: () => Promise<ReturnType<typeof createDefaultConfig>>,
+  extra: Partial<SessionDeps> = {},
+) {
+  let options: MutationWatchOptions | undefined;
+  let unwatched = 0;
+  let fired = false;
+  let ctx!: ReturnType<typeof setup>;
+  ctx = setup(markup, getConfig, {
+    createReadStyle: () => (el) => {
+      if (!fired && options && el.tagName === tag) {
+        fired = true;
+        hook(options, ctx);
+      }
+      return readStyle(el);
+    },
+    createMutationWatch: (given) => {
+      options = given;
+      return () => {
+        unwatched += 1;
+      };
+    },
+    ...extra,
+  });
+  return {
+    ...ctx,
+    unwatched: () => unwatched,
+    onDirty: (els: Element[]) => options?.onDirty(els),
+  };
+}
+
 describe('page session: watching before the initial scan', () => {
   const NEW_BLOCKS = '<div id="n"><div>New heading text.</div><div>New body text.</div></div>';
-
-  /**
-   * The mutation watch is a fake that keeps its options. The first element of `tag` the
-   * scan asks about runs `hook` synchronously (once, and only after the watch exists,
-   * so a start that watches too late changes the DOM without telling anyone).
-   */
-  function midScan(
-    markup: string,
-    tag: string,
-    hook: (options: MutationWatchOptions, ctx: ReturnType<typeof setup>) => void,
-    getConfig?: () => Promise<ReturnType<typeof createDefaultConfig>>,
-    extra: Partial<SessionDeps> = {},
-  ) {
-    let options: MutationWatchOptions | undefined;
-    let unwatched = 0;
-    let fired = false;
-    let ctx!: ReturnType<typeof setup>;
-    ctx = setup(markup, getConfig, {
-      createReadStyle: () => (el) => {
-        if (!fired && options && el.tagName === tag) {
-          fired = true;
-          hook(options, ctx);
-        }
-        return readStyle(el);
-      },
-      createMutationWatch: (given) => {
-        options = given;
-        return () => {
-          unwatched += 1;
-        };
-      },
-      ...extra,
-    });
-    return {
-      ...ctx,
-      unwatched: () => unwatched,
-      onDirty: (els: Element[]) => options?.onDirty(els),
-    };
-  }
 
   const answerAll = async (t: ReturnType<typeof setup>) => {
     for (const call of t.port.calls) call.answer();
@@ -1853,5 +1868,230 @@ describe('page session: watching before the initial scan', () => {
     await expect(t.session.start()).rejects.toThrow('storage gone');
     expect(t.session.state().phase).toBe('idle');
     expect(t.statuses.at(-1)).toBe('idle');
+  });
+});
+
+describe('page session: too-long paragraphs', () => {
+  const LONG = 'word '.repeat(1100);
+  const SHORT = 'Short ordinary paragraph text.';
+  const BOX = `<div id="c"><p id="long">${LONG}</p><p id="short">${SHORT}</p></div>`;
+  const notes = () => document.querySelectorAll('et-tr[data-et-state="skipped"]');
+  const hasSkipped = (t: ReturnType<typeof setup>) => 'skipped' in t.session.state();
+  const sentLong = (t: ReturnType<typeof setup>) =>
+    t.sentTexts().some((text) => text.includes('word word'));
+  /** Starts, brings every root into range and waits for the ordinary paragraph's request. */
+  async function begin(t: ReturnType<typeof setup>) {
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls.length).toBeGreaterThan(0));
+    await vi.waitFor(() => expect(notes()).toHaveLength(1));
+  }
+
+  it('counts the paragraph, leaves a note and never sends its text', async () => {
+    const t = setup(BOX);
+    await begin(t);
+    expect(t.session.state()).toMatchObject({ skipped: 1, failed: 0 });
+    expect(t.sentTexts()).toContain(SHORT);
+    expect(sentLong(t)).toBe(false);
+    await t.session.stop();
+  });
+
+  it('reaches done with only an oversized paragraph, and does not count it as translated', async () => {
+    const t = setup(`<div id="c"><p id="long">${LONG}</p></div>`);
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() => expect(notes()).toHaveLength(1));
+    expect(t.port.calls).toHaveLength(0);
+    expect(t.session.state()).toMatchObject({
+      phase: 'done',
+      translated: 0,
+      failed: 0,
+      skipped: 1,
+    });
+    expect(t.statuses.at(-1)).toBe('done');
+    await t.session.stop();
+  });
+
+  it('does not hold up progress: done once the ordinary paragraphs are translated', async () => {
+    const t = setup(BOX);
+    await begin(t);
+    expect(t.session.state().phase).toBe('running');
+    t.port.calls[0]?.answer();
+    await vi.waitFor(() =>
+      expect(t.session.state()).toMatchObject({ phase: 'done', translated: 1 }),
+    );
+    expect(t.statuses.at(-1)).toBe('done');
+    await t.session.stop();
+  });
+
+  it('stays at 1 with one note when a paragraph is appended and rescanned', async () => {
+    const t = setup(BOX);
+    await begin(t);
+    const added = document.createElement('p');
+    added.textContent = 'A newly appended paragraph.';
+    document.getElementById('c')?.append(added);
+    await vi.waitFor(() => expect(t.observed).toContain(added));
+    t.show([added]);
+    await vi.waitFor(() => expect(t.sentTexts()).toContain('A newly appended paragraph.'));
+    expect(t.session.state().skipped).toBe(1);
+    expect(notes()).toHaveLength(1);
+    await t.session.stop();
+  });
+
+  it('stays at 1 when content is inserted during the first scan and rescanned', async () => {
+    const t = midScan(
+      `<div id="c"><p id="long">${LONG}</p><p>Plain <span>marked</span> paragraph.</p></div>`,
+      'SPAN',
+      (options) => {
+        const box = document.getElementById('c') as HTMLElement;
+        box.insertAdjacentHTML('beforeend', '<p>Inserted during the scan.</p>');
+        options.onDirty([box]);
+      },
+    );
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() => expect(t.sentTexts()).toContain('Inserted during the scan.'));
+    await wait(30);
+    expect(t.session.state().skipped).toBe(1);
+    expect(notes()).toHaveLength(1);
+    await t.session.stop();
+  });
+
+  it('stays at 1 when two rescans over the same area run at once', async () => {
+    const t = midScan(BOX, 'NONE', () => undefined);
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() => expect(notes()).toHaveLength(1));
+    const box = document.getElementById('c') as HTMLElement;
+    box.insertAdjacentHTML('beforeend', '<p>Added before the double rescan.</p>');
+    t.onDirty([box]);
+    t.onDirty([box]);
+    await vi.waitFor(() => {
+      t.show();
+      expect(t.sentTexts()).toContain('Added before the double rescan.');
+    });
+    // The paragraph going out proves one rescan finished; give the other one time to
+    // commit too before checking that nothing was counted twice.
+    await wait(80);
+    expect(t.session.state().skipped).toBe(1);
+    expect(notes()).toHaveLength(1);
+    await t.session.stop();
+  });
+
+  it('leaves nothing behind when stopped in the middle of the scan', async () => {
+    const t = midScan(
+      `<div><p>${LONG}</p><p>Plain <span>marked</span> paragraph.</p></div>`,
+      'SPAN',
+      () => {
+        void t.session.stop();
+      },
+    );
+    await t.session.start();
+    await wait(60);
+    expect(hasSkipped(t)).toBe(false);
+    expect(notes()).toHaveLength(0);
+  });
+
+  it('drops the note and translates in place once the paragraph is shortened', async () => {
+    const t = setup(BOX);
+    await begin(t);
+    const long = document.getElementById('long') as HTMLElement;
+    long.textContent = 'Now a short paragraph.';
+    await vi.waitFor(() => expect(hasSkipped(t)).toBe(false));
+    expect(notes()).toHaveLength(0);
+    t.show();
+    await vi.waitFor(() => expect(t.sentTexts()).toContain('Now a short paragraph.'));
+    t.port.calls.at(-1)?.answer();
+    await vi.waitFor(() =>
+      expect(long.querySelector('et-tr')?.textContent).toBe('译:Now a short paragraph.'),
+    );
+    await t.session.stop();
+  });
+
+  it('swaps a translation for the note when an ordinary paragraph grows too long', async () => {
+    const t = setup(BOX);
+    await begin(t);
+    t.port.calls[0]?.answer();
+    const short = document.getElementById('short') as HTMLElement;
+    await vi.waitFor(() => expect(t.session.state().translated).toBe(1));
+    short.textContent = LONG;
+    await vi.waitFor(() => expect(t.session.state().skipped).toBe(2));
+    await vi.waitFor(() => expect(notes()).toHaveLength(2));
+    expect(t.session.state().translated).toBe(0);
+    expect(short.querySelector('et-tr')?.getAttribute('data-et-state')).toBe('skipped');
+    expect(translations().filter((text) => text?.startsWith('译:'))).toEqual([]);
+    expect(sentLong(t)).toBe(false);
+    await t.session.stop();
+  });
+
+  it('stops counting a paragraph the page removed', async () => {
+    const t = setup(BOX);
+    await begin(t);
+    document.getElementById('long')?.remove();
+    await vi.waitFor(() => expect(hasSkipped(t)).toBe(false));
+    expect(notes()).toHaveLength(0);
+    await t.session.stop();
+  });
+
+  it('keeps count and note across a mode switch there and back, and retryFailed', async () => {
+    const t = setup(BOX);
+    await begin(t);
+    await t.session.setMode('translation');
+    await t.session.setMode('bilingual');
+    t.session.retryFailed();
+    await wait(30);
+    expect(t.session.state().skipped).toBe(1);
+    expect(notes()).toHaveLength(1);
+    expect(document.getElementById('long')?.hasAttribute('data-et-only')).toBe(false);
+    await t.session.stop();
+  });
+
+  it('counts only real failures as failed and never resends the long text on retry', async () => {
+    const t = setup(BOX);
+    await begin(t);
+    const call = t.port.calls[0] as Call;
+    call.onChunk?.({
+      id: call.payload.items[0]?.id ?? '',
+      error: appError('provider', 'provider/bad-response', 'bad'),
+    });
+    call.finish({ status: 'done', data: { total: 1, failed: 1 } });
+    await vi.waitFor(() => expect(t.session.state().failed).toBe(1));
+    expect(t.session.state().skipped).toBe(1);
+    t.session.retryFailed();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(2));
+    expect(t.port.calls[1]?.payload.items.map((item) => item.text)).toEqual([SHORT]);
+    expect(sentLong(t)).toBe(false);
+    await t.session.stop();
+  });
+
+  it('sends nothing and shows no dot when the viewport reports it again', async () => {
+    const near = new Set<Element>();
+    const t = setup(`<div id="c"><p id="long">${LONG}</p></div>`, undefined, {
+      loadingDelayMs: 40,
+      loadingScanMs: 20,
+      inViewport: (el) => near.has(el),
+    });
+    await t.session.start();
+    await vi.waitFor(() => expect(t.observed.length).toBeGreaterThan(0));
+    const long = document.getElementById('long') as HTMLElement;
+    near.add(long);
+    t.hide([long]);
+    t.show([long]);
+    await wait(150);
+    expect(t.port.calls).toHaveLength(0);
+    expect(document.querySelectorAll('et-tr[data-et-state="loading"]')).toHaveLength(0);
+    expect(notes()).toHaveLength(1);
+    await t.session.stop();
+  });
+
+  it('leaves out the count when there is no such paragraph', async () => {
+    const t = setup('<p>Only an ordinary paragraph.</p>');
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    t.port.calls[0]?.answer();
+    await vi.waitFor(() => expect(t.session.state().translated).toBe(1));
+    expect(hasSkipped(t)).toBe(false);
+    await t.session.stop();
   });
 });

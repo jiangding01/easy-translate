@@ -483,6 +483,189 @@ describe('renderer: failures and lifecycle', () => {
   });
 });
 
+const LONG = 'word '.repeat(1100);
+const isFlexOrGridRoot = (el: Element) =>
+  /flex|grid/.test((el as HTMLElement).style?.display ?? '');
+
+describe('renderer: too-long placeholder', () => {
+  it('writes a quiet note: no button, no title, no tabindex, in the interface language', async () => {
+    const { units, renderer } = await setup(`<p>${LONG}</p>`);
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    expect(unit.skipped).toBe('long');
+    await renderer.skip(unit);
+    const tr = document.querySelector('et-tr');
+    expect(tr?.getAttribute('data-et-state')).toBe('skipped');
+    expect(tr?.getAttribute('lang')).toBe('zh-CN');
+    expect(tr?.getAttribute('translate')).toBe('no');
+    expect(tr?.textContent).toBe('此段过长，未翻译');
+    expect(tr?.querySelector('button')).toBeNull();
+    expect(tr?.hasAttribute('title')).toBe(false);
+    expect(tr?.hasAttribute('tabindex')).toBe(false);
+  });
+
+  it('words the note in English when the interface is English, whatever the target', async () => {
+    const getMessage = createGetMessage(await loadLocales(), 'en');
+    fakeBrowser.i18n.getMessage = getMessage as typeof fakeBrowser.i18n.getMessage;
+    const { units } = await setup(`<p>${LONG}</p>`);
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    const renderer = createRenderer({ win: window, style: 'faded', target: 'ja', readStyle });
+    await renderer.skip(unit);
+    const tr = document.querySelector('et-tr');
+    expect(tr?.textContent).toBe('Too long to translate');
+    expect(tr?.getAttribute('lang')).toBe('en');
+  });
+
+  it('marks run and flex units inline, block units not, and a dark host dark', async () => {
+    const { units, renderer } = await setup(
+      `<div>${LONG}<p>Inner block text.</p></div>` +
+        `<div style="display:flex"><span>${LONG}</span><span>Second item</span></div>` +
+        `<p>${LONG} block</p>`,
+    );
+    const run = units.find((unit) => unit.kind === 'run' && unit.skipped);
+    const flex = units.find((unit) => (unit.root as HTMLElement).style?.display === 'flex');
+    const block = units.find(
+      (unit) => unit.kind === 'block' && unit.root.tagName === 'P' && unit.skipped,
+    );
+    if (!run || !flex || !block) throw new Error('missing units');
+    await renderer.skip(run);
+    await renderer.skip(flex);
+    await renderer.skip(block);
+    const trOf = (root: Element) => [...root.querySelectorAll('et-tr')].at(-1) as Element;
+    expect(trOf(run.root).hasAttribute('data-et-inline')).toBe(true);
+    expect(trOf(flex.root).hasAttribute('data-et-inline')).toBe(true);
+    expect(trOf(block.root).hasAttribute('data-et-inline')).toBe(false);
+    expect(trOf(block.root).hasAttribute('data-et-host')).toBe(false);
+  });
+
+  it('carries the dark host marker', async () => {
+    document.body.style.backgroundColor = 'rgb(17, 17, 17)';
+    try {
+      const { units, renderer } = await setup(`<p>${LONG}</p>`);
+      const [unit] = units;
+      if (!unit) throw new Error('no unit');
+      await renderer.skip(unit);
+      expect(document.querySelector('et-tr')?.getAttribute('data-et-host')).toBe('dark');
+    } finally {
+      document.body.style.backgroundColor = '';
+    }
+  });
+
+  it('is neither translated nor failed', async () => {
+    const { units, renderer } = await setup(`<p>${LONG}</p>`);
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    await renderer.skip(unit);
+    expect(document.querySelectorAll('et-tr')).toHaveLength(1);
+    expect(renderer.has(unit)).toBe(false);
+    expect(renderer.isFailed(unit)).toBe(false);
+  });
+
+  const trOnlyFixture = `<p>${LONG}</p><p>Ordinary paragraph text.</p>`;
+
+  it('keeps the original visible in translation-only (skipped before the switch)', async () => {
+    const { units, renderer } = await setup(trOnlyFixture);
+    const long = units.find((unit) => unit.skipped);
+    const normal = units.find((unit) => !unit.skipped);
+    if (!long || !normal) throw new Error('missing units');
+    expect(long.kind).toBe('block');
+    expect(isFlexOrGridRoot(long.root)).toBe(false);
+    await renderer.skip(long);
+    await renderer.insert([{ unit: normal, translation: '普通段落' }]);
+    await renderer.setMode('bilingual');
+    await renderer.setMode('translation');
+    expect(normal.root.hasAttribute('data-et-only')).toBe(true);
+    expect(long.root.hasAttribute('data-et-only')).toBe(false);
+    expect(document.querySelectorAll('et-tr[data-et-state="skipped"]')).toHaveLength(1);
+  });
+
+  it('keeps the original visible when it is skipped after the switch', async () => {
+    const { units, renderer } = await setup(trOnlyFixture);
+    const long = units.find((unit) => unit.skipped);
+    const normal = units.find((unit) => !unit.skipped);
+    if (!long || !normal) throw new Error('missing units');
+    expect(long.kind).toBe('block');
+    expect(isFlexOrGridRoot(long.root)).toBe(false);
+    await renderer.setMode('translation');
+    await renderer.skip(long);
+    await renderer.insert([{ unit: normal, translation: '普通段落' }]);
+    expect(normal.root.hasAttribute('data-et-only')).toBe(true);
+    expect(long.root.hasAttribute('data-et-only')).toBe(false);
+  });
+
+  it('leaves no placeholder when the unit is dropped while the frame is pending', async () => {
+    const { units, renderer, before } = await setup(`<p>${LONG}</p>`);
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    const writing = renderer.skip(unit);
+    renderer.drop(unit);
+    await writing;
+    expect(document.body.innerHTML).toBe(before);
+    expect(renderer.detached()).toEqual([]);
+  });
+
+  it('writes nothing when the block root left the page during the frame', async () => {
+    const { units, renderer } = await setup(`<div id="gone"><p>${LONG}</p></div>`);
+    const unit = units.find((item) => item.skipped);
+    if (!unit) throw new Error('no unit');
+    expect(unit.kind).toBe('block');
+    const writing = renderer.skip(unit);
+    unit.root.remove();
+    expect(unit.root.isConnected).toBe(false);
+    await writing;
+    expect(document.querySelector('et-tr')).toBeNull();
+    expect(renderer.detached()).toEqual([]);
+  });
+
+  it('writes nothing when the last node of a run left its parent during the frame', async () => {
+    const { units, renderer } = await setup(`<div>${LONG}<p>Inner block text.</p></div>`);
+    const run = units.find((unit) => unit.kind === 'run' && unit.skipped);
+    if (!run) throw new Error('no run');
+    const writing = renderer.skip(run);
+    run.nodes[run.nodes.length - 1]?.parentNode?.removeChild(
+      run.nodes[run.nodes.length - 1] as Node,
+    );
+    await writing;
+    expect(document.querySelector('et-tr')).toBeNull();
+    expect(renderer.detached()).toEqual([]);
+  });
+
+  it('does not animate in', async () => {
+    const fades = stubFades();
+    try {
+      const { units, renderer } = await setup(`<p>${LONG}</p>`);
+      const [unit] = units;
+      if (!unit) throw new Error('no unit');
+      await renderer.skip(unit);
+      expect(fades.animations).toHaveLength(0);
+    } finally {
+      fades.restore();
+    }
+  });
+
+  it('is removed on restore, and a skip whose frame comes after the restore writes nothing', async () => {
+    const { units, renderer, before } = await setup(`<p>${LONG}</p><p>${LONG} second</p>`);
+    const [first, second] = units;
+    if (!first || !second) throw new Error('no units');
+    await renderer.skip(first);
+    expect(document.querySelectorAll('et-tr')).toHaveLength(1);
+    const late = renderer.skip(second);
+    await renderer.restoreAll();
+    await late;
+    expect(document.body.innerHTML).toBe(before);
+  });
+
+  it('is noticed when a framework removes it', async () => {
+    const { units, renderer } = await setup(`<p>${LONG}</p>`);
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    await renderer.skip(unit);
+    document.querySelector('et-tr')?.remove();
+    expect(renderer.detached()).toEqual([unit]);
+  });
+});
+
 describe('renderer: loading dot', () => {
   const dots = () => [...document.querySelectorAll('et-tr[data-et-state="loading"]')];
 
@@ -871,6 +1054,17 @@ describe('renderer: DOM contract', () => {
     for (const unit of [run, flex, failed]) {
       expect(unit.root.hasAttribute('data-et-only')).toBe(false);
     }
+  });
+
+  it('marks a too-long placeholder as plugin UI in the interface language', async () => {
+    const { units, renderer } = await setup(`<p>${LONG}</p>`);
+    const [unit] = units;
+    if (!unit) throw new Error('no unit');
+    await renderer.skip(unit);
+    const tr = document.querySelector('et-tr') as Element;
+    expect(tr.getAttribute('data-et-state')).toBe('skipped');
+    expect(tr.getAttribute('lang')).toBe(uiLocale());
+    expect(tr.hasAttribute('data-et-inline')).toBe(false);
   });
 
   it('keeps the documented tag and attribute names for the plugin UI hosts', () => {

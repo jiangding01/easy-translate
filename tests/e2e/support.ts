@@ -18,6 +18,8 @@ export interface PageState {
   mode: string;
   translated: number;
   failed: number;
+  /** Paragraphs too long to translate; only present when above zero. */
+  skipped?: number;
   /** Set while the session is paused on an engine-level error. */
   engineError?: { code: string };
 }

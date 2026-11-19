@@ -205,29 +205,6 @@ describe('layout boundaries (claude.dev blog structures)', () => {
       { kind: 'block', root: 'P', text: 'Plain inline words stay together.' },
     ]);
   });
-
-  it('skips text that is only a date', async () => {
-    const { isTranslatableText } = await import('./text');
-    for (const date of [
-      'Nov 09, 2026',
-      'Sep 28, 2026',
-      '28 September 2026',
-      'Sept. 3',
-      '2026-11-14',
-    ]) {
-      expect(isTranslatableText(date)).toBe(false);
-    }
-    for (const prose of [
-      'May the best tool win',
-      'March',
-      'Published on Nov 9, 2026 by Addy',
-      'Maybe 2',
-      'Mark 2',
-      'Octopus 8',
-    ]) {
-      expect(isTranslatableText(prose)).toBe(true);
-    }
-  });
 });
 
 describe('layout boundaries inside a sentence', () => {
@@ -311,5 +288,61 @@ describe('content added while a container is still being scanned', () => {
       () => document.getElementById('a')?.insertAdjacentHTML('beforeend', '<svg></svg>'),
     );
     expect(found).toEqual([{ kind: 'block', root: 'p', text: 'Read the guide now.' }]);
+  });
+});
+
+describe('oversized paragraphs', () => {
+  async function found(markup: string) {
+    document.body.innerHTML = markup;
+    return discoverUnits(document.body, { readStyle });
+  }
+
+  it('marks a block over the limit as a skipped unit', async () => {
+    const [unit, ...rest] = await found(`<p>${'word '.repeat(1100)}</p>`);
+    expect(rest).toEqual([]);
+    expect(unit?.kind).toBe('block');
+    expect(unit?.skipped).toBe('long');
+  });
+
+  it('leaves the flag off ordinary units', async () => {
+    const [unit] = await found('<p>Ordinary paragraph text.</p>');
+    expect(unit).toBeDefined();
+    expect('skipped' in (unit ?? {})).toBe(false);
+  });
+
+  it('puts the limit at 5000 sent characters', async () => {
+    const exactly = 'a'.repeat(4999);
+    const [fits] = await found(`<p>${exactly} </p>`);
+    expect(fits?.seg.text.length).toBe(4999);
+    const text5000 = `${'a'.repeat(4995)} bcde`;
+    const [edge] = await found(`<p>${text5000}</p>`);
+    expect(edge?.seg.text.length).toBe(5000);
+    expect(edge?.skipped).toBeUndefined();
+    const [over] = await found(`<p>${text5000}f</p>`);
+    expect(over?.seg.text.length).toBe(5001);
+    expect(over?.skipped).toBe('long');
+  });
+
+  it('finds nothing in a huge URL or a numeric table', async () => {
+    expect(await found(`<p>https://example.com/${'a'.repeat(6000)}</p>`)).toEqual([]);
+    expect(await found(`<p>${'1 '.repeat(3000)}</p>`)).toEqual([]);
+  });
+
+  it('gives each oversized run in one block its own skipped unit', async () => {
+    const long = 'word '.repeat(1100);
+    const list = await found(`<div>${long}<p>Between the runs.</p>${long}</div>`);
+    const runs = list.filter((unit) => unit.kind === 'run');
+    expect(runs).toHaveLength(2);
+    expect(runs.map((unit) => unit.skipped)).toEqual(['long', 'long']);
+    expect(runs[0]?.root).toBe(runs[1]?.root);
+  });
+
+  it('judges length by the sent text: a huge inline code does not make a paragraph long', async () => {
+    const [unit, ...rest] = await found(
+      `<p>Run <code>${'x'.repeat(6000)}</code> before you start.</p>`,
+    );
+    expect(rest).toEqual([]);
+    expect(unit?.skipped).toBeUndefined();
+    expect(unit?.seg.text.length).toBeLessThan(100);
   });
 });

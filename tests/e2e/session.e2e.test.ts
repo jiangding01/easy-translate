@@ -276,4 +276,62 @@ describe('session', () => {
     expect(h.google.texts.some((text) => text.includes('lighthouse beam'))).toBe(true);
     h.assertNoErrors();
   });
+
+  it('marks a paragraph too long to translate, counts it, and never sends its text', async () => {
+    await h.openPage('e2e-article.html');
+    const marker = 'zeppelinmarker';
+    await h.evaluate(`(() => {
+      document.body.innerHTML = '<div id="box">'
+        + '<p id="long">' + ${JSON.stringify(marker)} + ' ' + 'word '.repeat(1200) + '</p>'
+        + '<p id="url">https://example.com/' + 'a'.repeat(6000) + '</p>'
+        + '<p id="plain">A short ordinary paragraph about the harbour.</p>'
+        + '</div>';
+    })()`);
+    await h.tell('page.toggle');
+    await waitFor(async () => (await state()).skipped === 1, {
+      message: 'the too-long paragraph to be counted',
+    });
+    const notes = () =>
+      h.evaluate<number>(`document.querySelectorAll('et-tr[data-et-state="skipped"]').length`);
+    await waitFor(async () => (await notes()) === 1, { message: 'the note to be written' });
+    await waitFor(async () => (await state()).translated >= 1, {
+      message: 'the ordinary paragraph to be translated',
+    });
+    expect(h.google.texts.some((text) => text.includes(marker))).toBe(false);
+    expect(h.google.texts.some((text) => text.includes('example.com'))).toBe(false);
+
+    // Translation-only: the long paragraph's original stays, the ordinary one is hidden.
+    expect(await h.tell('page.setMode', 'translation')).toMatchObject({ ok: true });
+    await waitFor(
+      () => h.evaluate<boolean>(`document.querySelector('#plain').hasAttribute('data-et-only')`),
+      { message: 'the ordinary paragraph to be hidden' },
+    );
+    expect(
+      await h.evaluate<boolean>(`document.querySelector('#long').hasAttribute('data-et-only')`),
+    ).toBe(false);
+    expect(await h.tell('page.setMode', 'bilingual')).toMatchObject({ ok: true });
+
+    // A paragraph added later does not change the count or the number of notes.
+    await h.evaluate(`(() => {
+      const p = document.createElement('p');
+      p.id = 'later';
+      p.textContent = 'A later paragraph about the lighthouse keeper.';
+      document.querySelector('#plain').after(p);
+    })()`);
+    await waitFor(
+      () => h.evaluate<boolean>(`!!document.querySelector('#later > et-tr[data-et-s]')`),
+      { message: 'the later paragraph to be translated' },
+    );
+    expect((await state()).skipped).toBe(1);
+    expect(await notes()).toBe(1);
+
+    await h.tell('page.toggle');
+    await waitFor(async () => !('skipped' in (await state())), {
+      message: 'the count to go away on stop',
+    });
+    await waitFor(() => h.evaluate<boolean>(`document.querySelectorAll('et-tr').length === 0`), {
+      message: 'the notes to be removed',
+    });
+    h.assertNoErrors();
+  });
 });

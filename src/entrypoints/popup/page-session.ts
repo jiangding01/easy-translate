@@ -34,6 +34,11 @@ export function failedText(count: number): string {
   return i18n.t('popup.failedCount', count, [count.toLocaleString(uiLocale())]);
 }
 
+/** "N paragraphs too long to translate", the count formatted for the UI language. */
+export function skippedText(count: number): string {
+  return i18n.t('common.skippedCount', count, [count.toLocaleString(uiLocale())]);
+}
+
 export interface PageSessionControls {
   state: PageState | undefined;
   start(engine?: Engine): Promise<Result<PageState>>;

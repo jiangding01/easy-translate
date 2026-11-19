@@ -51,6 +51,8 @@ export interface PageState {
   translated: number;
   /** Units whose last attempt failed and can be retried. */
   failed: number;
+  /** Paragraphs too long to translate, marked in the page and never sent; only present above zero. */
+  skipped?: number;
   /** Engine-level problem that paused the session; it is shown once, not per paragraph. */
   engineError?: AppError;
   /** Engine this session actually uses: fixed at start, "这次先用" can change it. */

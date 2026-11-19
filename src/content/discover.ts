@@ -1,6 +1,6 @@
 import { isInlineElement, isSkipped, type StyleReader } from './dom-rules';
 import { type Segment, segment } from './segment';
-import { isTranslatableText } from './text';
+import { classifyText } from './text';
 
 // Finds translation units: leaf blocks (no block descendants) and inline runs
 // inside mixed blocks. Post-order with an explicit stack (no recursion limits)
@@ -13,6 +13,8 @@ export interface Unit {
   /** The unit's content: all children of a block, or a run's contiguous siblings. */
   nodes: Node[];
   seg: Segment;
+  /** Found, but never sent: the reason. Absent on an ordinary unit. */
+  skipped?: 'long';
 }
 
 export interface DiscoverOptions {
@@ -50,8 +52,11 @@ function defaultYield(): Promise<void> {
 function makeUnit(kind: Unit['kind'], root: Element, nodes: Node[]): Unit | undefined {
   if (nodes.length === 0) return undefined;
   const seg = segment(nodes);
-  if (!isTranslatableText(seg.plain)) return undefined;
-  return { kind, root, nodes, seg };
+  const verdict = classifyText(seg.plain, seg.text.length);
+  if (verdict === 'noise') return undefined;
+  return verdict === 'long'
+    ? { kind, root, nodes, seg, skipped: 'long' }
+    : { kind, root, nodes, seg };
 }
 
 export async function discoverUnits(root: Element, options: DiscoverOptions): Promise<Unit[]> {

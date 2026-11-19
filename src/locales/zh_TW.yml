@@ -94,6 +94,10 @@ common:
   # $1：Google 引擎的名稱（engine.googleName）。
   useGoogleOnce: 這次先用 $1
   retry: 重試
+  # $1：過長而沒有翻譯的段數。
+  skippedCount:
+    1: $1 段過長，未翻譯
+    n: $1 段過長，未翻譯
 
 # 工具列面板（src/entrypoints/popup）。
 popup:
@@ -313,6 +317,8 @@ isle:
   listFailed: 暫時無法取得引擎清單
   started: 開始翻譯
   finished: 翻譯完成
+  # $1：主句（如「翻譯完成」），$2：補充說明。
+  withNote: $1；$2
   # $1：未譯出的段落數。
   retryCount:
     1: 重試 $1 段未譯出的段落
@@ -355,3 +361,5 @@ card:
 render:
   failed: 未譯出
   retry: 重試
+  # 段落過長，不送出，原處留下這句提示。
+  skipped: 此段過長，未翻譯
