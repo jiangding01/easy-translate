@@ -24,6 +24,11 @@ export interface Segment {
   soleWrapper?: Element;
 }
 
+/** Cloned whole, never translated: verbatim tags, plus role=img (skipped, but an inline emoji must survive). */
+function isVerbatim(el: Element): boolean {
+  return VERBATIM_TAGS.has(el.tagName) || el.getAttribute('role') === 'img';
+}
+
 function sourceHasPrefix(source: string, prefix: string): boolean {
   return new RegExp(`</?${prefix}\\d`).test(source);
 }
@@ -45,8 +50,8 @@ export function segment(nodes: readonly Node[]): Segment {
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
     const el = node as Element;
-    if (isSkipped(el) && !VERBATIM_TAGS.has(el.tagName)) return;
-    if (VERBATIM_TAGS.has(el.tagName)) {
+    if (isSkipped(el) && !isVerbatim(el)) return;
+    if (isVerbatim(el)) {
       if (tagged) {
         out.push(`<${prefix}${marks.length}/>`);
         marks.push({ kind: 'void', source: el });
@@ -91,7 +96,7 @@ function findSoleWrapper(nodes: readonly Node[]): Element | undefined {
   const only = meaningful[0];
   if (!only || only.nodeType !== Node.ELEMENT_NODE) return undefined;
   const el = only as Element;
-  return VERBATIM_TAGS.has(el.tagName) || isSkipped(el) ? undefined : el;
+  return isVerbatim(el) || isSkipped(el) ? undefined : el;
 }
 
 // ------------------------------------------------------------ restore

@@ -120,6 +120,9 @@ const SKIP_ROLES = new Set([
   'tab',
   'tablist',
   'toolbar',
+  // Children of role=img are presentational (the label carries the text), so a
+  // drawing made of DOM text is not prose.
+  'img',
 ]);
 
 /** Our own nodes. */
@@ -130,6 +133,55 @@ export const OWN_ATTR = 'data-et';
 
 /** Nodes other translators insert. */
 const FOREIGN_CLASSES = ['immersive-translate-target-wrapper', 'fluent-read-bilingual-content'];
+
+/**
+ * Host-bound skips, built in only: [hostname, selector]. Interface mock-ups drawn
+ * with DOM text (monospace rows, short labels, filled in lazily) look like prose
+ * to every generic rule.
+ */
+const SITE_SKIPS: readonly (readonly [string, string])[] = [['claude.dev', '.efx-fig']];
+
+let siteSkipHost: string | undefined;
+let siteSkipSelector = '';
+
+/** Selector of the site skips for the element's page, or '' (cached per host). */
+function siteSelector(el: Element): string {
+  const host = el.ownerDocument.defaultView?.location.hostname ?? '';
+  if (host !== siteSkipHost) {
+    siteSkipHost = host;
+    siteSkipSelector = SITE_SKIPS.filter(([site]) => host === site || host.endsWith(`.${site}`))
+      .map(([, selector]) => selector)
+      .join(',');
+  }
+  return siteSkipSelector;
+}
+
+const TOOLBAR_CLASS = /lang|filename|title|header|toolbar|copy/i;
+
+function isBlankText(node: Node | null): boolean {
+  return !node || node.nodeType !== Node.TEXT_NODE || !(node.nodeValue ?? '').trim();
+}
+
+/**
+ * The label bar above a code block (language, file name, copy button): UI chrome
+ * that would otherwise be translated and end up in the exported text. Deliberately
+ * narrow, since a miss only leaves a short label untranslated while a false hit
+ * silently drops real text: a plain DIV/SPAN right before the block (or before its
+ * wrapper), with nothing but whitespace text beside it, that either holds a button
+ * or is a single word-like token under a toolbar-ish class.
+ */
+function isCodeToolbar(el: Element): boolean {
+  if (el.tagName !== 'DIV' && el.tagName !== 'SPAN') return false;
+  const next = el.nextElementSibling;
+  if (!next || (next.tagName !== 'PRE' && next.firstElementChild?.tagName !== 'PRE')) return false;
+  if (!isBlankText(el.previousSibling) || !isBlankText(el.nextSibling)) return false;
+  const text = el.textContent ?? '';
+  if (el.querySelector('button')) return text.replace(/\s+/g, '').length <= 40;
+  // getAttribute: an SVG's className is not a string.
+  if (!TOOLBAR_CLASS.test(el.getAttribute('class') ?? '')) return false;
+  const token = text.trim();
+  return token.length <= 80 && !/\s/.test(token);
+}
 
 /**
  * Content that is never ours to translate or touch, whatever the layout: every skip
@@ -147,7 +199,9 @@ export function isProtected(el: Element): boolean {
   if (editable !== null && editable !== 'false') return true;
   const role = el.getAttribute('role');
   if (role && SKIP_ROLES.has(role)) return true;
-  return false;
+  if (isCodeToolbar(el)) return true;
+  const selector = siteSelector(el);
+  return selector !== '' && el.matches(selector);
 }
 
 /** Skipped together with its whole subtree (cheap attribute checks only, no layout). */

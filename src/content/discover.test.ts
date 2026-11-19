@@ -138,6 +138,32 @@ describe('discoverUnits', () => {
   });
 });
 
+describe('code toolbars and role=img', () => {
+  it('skips the label bar of a claude.dev code block', async () => {
+    expect(
+      await units(
+        '<div class="art-code"><div class="ch"><span>CODE<span class="lang">Python</span></span><button>Copy</button></div><pre>x = 1</pre></div><p>After the code.</p>',
+      ),
+    ).toEqual([{ kind: 'block', root: 'P', text: 'After the code.' }]);
+  });
+
+  it('skips the language tag of a VitePress code block', async () => {
+    expect(
+      await units(
+        '<div class="language-sh"><button class="copy"></button><span class="lang">sh</span><pre>ls</pre></div><p>Then run it.</p>',
+      ),
+    ).toEqual([{ kind: 'block', root: 'P', text: 'Then run it.' }]);
+  });
+
+  it('skips text inside a role=img block but not the caption beside it', async () => {
+    expect(
+      await units(
+        '<figure><div role="img" aria-label="diagram"><div>Settings panel</div><div>Effort level</div></div><figcaption>A diagram of settings.</figcaption></figure>',
+      ),
+    ).toEqual([{ kind: 'block', root: 'FIGCAPTION', text: 'A diagram of settings.' }]);
+  });
+});
+
 describe('layout boundaries (claude.dev blog structures)', () => {
   it('splits a list of grid rows made of links and spans into one unit per cell', async () => {
     const row = (date: string, title: string) =>
