@@ -1,6 +1,6 @@
 # M3d PR-E：单页应用切换路由（e2e 与整页重扫冷却）
 
-> 状态：已合并（#PRNUM，2026-11-19）。方案经 Opus 对抗式审查（阻断 2 条）后按实测数据重写、复审无阻断，用户批准。总方案见 `docs/plans/m3d.md`（E 行）。另含过长段落的手工验收页（PR-C #57 合并后用户未找到真实页面验收）。分支由 `test/spa-route-e2e` 改为 `fix/spa-route-cooldown`（含产品修复，仓库惯例不用 `test/`）。
+> 状态：已合并（#58，2026-11-19）。方案经 Opus 对抗式审查（阻断 2 条）后按实测数据重写、复审无阻断，用户批准。总方案见 `docs/plans/m3d.md`（E 行）。另含过长段落的手工验收页（PR-C #57 合并后用户未找到真实页面验收）。分支由 `test/spa-route-e2e` 改为 `fix/spa-route-cooldown`（含产品修复，仓库惯例不用 `test/`）。
 
 ## 实测结论（行号为 main `cf85c33`）
 探针 e2e `tests/e2e/spa-route.e2e.test.ts`（9 条，两轮全过、未触发重试）覆盖：

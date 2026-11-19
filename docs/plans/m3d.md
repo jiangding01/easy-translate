@@ -1,6 +1,6 @@
 # M3d 动态页与站点规则：范围与拆分
 
-> 状态：M3d 全部完成（B1 #54、B2 #55、D #56、C #57、E #PRNUM）。2026-11-19 用户批准（按 Fable 5.2 裁决与推荐选项）。各 PR 的方案与实施记录各自成文，本文只记范围、拆分与决定。
+> 状态：M3d 全部完成（B1 #54、B2 #55、D #56、C #57、E #58）。2026-11-19 用户批准（按 Fable 5.2 裁决与推荐选项）。各 PR 的方案与实施记录各自成文，本文只记范围、拆分与决定。
 
 ## 结论
 M3d 收敛为 5 个独立可合并的小 PR，**不改常驻 content**（`content` 6.99 / 7.00 KB，预算不变）。全部改动落在按需 page-runtime（23.16 / 24 KB）；若超出，按实测把 page-runtime 预算提到 25 KB（用户已有条件同意，按需加载不影响首屏）。每个 PR 贴实测体积。
@@ -12,7 +12,7 @@ M3d 收敛为 5 个独立可合并的小 PR，**不改常驻 content**（`conten
 | 2 | B2 `fix/session-watch-before-scan` | 监听与配置订阅提前到初扫之前，扫描期间的脏元素缓存、扫完统一 rescan（Codex 第 4 条与「配置订阅晚于初扫」）；discover 把扫描期间追加的未访问子元素当边界（行内父元素除外），不并进未扫完容器的行内 run；e2e 第 19 条用隔离世界包装 `scheduler.yield` 做暂停点 | 无；已合并（#55） |
 | 3 | D `feat/skip-ui-mock-regions` | page-runtime 内置站点表（hostname 后缀 → 排除选择器），首条 claude.dev 的 `.efx-fig`；通用规则：`role=img` 子树不翻且行内 `role=img` 原样保留；代码块工具栏不翻（`PRE` 或其外包容器的前兄弟 DIV/SPAN，两侧文本为空白，且含按钮、文字不超过 40 字，或为带工具栏类名的单个记号，HANDOFF 待处理 1 与 5）。方案与实施记录见 `docs/plans/skip-ui-mock-regions.md` | 无；已合并（#56） |
 | 4 | C `feat/skipped-count` | 只统计超过 5000 字符的单元（URL、数字等噪声不计），`PageState.skipped`，灵岛与面板仅在大于 0 时显示（Codex 第 6 条） | 「N 段过长，未翻译」（需三语）；已合并（#57）。方案与实施记录见 `docs/plans/skipped-count.md` |
-| 5 | E `fix/spa-route-cooldown` | e2e 覆盖 `pushState` 替换主内容等 11 种场景；修两处整页重扫冷却：自家删除的译文不算变动、URL 变化时冷却降到 1s；不加监听、不包 `pushState` | 无；已合并（#PRNUM）。方案与实施记录见 `docs/plans/spa-route-cooldown.md` |
+| 5 | E `fix/spa-route-cooldown` | e2e 覆盖 `pushState` 替换主内容等 11 种场景；修两处整页重扫冷却：自家删除的译文不算变动、URL 变化时冷却降到 1s；不加监听、不包 `pushState` | 无；已合并（#58）。方案与实施记录见 `docs/plans/spa-route-cooldown.md` |
 
 ## 用户已拍板的决定（2026-11-19）
 1. 砍掉「从不翻译此站」：项目只在「总是翻译此站」时自动开始，它能拦的只有用户主动的快捷键、右键与面板。
