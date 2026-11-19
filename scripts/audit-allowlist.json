@@ -1,11 +1,4 @@
 {
   "$comment": "High or critical advisories the runtime dependency audit lets through (scripts/check-audit.mjs). Each entry names one advisory by ID (never a package), says why it does not reach users, and expires: past that date the audit fails, so renewing is a deliberate change. An entry the audit no longer reports also fails, so remove it once upstream ships a fix.",
-  "advisories": [
-    {
-      "id": "GHSA-fc5q-39xc-vjpf",
-      "package": "picomatch",
-      "reason": "ReDoS on crafted glob patterns, no patched version yet. It comes in through @wxt-dev/i18n's build-time module (tinyglobby) and wxt/vite, and only matches the project's own globs during the build; the extension package contains no picomatch or tinyglobby code. Re-check the build output before renewing.",
-      "expires": "2026-12-18"
-    }
-  ]
+  "advisories": []
 }

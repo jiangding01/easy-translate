@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { createGetMessage, loadLocales } from '../../scripts/i18n-messages.mjs';
 import { discoverUnits } from './discover';
@@ -24,6 +24,54 @@ async function setup(markup: string) {
 beforeEach(() => {
   document.head.innerHTML = '';
 });
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+/**
+ * happy-dom has no layout (every rect is 0) and no Element.animate, so a mode switch
+ * would skip its fade and never leave the gap the races live in. This gives every
+ * element an on-screen rect and an animate whose `finished` the test lets go.
+ */
+function stubFades() {
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+    top: 0,
+    bottom: 20,
+    left: 0,
+    right: 100,
+    width: 100,
+    height: 20,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  });
+  const animations: { release: () => void; cancel: ReturnType<typeof vi.fn> }[] = [];
+  const animate = () => {
+    let release!: () => void;
+    const finished = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const cancel = vi.fn();
+    animations.push({ release, cancel });
+    return { finished, cancel };
+  };
+  Object.defineProperty(Element.prototype, 'animate', {
+    configurable: true,
+    writable: true,
+    value: animate,
+  });
+  return {
+    animations,
+    /** Lets every animation started so far finish. */
+    release: () => {
+      for (const item of animations) item.release();
+    },
+    restore: () => {
+      Reflect.deleteProperty(Element.prototype, 'animate');
+    },
+  };
+}
 
 describe('renderer: insert and restore', () => {
   it('appends a block translation inside the paragraph and restores the page exactly', async () => {
@@ -622,6 +670,110 @@ describe('renderer: loading dot', () => {
   });
 });
 
+describe('renderer: mode switches racing each other', () => {
+  async function fading(markup: string) {
+    const fades = stubFades();
+    const t = await setup(markup);
+    await t.renderer.insert(t.units.map((unit) => ({ unit, translation: '译文' })));
+    // Whatever the insert animated is done: only the switch's own fades are counted.
+    fades.release();
+    fades.animations.length = 0;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const inserted = document.body.innerHTML;
+    return { ...t, fades, inserted };
+  }
+
+  it('ends on the last request when the mode is switched there and back during the fade', async () => {
+    const { renderer, fades, inserted } = await fading('<p>Back and forth text.</p>');
+    try {
+      const first = renderer.setMode('translation');
+      const second = renderer.setMode('bilingual');
+      // One switch: every request during it gets the same Promise.
+      expect(second).toBe(first);
+      expect(fades.animations).toHaveLength(1);
+      fades.release();
+      await first;
+      expect(renderer.mode).toBe('bilingual');
+      // Already showing it: only the fade back in, no styles touched.
+      expect(document.body.innerHTML).toBe(inserted);
+      expect(fades.animations).toHaveLength(2);
+    } finally {
+      fades.restore();
+    }
+  });
+
+  it('applies a repeated request once and restores the page exactly afterwards', async () => {
+    const { renderer, fades, inserted } = await fading(
+      '<p style="color: red;">Twice asked text.</p>',
+    );
+    try {
+      const first = renderer.setMode('translation');
+      const again = renderer.setMode('translation');
+      expect(again).toBe(first);
+      fades.release();
+      await first;
+      expect(renderer.mode).toBe('translation');
+      expect(document.querySelector('p')?.hasAttribute('data-et-only')).toBe(true);
+      const back = renderer.setMode('bilingual');
+      fades.release();
+      await back;
+      // The pinned style was read once, from the page's own: nothing of ours is left.
+      expect(document.body.innerHTML).toBe(inserted);
+    } finally {
+      fades.restore();
+    }
+  });
+
+  it('does not read the pinned style again when a switch is asked back to the mode on screen', async () => {
+    const { renderer, fades, inserted } = await fading(
+      '<p style="color: red;">Already pinned text.</p>',
+    );
+    try {
+      const into = renderer.setMode('translation');
+      fades.release();
+      await into;
+      const reads = vi.spyOn(window, 'getComputedStyle');
+      const away = renderer.setMode('bilingual');
+      const back = renderer.setMode('translation');
+      expect(back).toBe(away);
+      fades.release();
+      await away;
+      expect(renderer.mode).toBe('translation');
+      // Back where it was: only the fade in, the page's styles are not read again.
+      expect(reads.mock.calls.some(([element]) => element === document.querySelector('p'))).toBe(
+        false,
+      );
+      const out = renderer.setMode('bilingual');
+      fades.release();
+      await out;
+      // Had the pinned style been read as the original, it would be left behind here.
+      expect(document.body.innerHTML).toBe(inserted);
+    } finally {
+      fades.restore();
+    }
+  });
+
+  it('applies a request made while the fade is running to translations inserted meanwhile', async () => {
+    const { units, renderer, fades } = await fading(
+      '<p>Early paragraph text.</p><p>Late paragraph text.</p>',
+    );
+    try {
+      const [early, late] = units;
+      if (!early || !late) throw new Error('no units');
+      renderer.drop(late);
+      const switching = renderer.setMode('translation');
+      await renderer.insert([{ unit: late, translation: '后到' }]);
+      fades.release();
+      await switching;
+      expect(
+        [...document.querySelectorAll('p')].map((p) => p.hasAttribute('data-et-only')),
+      ).toEqual([true, true]);
+    } finally {
+      fades.restore();
+    }
+  });
+});
+
 describe('renderer: writes racing a restore', () => {
   it('drops an insert still waiting for its frame when the restore begins', async () => {
     const { units, renderer, before } = await setup('<p>The best tools disappear.</p>');
@@ -644,14 +796,27 @@ describe('renderer: writes racing a restore', () => {
   });
 
   it('never pins spacing after a restore began during a mode switch', async () => {
-    const { units, renderer, before } = await setup('<p>Pinned margins stay behind.</p>');
-    const [unit] = units;
-    if (!unit) throw new Error('no unit');
-    await renderer.insert([{ unit, translation: '钉住的边距会留下来。' }]);
-    const inflight = renderer.setMode('translation');
-    await renderer.restoreAll();
-    await inflight;
-    expect(document.body.innerHTML).toBe(before);
+    const fades = stubFades();
+    try {
+      const { units, renderer, before } = await setup('<p>Pinned margins stay behind.</p>');
+      const [unit] = units;
+      if (!unit) throw new Error('no unit');
+      await renderer.insert([{ unit, translation: '钉住的边距会留下来。' }]);
+      fades.release();
+      fades.animations.length = 0;
+      const inflight = renderer.setMode('translation');
+      // The switch is really in its fade, not finished before the restore began.
+      expect(fades.animations).toHaveLength(1);
+      const restoring = renderer.restoreAll();
+      fades.release();
+      await inflight;
+      await restoring;
+      expect(fades.animations[0]?.cancel).toHaveBeenCalled();
+      expect(renderer.mode).toBe('bilingual');
+      expect(document.body.innerHTML).toBe(before);
+    } finally {
+      fades.restore();
+    }
   });
 });
 

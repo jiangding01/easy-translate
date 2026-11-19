@@ -953,7 +953,8 @@ export function createIsle({ session, deps, env }: IsleOptions): Isle {
     const current = currentEngine();
     const option = options?.options.find((item) => item.id === current);
     showMark(doc, engine, option);
-    const name = option?.name ?? '';
+    // An engine no longer in the list (deleted while in use) shows by its id.
+    const name = option?.name ?? current ?? '';
     const engineLabel = last.engineError
       ? message('isle.engineError', name, errorText(last.engineError))
       : message('isle.engineSwitch', name);

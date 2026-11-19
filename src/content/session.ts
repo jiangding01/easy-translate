@@ -750,8 +750,13 @@ export function createPageSession(deps: SessionDeps): PageSession {
 
   async function begin(options: { engine?: Engine }): Promise<PageState> {
     if (halted) return state();
-    if (options.engine !== undefined && options.engine !== engine && phase !== 'idle') {
+    if (
+      options.engine !== undefined &&
+      phase !== 'idle' &&
+      (options.engine !== engine || engineError !== undefined)
+    ) {
       // "这次先用 Google": switch the running session's engine and resend what is left.
+      // The same engine while paused (engineError) still clears the pause.
       engine = options.engine;
       engineError = undefined;
       retry([...failed]);
@@ -775,6 +780,10 @@ export function createPageSession(deps: SessionDeps): PageSession {
       deps.reportStatus('running');
       config = await deps.getConfig();
       if (current !== epoch) return state();
+      // The session's engine is fixed from here: a later change of the default engine
+      // does not reach this page. Only "这次先用" (above) can change it. Set after the
+      // epoch check so a pick made while the config was loading is kept.
+      engine ??= config.translation.engine;
       readStyle = deps.createReadStyle();
       sheet = injectStyles(doc);
       renderer = createRenderer({

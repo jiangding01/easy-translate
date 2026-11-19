@@ -534,6 +534,13 @@ describe('dot and toolbar state', () => {
     );
   });
 
+  it('names an engine that is no longer in the list by its id', async () => {
+    const t = await setup();
+    await t.start();
+    t.emit({ engine: 'custom-gone' as never });
+    expect(t.$('.eg').getAttribute('aria-label')).toBe('本页引擎：custom-gone（点击切换）');
+  });
+
   it('marks translating with the spinning arc and shows the current engine', async () => {
     const t = await setup();
     await t.start();

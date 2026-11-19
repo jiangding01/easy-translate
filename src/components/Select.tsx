@@ -199,7 +199,8 @@ export function Select<T extends string>(props: Props<T>) {
         onKeyDown={onTriggerKeyDown}
       >
         {props.label && !props.labelledBy && (
-          <span id={nameId} hidden>
+          // The quiet footer control shows its label (it sets the default, not this page).
+          <span id={nameId} hidden={variant !== 'quiet'} className={styles.name}>
             {props.label}
           </span>
         )}

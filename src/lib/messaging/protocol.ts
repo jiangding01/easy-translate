@@ -53,7 +53,7 @@ export interface PageState {
   failed: number;
   /** Engine-level problem that paused the session; it is shown once, not per paragraph. */
   engineError?: AppError;
-  /** One-off engine used by this session instead of the configured one. */
+  /** Engine this session actually uses: fixed at start, "这次先用" can change it. */
   engine?: Engine;
   /** Set once the session stopped for good (extension context invalidated); absent otherwise. */
   halted?: true;
@@ -73,7 +73,7 @@ export interface EngineOption {
 }
 
 export interface EngineOptions {
-  /** The engine set in the config (the session may use a one-off engine instead). */
+  /** The default engine set in the config (a running session keeps the one it started with). */
   configured: Engine;
   options: EngineOption[];
 }
@@ -146,7 +146,7 @@ export interface TranslateRequest {
   /** Defaults to the configured source / target language. */
   source?: LanguageCode | 'auto';
   target?: LanguageCode;
-  /** One-off engine for this request ("这次先用 Google"); never written to the config. */
+  /** Engine this session uses (fixed at start, "这次先用 Google" can change it); never written to the config. */
   engine?: Engine;
   /**
    * Stream the translation as `delta` / `reset` chunks before the final chunk.

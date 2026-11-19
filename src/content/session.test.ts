@@ -306,6 +306,75 @@ describe('page session: lifecycle', () => {
     expect(configListeners).toHaveLength(0);
   });
 
+  it('keeps the engine it started with when the default engine changes mid-session', async () => {
+    const { session, port, show, observed, configListeners } = setup(
+      '<p>First pinned paragraph.</p><p>Second pinned paragraph.</p>',
+    );
+    await session.start();
+    show(observed.slice(0, 1));
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    expect(port.calls[0]?.payload.engine).toBe('google');
+    port.calls[0]?.answer();
+    await vi.waitFor(() => expect(translations()).toHaveLength(1));
+    const next = createDefaultConfig('zh-CN');
+    next.translation.engine = 'deepseek';
+    for (const listener of configListeners) listener(next);
+    show(observed.slice(1));
+    await vi.waitFor(() => expect(port.calls).toHaveLength(2));
+    expect(port.calls[1]?.payload.engine).toBe('google');
+    expect(session.state().engine).toBe('google');
+  });
+
+  it('keeps an engine picked while the config is still loading', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { session, port, show } = setup('<p>Picked during load.</p>', async () => {
+      await gate;
+      return createDefaultConfig('zh-CN');
+    });
+    const started = session.start();
+    await wait();
+    await session.start({ engine: 'deepseek' });
+    release();
+    await started;
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    expect(port.calls[0]?.payload.engine).toBe('deepseek');
+    expect(session.state().engine).toBe('deepseek');
+  });
+
+  it('starts with the given engine, and re-pins the then-current default after a stop', async () => {
+    const config = createDefaultConfig('zh-CN');
+    const { session, port, show } = setup('<p>Pinned after stop.</p>', async () => config);
+    await session.start({ engine: 'deepseek' });
+    expect(session.state().engine).toBe('deepseek');
+    await session.stop();
+    expect(session.state().engine).toBeUndefined();
+    config.translation.engine = 'gemini';
+    await session.start();
+    expect(session.state().engine).toBe('gemini');
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    expect(port.calls[0]?.payload.engine).toBe('gemini');
+  });
+
+  it('pauses when the pinned engine no longer exists (deleted custom engine)', async () => {
+    const { session, port, show } = setup('<p>Deleted engine paragraph.</p>');
+    await session.start({ engine: 'custom-gone' as never });
+    show();
+    await vi.waitFor(() => expect(port.calls).toHaveLength(1));
+    expect(port.calls[0]?.payload.engine).toBe('custom-gone');
+    port.calls[0]?.finish({
+      status: 'error',
+      error: appError('config', 'config/provider-missing', 'Custom provider not found'),
+    });
+    await vi.waitFor(() =>
+      expect(session.state().engineError?.code).toBe('config/provider-missing'),
+    );
+  });
+
   it('leaves the page untouched when the config cannot be read', async () => {
     const { session, before, statuses } = setup('<p>Unreadable config text.</p>', async () => {
       throw new Error('storage gone');
@@ -398,8 +467,8 @@ describe('page session: errors', () => {
     await vi.waitFor(() => expect(t.session.state().engineError).toBeDefined());
     t.session.retryFailed();
     await vi.waitFor(() => expect(t.port.calls).toHaveLength(2));
-    expect(t.port.calls[1]?.payload.engine).toBeUndefined();
-    await t.session.start({ engine: 'google' });
+    expect(t.port.calls[1]?.payload.engine).toBe('google');
+    await t.session.start({ engine: 'deepseek' });
     await wait();
     // Every paragraph is still out with the old engine: nothing to send yet.
     expect(t.port.calls).toHaveLength(2);
@@ -412,7 +481,7 @@ describe('page session: errors', () => {
     );
     old.finish({ status: 'error', error: engineError('provider/unauthorized') });
     await vi.waitFor(() => expect(port.calls).toHaveLength(3));
-    expect(port.calls[2]?.payload.engine).toBe('google');
+    expect(port.calls[2]?.payload.engine).toBe('deepseek');
     expect(port.calls[2]?.payload.items.map((item) => item.text)).toEqual([
       'Late failure one.',
       'Late failure two.',
@@ -434,7 +503,7 @@ describe('page session: errors', () => {
     old.onChunk?.({ id: second?.id ?? '', error: engineError('provider/quota-exceeded') });
     old.finish({ status: 'done', data: { total: 2, failed: 1 } });
     await vi.waitFor(() => expect(port.calls).toHaveLength(3));
-    expect(port.calls[2]?.payload.engine).toBe('google');
+    expect(port.calls[2]?.payload.engine).toBe('deepseek');
     expect(port.calls[2]?.payload.items.map((item) => item.text)).toEqual(['Late chunk two.']);
     expect(session.state().engineError).toBeUndefined();
     await vi.waitFor(() => expect(translations()).toEqual(['旧引擎译文']));
@@ -1457,15 +1526,17 @@ describe('page session: subscribe', () => {
     expect(seen.at(-1)).toEqual({ failed: 0, error: false });
   });
 
-  it('pushes when the engine of a running session is switched', async () => {
+  it('pushes the pinned engine at start and the new one when it is switched', async () => {
     const { session, runFrame } = setup('<p>Switch engine text.</p>');
-    await session.start();
     const seen: (string | undefined)[] = [];
     session.subscribe((state) => seen.push(state.engine));
+    await session.start();
     runFrame();
+    // The engine is fixed as soon as the config is read: pushed right away.
+    expect(seen).toEqual(['google']);
     await session.start({ engine: 'deepseek' });
     runFrame();
-    expect(seen).toEqual(['deepseek']);
+    expect(seen).toEqual(['google', 'deepseek']);
   });
 
   it('stops pushing after unsubscribe and cancels the queued frame', async () => {
