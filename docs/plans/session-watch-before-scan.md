@@ -1,6 +1,6 @@
 # M3d PR-B2：先监听后初扫，初扫期间的新内容不漏、不并块
 
-> 状态：已合并（#PRNUM，2026-11-19）。方案经 Opus 对抗式审查后修订，用户批准。总方案见 `docs/plans/m3d.md`（B2 行）；问题核实见 `docs/reviews/2026-11-17-core-findings-verification.md` 第 3 条及「配置订阅晚于初扫」。
+> 状态：已合并（#55，2026-11-19）。方案经 Opus 对抗式审查后修订，用户批准。总方案见 `docs/plans/m3d.md`（B2 行）；问题核实见 `docs/reviews/2026-11-17-core-findings-verification.md` 第 3 条及「配置订阅晚于初扫」。
 
 ## 问题（行号为 main `9102dc9`）
 1. **初扫与监听之间的空窗**（Codex 第 4 条）：`session.ts` `begin()` 先 `await discoverUnits(doc.body)`（:802），扫完 `register`（:808）后才 `watch`（:813）。初扫是分片的（`discover.ts:30-48`，8ms 一片，`scheduler.yield` 让出），扫描期间页面插进**已扫过**的容器的内容，既不在初扫结果里，也没有监听器记录，永远不翻译。
