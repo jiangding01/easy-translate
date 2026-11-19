@@ -10,7 +10,7 @@ import type {
   TranslateRequest,
 } from '@/lib/messaging/protocol';
 import type { StyleReader } from './dom-rules';
-import { watchMutations } from './mutations';
+import { type MutationWatchOptions, watchMutations } from './mutations';
 import { IDLE_PAGE_STATE } from './runtime-contract';
 import { createPageSession, isEngineLevel, type SessionDeps } from './session';
 
@@ -93,7 +93,10 @@ function setup(
     getConfig,
     watchConfig: (callback) => {
       configListeners.push(callback);
-      return () => configListeners.splice(configListeners.indexOf(callback), 1);
+      return () => {
+        const at = configListeners.indexOf(callback);
+        if (at >= 0) configListeners.splice(at, 1);
+      };
     },
     reportStatus: (status) => statuses.push(status),
     createReadStyle: () => readStyle,
@@ -1616,5 +1619,187 @@ describe('page session: subscribe', () => {
     card.append(document.createElement('p'));
     await wait();
     expect(port.calls).toHaveLength(1);
+  });
+});
+
+describe('page session: watching before the initial scan', () => {
+  const NEW_BLOCKS = '<div id="n"><div>New heading text.</div><div>New body text.</div></div>';
+
+  /**
+   * The mutation watch is a fake that keeps its options. The first element of `tag` the
+   * scan asks about runs `hook` synchronously (once, and only after the watch exists,
+   * so a start that watches too late changes the DOM without telling anyone).
+   */
+  function midScan(
+    markup: string,
+    tag: string,
+    hook: (options: MutationWatchOptions, ctx: ReturnType<typeof setup>) => void,
+    getConfig?: () => Promise<ReturnType<typeof createDefaultConfig>>,
+    extra: Partial<SessionDeps> = {},
+  ) {
+    let options: MutationWatchOptions | undefined;
+    let unwatched = 0;
+    let fired = false;
+    let ctx!: ReturnType<typeof setup>;
+    ctx = setup(markup, getConfig, {
+      createReadStyle: () => (el) => {
+        if (!fired && options && el.tagName === tag) {
+          fired = true;
+          hook(options, ctx);
+        }
+        return readStyle(el);
+      },
+      createMutationWatch: (given) => {
+        options = given;
+        return () => {
+          unwatched += 1;
+        };
+      },
+      ...extra,
+    });
+    return {
+      ...ctx,
+      unwatched: () => unwatched,
+      onDirty: (els: Element[]) => options?.onDirty(els),
+    };
+  }
+
+  const answerAll = async (t: ReturnType<typeof setup>) => {
+    for (const call of t.port.calls) call.answer();
+    await wait(10);
+  };
+
+  it('translates a paragraph added to a container the scan had already passed', async () => {
+    const t = midScan(
+      '<div id="a"><p>Early text here.</p></div><div><p>Later <span>text</span> here.</p></div>',
+      'SPAN',
+      (options) => {
+        const box = document.getElementById('a') as HTMLElement;
+        box.insertAdjacentHTML('beforeend', '<p>Inserted late text.</p>');
+        options.onDirty([box]);
+      },
+    );
+    await t.session.start();
+    await vi.waitFor(() => expect(t.observed.length).toBeGreaterThanOrEqual(3));
+    t.show();
+    await vi.waitFor(() => expect(t.sentTexts()).toContain('Inserted late text.'));
+    await answerAll(t);
+    await vi.waitFor(() => expect(translations()).toContain('译:Inserted late text.'));
+    await t.session.stop();
+  });
+
+  it('sends blocks added to an unfinished container as separate blocks, each text once', async () => {
+    const t = midScan(
+      '<div id="feed"><div><span>Old one</span> text here.</div><div>Old two text here.</div></div>',
+      'SPAN',
+      (options) => {
+        const feed = document.getElementById('feed') as HTMLElement;
+        feed.insertAdjacentHTML('beforeend', NEW_BLOCKS);
+        options.onDirty([feed]);
+      },
+    );
+    await t.session.start();
+    await vi.waitFor(() => expect(t.observed.length).toBeGreaterThanOrEqual(4));
+    t.show();
+    await vi.waitFor(() => expect(t.sentTexts().length).toBeGreaterThanOrEqual(4));
+    await wait(30);
+    expect([...t.sentTexts()].sort()).toEqual(
+      [
+        'New body text.',
+        'New heading text.',
+        '<t0>Old one</t0> text here.',
+        'Old two text here.',
+      ].sort(),
+    );
+    await t.session.stop();
+  });
+
+  it('sends link text once when something is added to the link during the scan', async () => {
+    const t = midScan(
+      '<p id="p">Read <a id="a" href="/x"><b>the</b> guide</a> now.</p>',
+      'B',
+      (options) => {
+        const link = document.getElementById('a') as HTMLElement;
+        link.insertAdjacentHTML('beforeend', '<svg></svg>');
+        options.onDirty([link]);
+      },
+    );
+    await t.session.start();
+    await vi.waitFor(() => expect(t.observed.length).toBeGreaterThanOrEqual(1));
+    t.show();
+    await vi.waitFor(() => expect(t.sentTexts().length).toBeGreaterThanOrEqual(1));
+    await wait(30);
+    expect(t.sentTexts().filter((text) => text.includes('guide'))).toHaveLength(1);
+    expect(t.sentTexts()).toHaveLength(1);
+    // The hook really fired during the scan.
+    expect(document.querySelector('#a svg')).not.toBeNull();
+    await t.session.stop();
+  });
+
+  it('stops watching when stopped during the scan', async () => {
+    const t = midScan('<div><p>One <span>two</span> three.</p></div>', 'SPAN', () => {
+      void t.session.stop();
+    });
+    await t.session.start();
+    expect(t.session.state().phase).toBe('idle');
+    expect(t.unwatched()).toBe(1);
+  });
+
+  it('applies a style set while the config was loading', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const t = setup('<p>Style during load text.</p>', async () => {
+      await gate;
+      return createDefaultConfig('zh-CN');
+    });
+    const started = t.session.start();
+    await vi.waitFor(() => expect(t.configListeners).toHaveLength(1));
+    const next = createDefaultConfig('zh-CN');
+    next.page.style = 'highlight';
+    for (const listener of t.configListeners) listener(next);
+    release();
+    await started;
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    await answerAll(t);
+    await vi.waitFor(() =>
+      expect(document.querySelector('et-tr')?.getAttribute('data-et-s')).toBe('highlight'),
+    );
+    await t.session.stop();
+  });
+
+  it('applies a style set while the page is being scanned', async () => {
+    const next = createDefaultConfig('zh-CN');
+    next.page.style = 'underline';
+    const t = midScan('<p>Style <span>during</span> scan text.</p>', 'SPAN', (_options, ctx) => {
+      for (const listener of ctx.configListeners) listener(next);
+    });
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    await answerAll(t);
+    await vi.waitFor(() =>
+      expect(document.querySelector('et-tr')?.getAttribute('data-et-s')).toBe('underline'),
+    );
+    await t.session.stop();
+  });
+
+  it('still finishes stopping when the config cannot be read and the unsubscribe throws', async () => {
+    const t = setup(
+      '<p>Unreadable and gone text.</p>',
+      async () => {
+        throw new Error('storage gone');
+      },
+      {
+        watchConfig: () => () => {
+          throw new Error('extension gone');
+        },
+      },
+    );
+    await expect(t.session.start()).rejects.toThrow('storage gone');
+    expect(t.session.state().phase).toBe('idle');
+    expect(t.statuses.at(-1)).toBe('idle');
   });
 });

@@ -27,7 +27,7 @@
 | 1 | 动态重扫把编辑区文字放进翻译请求 | 属实，且更严重 | `discover.ts:81` 只在 `el !== root` 时判断 isSkipped；`session.ts:494` 向上找重扫起点只越过行内元素，都不查祖先。实测：以编辑器或其内 `<p>` 为重扫起点，草稿进入翻译单元；nav、aria-hidden、`translate=no` 同样可被绕过 | P1：草稿发给服务商，`<et-tr>` 可能写进编辑器内容 | 单独修复 PR：抽 `skippedAncestor()`，重扫起点与发包前共用（aria-hidden 保留「可能临时隐藏」逻辑）；e2e PR2 补回归用例 |
 | 2 | 退出「仅译文」覆盖网页的样式更新 | 属实 | `render.ts:274` 保存整个 style 属性，`:290` 整份覆盖 | P2 | 单独小 PR：只记录并还原扩展改过的属性（仍为扩展写入值时才还原）；e2e PR2 补用例 |
 | 3 | 改默认引擎影响已开会话 | 部分属实 | `session.ts:640` engine 为 undefined，`service.ts:271` 每批重读默认；灵岛显示实时默认，界面不误导；`:675` 注释说引擎固定与实际不符 | P3 | M3d：开始时固定为当时默认引擎。状态：已修复并合并（#54，分支 `fix/session-pinned-engine`） |
-| 4 | 初扫与监听之间有空窗 | 已排期 | `session.ts:659` 到 `:666` 仍先扫后监听 | P2 | M3d PR-B；e2e PR2 第 19 条加「扫描期间插入内容」 |
+| 4 | 初扫与监听之间有空窗 | 已排期 | `session.ts:659` 到 `:666` 仍先扫后监听 | P2 | M3d PR-B；e2e PR2 第 19 条加「扫描期间插入内容」。状态：已修复并合并（#PRNUM，分支 `fix/session-watch-before-scan`） |
 | 5 | 缓存「保留 7 天」与实际不符、清空失败仍提示成功 | 部分属实 | `cache.ts:164` 过期只在读到时删；clear 被 guarded 包住，失败返回默认值（`:308`） | P3 | 小 PR：SW 启动按 lastUsedAt 清扫过期；clear 失败抛错 |
 | 6 | 超过 5000 字的段落无提示跳过 | 属实 | `text.ts:15,25` | P3 | M3d 之后：先计入「跳过」并显示，再考虑按句切分 |
 | 7 | html lang 挡住手动翻译 | 属实 | `panel-state.ts:23` lang 等于目标语言时，`App.tsx:186` 隐藏「翻译此页」与目标语言 | P3（快捷键与页面右键菜单仍可用，灵岛要在翻译开始后才出现，不是入口） | 小 PR：保留「仍然翻译」按钮与目标语言（新增文案需用户确认） |
@@ -55,5 +55,5 @@
 2. 第 2 条单独小 PR。状态：已修复并合并（#46，分支 `fix/translation-only-style-restore`），方案与实施记录见 `docs/plans/translation-only-style-restore.md`。
 3. e2e PR2 增补：编辑区（已随第 1 条修复 PR 提前完成）、样式恢复（已随第 2 条修复 PR 提前完成）、扫描期间插入内容（e2e 第 19 条，随 M3d PR-B 启用）。状态：e2e PR2 已完成并合并（#48），第 15 条扩展重载用例已完成并合并（#51）。
 4. 第 7 条、第 5 条各一个小 PR，v0.2.0 之前。第 7 条状态：已修复并合并（#49，分支 `fix/popup-translate-anyway`），方案与实施记录见 `docs/plans/popup-translate-anyway.md`。第 5 条状态：已修复并合并（#50，分支 `fix/cache-honesty`），方案与实施记录见 `docs/plans/cache-honesty.md`。
-5. M3d PR-B：第 4 条，连同配置订阅问题。
+5. M3d PR-B：第 4 条，连同配置订阅问题。状态：已修复并合并（#PRNUM，分支 `fix/session-watch-before-scan`），方案与实施记录见 `docs/plans/session-watch-before-scan.md`。
 6. M3d：第 3 条固定引擎、第 6 条显示跳过数。

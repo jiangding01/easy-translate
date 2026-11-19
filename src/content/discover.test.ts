@@ -237,3 +237,53 @@ describe('isInlineElement with display none', () => {
     expect(isInlineElement(document.createElement('div'), none)).toBe(false);
   });
 });
+
+describe('content added while a container is still being scanned', () => {
+  /** A reader that runs `hook` once, on the first element of `tag` it is asked about. */
+  function hooked(tag: string, hook: () => void): StyleReader {
+    let done = false;
+    return (el) => {
+      if (!done && el.tagName === tag) {
+        done = true;
+        hook();
+      }
+      return readStyle(el);
+    };
+  }
+  const NEW_BLOCKS = '<div id="n"><div>New heading text.</div><div>New body text.</div></div>';
+
+  async function scan(markup: string, tag: string, hook: () => void) {
+    document.body.innerHTML = markup;
+    const found = await discoverUnits(document.body, { readStyle: hooked(tag, hook) });
+    return found.map((unit) => ({
+      kind: unit.kind,
+      root: unit.root.id || unit.root.tagName,
+      text: unit.seg.plain,
+    }));
+  }
+
+  it('does not fold blocks added to a block parent into one of its runs', async () => {
+    const found = await scan(
+      '<div id="feed"><div><span>Old one</span> text here.</div><div>Old two text here.</div></div>',
+      'SPAN',
+      () => document.getElementById('feed')?.insertAdjacentHTML('beforeend', NEW_BLOCKS),
+    );
+    expect(found.map((unit) => unit.text)).toEqual(['Old one text here.', 'Old two text here.']);
+  });
+
+  it('does not wrap blocks added to a parent that had only inline content', async () => {
+    const found = await scan('<div id="feed"><span>Old text</span> here.</div>', 'SPAN', () =>
+      document.getElementById('feed')?.insertAdjacentHTML('beforeend', NEW_BLOCKS),
+    );
+    expect(found).toEqual([{ kind: 'run', root: 'feed', text: 'Old text here.' }]);
+  });
+
+  it('leaves an inline parent alone when something is added to it', async () => {
+    const found = await scan(
+      '<p id="p">Read <a id="a" href="/x"><b>the</b> guide</a> now.</p>',
+      'B',
+      () => document.getElementById('a')?.insertAdjacentHTML('beforeend', '<svg></svg>'),
+    );
+    expect(found).toEqual([{ kind: 'block', root: 'p', text: 'Read the guide now.' }]);
+  });
+});

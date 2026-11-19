@@ -778,6 +778,16 @@ export function createPageSession(deps: SessionDeps): PageSession {
       if (current !== epoch) return state();
       engine = options.engine;
       deps.reportStatus('running');
+      // Subscribe before reading: a change made while the config loads or the page is
+      // scanned must not be lost. Only the style follows the setting live; language and
+      // engine stay fixed for the session so one page never mixes two target languages.
+      // Until the renderer exists a new style is only remembered.
+      let style: ConfigV1['page']['style'] | undefined;
+      stopWatchingConfig = deps.watchConfig?.((next) => {
+        if (current !== epoch || next.page.style === style) return;
+        style = next.page.style;
+        renderer?.setStyle(style);
+      });
       config = await deps.getConfig();
       if (current !== epoch) return state();
       // The session's engine is fixed from here: a later change of the default engine
@@ -786,9 +796,10 @@ export function createPageSession(deps: SessionDeps): PageSession {
       engine ??= config.translation.engine;
       readStyle = deps.createReadStyle();
       sheet = injectStyles(doc);
+      style ??= config.page.style;
       renderer = createRenderer({
         win,
-        style: config.page.style,
+        style,
         target: config.language.target,
         // Always the current reader: it is refreshed on every mutation round.
         readStyle: (el) => readStyle(el),
@@ -799,6 +810,25 @@ export function createPageSession(deps: SessionDeps): PageSession {
       notify();
       viewport = deps.createViewport(onViewportChunked);
       win.addEventListener('scroll', onScroll, { capture: true, passive: true });
+      // Watch before the initial scan: the scan yields to the page, and content added to
+      // a container it has already passed would otherwise be seen by nobody. Dirty
+      // elements are held until the scan is registered, then rescanned in one go
+      // (rescanning during the scan would register the same text twice).
+      let held: Element[] | undefined = [];
+      stopWatching = watch({
+        root: doc.body,
+        isOwn,
+        ignoreRemoved: isLoadingDot,
+        onDirty: (elements) => {
+          if (held) {
+            held.push(...elements);
+            return;
+          }
+          // Fresh computed styles for each round: cached ones go stale on live pages.
+          readStyle = deps.createReadStyle();
+          void rescan(elements);
+        },
+      });
       const units = await discoverUnits(doc.body, {
         readStyle,
         pace: createPacer(),
@@ -807,27 +837,15 @@ export function createPageSession(deps: SessionDeps): PageSession {
       if (current !== epoch) return state();
       register(units);
       // The extension may have gone while the page was being scanned: halt now (notify
-      // checks) rather than set up watchers that need it.
+      // checks) rather than rescan or flush with an extension that is gone.
       notify();
       if (current !== epoch) return state();
-      stopWatching = watch({
-        root: doc.body,
-        isOwn,
-        ignoreRemoved: isLoadingDot,
-        onDirty: (elements) => {
-          // Fresh computed styles for each round: cached ones go stale on live pages.
-          readStyle = deps.createReadStyle();
-          void rescan(elements);
-        },
-      });
-      // Only the style follows the setting live; language and engine stay fixed for
-      // the session so one page never mixes two target languages.
-      let style = config.page.style;
-      stopWatchingConfig = deps.watchConfig?.((next) => {
-        if (current !== epoch || next.page.style === style) return;
-        style = next.page.style;
-        renderer?.setStyle(style);
-      });
+      const dirty = held;
+      held = undefined;
+      if (dirty.length > 0) {
+        readStyle = deps.createReadStyle();
+        void rescan(dirty);
+      }
       scheduleFlush(true);
       return state();
     } catch (error) {
@@ -841,7 +859,11 @@ export function createPageSession(deps: SessionDeps): PageSession {
     epoch += 1;
     for (const request of requests) request.cancel();
     requests.clear();
-    stopWatchingConfig?.();
+    try {
+      stopWatchingConfig?.();
+    } catch {
+      // Same as halt: the unsubscribe may need an extension that is already gone.
+    }
     stopWatchingConfig = undefined;
     viewport?.disconnect();
     viewport = undefined;

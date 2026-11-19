@@ -1,6 +1,6 @@
 # M3d 动态页与站点规则：范围与拆分
 
-> 状态：2026-11-19 用户批准；B1 已合并（#54）（按 Fable 5.2 裁决与推荐选项）。各 PR 的方案与实施记录各自成文，本文只记范围、拆分与决定。
+> 状态：2026-11-19 用户批准；B1 已合并（#54），B2 已合并（#PRNUM）（按 Fable 5.2 裁决与推荐选项）。各 PR 的方案与实施记录各自成文，本文只记范围、拆分与决定。
 
 ## 结论
 M3d 收敛为 5 个独立可合并的小 PR，**不改常驻 content**（`content` 6.99 / 7.00 KB，预算不变）。全部改动落在按需 page-runtime（23.16 / 24 KB）；若超出，按实测把 page-runtime 预算提到 25 KB（用户已有条件同意，按需加载不影响首屏）。每个 PR 贴实测体积。
@@ -9,7 +9,7 @@ M3d 收敛为 5 个独立可合并的小 PR，**不改常驻 content**（`conten
 | 顺序 | PR | 范围 | 新文案 |
 |---|---|---|---|
 | 1 | B1 `fix/session-pinned-engine` | 会话开始时固定实际引擎（`engine = options.engine ?? config.translation.engine`，代码与 `session.ts` 注释一致）；面板与灵岛显示会话实际引擎（读配置前沿用默认作兜底）；「这次先用」切换照旧；`render.ts` 的 `setMode` 串行化，快速连切停在最后一次 | 无；已合并（#54） |
-| 2 | B2 `fix/session-watch-before-scan` | 监听与配置订阅提前到初扫之前，扫描期间的脏元素缓存、扫完统一 rescan（Codex 第 4 条与「配置订阅晚于初扫」）；初扫期间追加的节点不并进未扫完容器的行内 run；e2e 第 19 条加可控暂停点 | 无 |
+| 2 | B2 `fix/session-watch-before-scan` | 监听与配置订阅提前到初扫之前，扫描期间的脏元素缓存、扫完统一 rescan（Codex 第 4 条与「配置订阅晚于初扫」）；discover 把扫描期间追加的未访问子元素当边界（行内父元素除外），不并进未扫完容器的行内 run；e2e 第 19 条用隔离世界包装 `scheduler.yield` 做暂停点 | 无；已合并（#PRNUM） |
 | 3 | D `feat/skip-ui-mock-regions` | page-runtime 内置小表（hostname 后缀 → 排除选择器），首条 claude.dev 的 `.efx-fig`；通用规则：`role=img` 子树不翻、紧邻 `PRE` 的短代码块工具栏不翻（HANDOFF 待处理 1 与 5）；出方案前多看几个站点的工具栏结构 | 无 |
 | 4 | C `feat/skipped-count` | 只统计超过 5000 字符的单元（URL、数字等噪声不计），`PageState.skipped`，灵岛与面板仅在大于 0 时显示（Codex 第 6 条） | 「N 段过长，未翻译」（需三语） |
 | 5 | E `test/spa-route-e2e` | e2e：`pushState` 整体替换主内容后新内容被翻译、旧单元被遗忘、计数正确；只修测出的问题；需要路由信号时在 `onDirty` 比较 `location.href`，路由变化后维持会话、防抖后全量 rescan 一次，不加任何监听 | 无 |
