@@ -267,7 +267,7 @@ export function createTranslateService(deps: TranslateServiceDeps): TranslateSer
     throwIfAborted(signal);
     const source: LanguageCode | 'auto' = request.source ?? config.language.source;
     const target: LanguageCode = request.target ?? config.language.target;
-    // A one-off engine ("这次先用 Google") applies to this request only.
+    // The session's engine (fixed at start, "这次先用 Google" can change it) wins over the default.
     const engine = request.engine ?? config.translation.engine;
     const adapter = getAdapter(engine);
     const settings = resolveProviderSettings(engine, config);

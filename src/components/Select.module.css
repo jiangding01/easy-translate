@@ -75,6 +75,23 @@
   color: var(--et-color-muted);
   font-size: var(--et-fs-caption);
 }
+/* The quiet control carries its label: stacked over the value, where a row would leave
+   the engine name no room in the 280px panel footer. */
+.quiet:has(> .name:not([hidden])) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 6px;
+  height: auto;
+  min-height: var(--et-h-control-sm);
+  padding-block: 1px;
+  line-height: 1.2;
+}
+.name {
+  grid-column: 1 / -1;
+  color: var(--et-color-faint);
+  font-size: calc(var(--et-fs-caption) - 2px);
+  white-space: nowrap;
+}
 .quiet:hover,
 .quiet[aria-expanded="true"] {
   background: var(--et-color-surface);

@@ -153,6 +153,9 @@ export function createRenderer(options: RenderOptions): Renderer {
    * fail, a mode switch) must not land after it, or they would outlive the session.
    */
   let disposed = false;
+  /** The mode switch in flight, and the mode the last request asked for. */
+  let switching: Promise<void> | undefined;
+  let wanted: PageMode = mode;
 
   const reduced = () => win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const frame = () =>
@@ -383,6 +386,53 @@ export function createRenderer(options: RenderOptions): Renderer {
 
   const has = (unit: Unit) => rendered.has(unit) && !rendered.get(unit)?.failed;
 
+  async function swapMode(): Promise<void> {
+    const switchable = () =>
+      [...rendered.values()].filter((record) => record.el.isConnected && canBeOnly(record));
+    const records = switchable();
+    const anchor = captureAnchor(win);
+    const visibleRoots = records.map((r) => r.unit.root).filter((root) => inViewport(root, win));
+    const animated = typeof doc.body.animate === 'function' && !reduced();
+    // First half: the visible paragraphs fade out together. Only our own
+    // animations are tracked and cancelled: the host's stay untouched.
+    const fades: Animation[] = [];
+    if (animated && visibleRoots.length > 0) {
+      for (const root of visibleRoots) {
+        fades.push(
+          root.animate([{}, { opacity: 0 }], {
+            duration: SWAP_HALF_MS,
+            easing: 'ease-in',
+            fill: 'forwards',
+          }),
+        );
+      }
+      await Promise.all(fades.map((fade) => fade.finished.catch(() => undefined)));
+      if (disposed) {
+        for (const fade of fades) fade.cancel();
+        return;
+      }
+    }
+    // Requests that came in during the fade: only the last one counts, read once. When
+    // it is the mode already on screen, nothing changes but the fade back in.
+    const next = wanted;
+    if (next !== mode) {
+      // Re-read: translations inserted during the fade must switch too.
+      const current = switchable();
+      const readings = next === 'translation' ? current.map(readOnly) : [];
+      mode = next;
+      if (next === 'translation') for (const reading of readings) applyOnly(reading);
+      else for (const record of current) removeOnly(record);
+      restoreAnchor(anchor, win);
+    }
+    // Second half: fade back in, then drop our animations so host styles rule again.
+    if (animated && visibleRoots.length > 0) {
+      for (const fade of fades) fade.cancel();
+      for (const root of visibleRoots) {
+        root.animate([{ opacity: 0 }, {}], { duration: SWAP_HALF_MS, easing: 'ease-out' });
+      }
+    }
+  }
+
   return {
     get mode() {
       return mode;
@@ -564,47 +614,21 @@ export function createRenderer(options: RenderOptions): Renderer {
       rendered.delete(unit);
     },
 
-    async setMode(next) {
-      if (next === mode || disposed) return;
-      const switchable = () =>
-        [...rendered.values()].filter((record) => record.el.isConnected && canBeOnly(record));
-      const records = switchable();
-      const anchor = captureAnchor(win);
-      const visibleRoots = records.map((r) => r.unit.root).filter((root) => inViewport(root, win));
-      const animated = typeof doc.body.animate === 'function' && !reduced();
-      // First half: the visible paragraphs fade out together. Only our own
-      // animations are tracked and cancelled: the host's stay untouched.
-      const fades: Animation[] = [];
-      if (animated && visibleRoots.length > 0) {
-        for (const root of visibleRoots) {
-          fades.push(
-            root.animate([{}, { opacity: 0 }], {
-              duration: SWAP_HALF_MS,
-              easing: 'ease-in',
-              fill: 'forwards',
-            }),
-          );
-        }
-        await Promise.all(fades.map((fade) => fade.finished.catch(() => undefined)));
-        if (disposed) {
-          for (const fade of fades) fade.cancel();
-          return;
-        }
+    setMode(next) {
+      if (disposed) return Promise.resolve();
+      // A switch in flight takes every later request as "the last word": only the
+      // target is updated, and the one Promise settles once that target is applied.
+      if (switching) {
+        wanted = next;
+        return switching;
       }
-      // Re-read: translations inserted during the fade must switch too.
-      const current = switchable();
-      const readings = next === 'translation' ? current.map(readOnly) : [];
-      mode = next;
-      if (next === 'translation') for (const reading of readings) applyOnly(reading);
-      else for (const record of current) removeOnly(record);
-      restoreAnchor(anchor, win);
-      // Second half: fade back in, then drop our animations so host styles rule again.
-      if (animated && visibleRoots.length > 0) {
-        for (const fade of fades) fade.cancel();
-        for (const root of visibleRoots) {
-          root.animate([{ opacity: 0 }, {}], { duration: SWAP_HALF_MS, easing: 'ease-out' });
-        }
-      }
+      if (next === mode) return Promise.resolve();
+      wanted = next;
+      const run = swapMode().finally(() => {
+        if (switching === run) switching = undefined;
+      });
+      switching = run;
+      return run;
     },
 
     async restoreAll() {

@@ -138,6 +138,45 @@ describe('session', () => {
     }
   });
 
+  it('keeps the engine it started with when the default engine changes afterwards', async () => {
+    await h.openPage('e2e-article.html');
+    await h.tell('page.toggle');
+    await waitFor(async () => (await state()).translated >= 8, {
+      message: 'the first screen to be translated',
+    });
+    await waitFor(async () => (await state()).phase === 'done', { message: 'the page to settle' });
+
+    // DeepSeek has no key: a session that followed the default would pause or fail.
+    const options = await h.extPage('options.html');
+    try {
+      expect(
+        await options.send('config.patch', [{ path: 'translation.engine', value: 'deepseek' }]),
+      ).toMatchObject({ ok: true });
+      const text = 'A pinned engine carries the harbour bell across the water.';
+      await h.evaluate(`(() => {
+        const p = document.createElement('p');
+        p.id = 'latecomer';
+        p.textContent = ${JSON.stringify(text)};
+        document.querySelector('#intro').after(p);
+      })()`);
+      await waitFor(
+        () =>
+          h.evaluate<boolean>(
+            `document.querySelector('#latecomer > et-tr')?.textContent.includes('【MOCK】') ?? false`,
+          ),
+        { message: 'the new paragraph to be translated by the session engine' },
+      );
+      expect(h.google.texts.some((item) => item.includes('harbour bell'))).toBe(true);
+      expect((await state()).engineError).toBeUndefined();
+      h.assertNoErrors();
+    } finally {
+      expect(
+        await options.send('config.patch', [{ path: 'translation.engine', value: 'google' }]),
+      ).toMatchObject({ ok: true });
+      await options.close();
+    }
+  });
+
   // Last in the file: it stops the worker.
   it('keeps translating new text after the service worker was stopped', async () => {
     await h.openPage('e2e-article.html');
