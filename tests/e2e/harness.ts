@@ -90,6 +90,12 @@ export interface Harness {
   openPage(fixture: string): Promise<void>;
   /** Evaluates in the test page's main world (awaits promises, returns by value). */
   evaluate<T = unknown>(expression: string): Promise<T>;
+  /**
+   * Evaluates in the extension's content-script world of the test page's top frame (the
+   * isolated world: page scripts cannot see what is changed there). Waits for that world to
+   * exist, as the content script is injected after the page loads.
+   */
+  evalInContentWorld<T = unknown>(expression: string): Promise<T>;
   /** Overrides the test page's viewport size (CDP device metrics) until clearViewport(). */
   setViewport(width: number, height: number): Promise<void>;
   clearViewport(): Promise<void>;
@@ -329,6 +335,8 @@ async function start(
   const sessions = new Map<string, { targetId: string; label: string }>();
   let pageSession: string | undefined;
   let swSession: string | undefined;
+  /** The extension's isolated worlds in the test page: execution context id -> frame id. */
+  const contentWorlds = new Map<number, string>();
   /** Whether the worker runs with interception on; stops are counted for stopServiceWorker. */
   let swReady = false;
   let swStops = 0;
@@ -417,6 +425,15 @@ async function start(
     else if (method === 'Target.detachedFromTarget') {
       sessions.delete(params.sessionId);
       if (params.sessionId === swSession) swReady = false;
+    } else if (sessionId === pageSession && method === 'Runtime.executionContextCreated') {
+      const { id, origin: contextOrigin, auxData } = params.context;
+      if (auxData?.type === 'isolated' && contextOrigin === `chrome-extension://${extensionId}`) {
+        contentWorlds.set(id, auxData.frameId);
+      }
+    } else if (sessionId === pageSession && method === 'Runtime.executionContextDestroyed') {
+      contentWorlds.delete(params.executionContextId);
+    } else if (sessionId === pageSession && method === 'Runtime.executionContextsCleared') {
+      contentWorlds.clear();
     } else if (
       fromSw &&
       /^(Inspector.targetCrashed|Runtime.executionContextsCleared)$/.test(method)
@@ -538,6 +555,20 @@ async function start(
       });
     },
     evaluate,
+    async evalInContentWorld<T>(expression: string) {
+      const contextId = await waitFor(
+        async () => {
+          const { frameTree } = await cdp.send('Page.getFrameTree', {}, page());
+          return [...contentWorlds].find(([, frameId]) => frameId === frameTree.frame.id)?.[0];
+        },
+        { message: "the content script's world" },
+      );
+      const params = { expression, contextId, awaitPromise: true, returnByValue: true };
+      const reply = await cdp.send('Runtime.evaluate', params, page());
+      const details = reply.exceptionDetails;
+      if (details) throw new Error(details.exception?.description ?? details.text);
+      return reply.result?.value as T;
+    },
     async setViewport(width, height) {
       const metrics = { width, height, deviceScaleFactor: 1, mobile: false };
       await cdp.send('Emulation.setDeviceMetricsOverride', metrics, page());

@@ -177,6 +177,76 @@ describe('session', () => {
     }
   });
 
+  // Content that lands while the first scan is yielding to the page. The yield is wrapped
+  // in the content script's own world (the page cannot see it), so the insertion happens at
+  // a known point of the scan; the page has thousands of blocks so the scan yields at all.
+  describe('during the first scan', () => {
+    const BULK = 6000;
+    async function bigPage(insert: string) {
+      await h.openPage('e2e-article.html');
+      await h.evaluate(`(() => {
+        document.body.innerHTML = '<div id="top"><p id="early">The first small container.</p></div>'
+          + '<main id="bulk">' + Array.from({ length: ${BULK} }, (_, i) =>
+            '<p>Paragraph number ' + i + ' of a very long page.</p>').join('') + '</main>';
+      })()`);
+      await h.evalInContentWorld(`(() => {
+        const real = globalThis.scheduler.yield.bind(globalThis.scheduler);
+        globalThis.__yields = 0;
+        globalThis.scheduler.yield = () => {
+          globalThis.__yields += 1;
+          if (globalThis.__yields === 1) {
+            globalThis.__trAtInsert = document.querySelectorAll('et-tr').length;
+            ${insert}
+          }
+          return real();
+        };
+      })()`);
+      await h.tell('page.toggle');
+    }
+    const translated = (selector: string) =>
+      h.evaluate<boolean>(
+        `document.querySelector(${JSON.stringify(selector)} + ' > et-tr')?.textContent.includes('【MOCK】') ?? false`,
+      );
+    const insertedMidScan = () =>
+      h.evalInContentWorld<{ yields: number; trAtInsert: number }>(
+        '({ yields: globalThis.__yields, trAtInsert: globalThis.__trAtInsert })',
+      );
+
+    it('translates a paragraph added to a container the scan had already passed', async () => {
+      await bigPage(`(() => {
+        const p = document.createElement('p');
+        p.id = 'late';
+        p.textContent = 'A paragraph that arrived while the page was still being scanned.';
+        document.getElementById('top').append(p);
+      })();`);
+      await waitFor(() => translated('#late'), {
+        message: 'the paragraph added during the scan to be translated',
+        timeout: 20_000,
+      });
+      expect(await translated('#early')).toBe(true);
+      // The insertion really came before any translation: the scan was still going.
+      expect(await insertedMidScan()).toMatchObject({ trAtInsert: 0 });
+      h.assertNoErrors();
+    });
+
+    it('translates blocks added in front of the page as two paragraphs', async () => {
+      await bigPage(`document.body.insertAdjacentHTML('afterbegin',
+        '<div id="pre"><div id="pa">First prepended block text.</div>'
+        + '<div id="pb">Second prepended block text.</div></div>');`);
+      await waitFor(async () => (await translated('#pa')) && (await translated('#pb')), {
+        message: 'both prepended blocks to be translated',
+        timeout: 20_000,
+      });
+      expect(await insertedMidScan()).toMatchObject({ trAtInsert: 0 });
+      // Each block on its own: nothing was sent as one unit around both.
+      expect(
+        h.google.texts.some((text) => text.includes('First prepended') && text.includes('Second')),
+      ).toBe(false);
+      expect(await h.evaluate<number>("document.querySelectorAll('body > et-tr').length")).toBe(0);
+      h.assertNoErrors();
+    });
+  });
+
   // Last in the file: it stops the worker.
   it('keeps translating new text after the service worker was stopped', async () => {
     await h.openPage('e2e-article.html');

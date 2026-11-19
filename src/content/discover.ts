@@ -88,14 +88,17 @@ export async function discoverUnits(root: Element, options: DiscoverOptions): Pr
       continue;
     }
 
+    // A child never visited (added after this element was entered) is a boundary, unless
+    // it is skipped; an inline parent ignores it, as before.
+    const selfInline = el !== root && inline(el);
     let childBlockish = false;
     for (const child of el.children) {
-      if (blockish.get(child)) {
+      if (blockish.get(child) ?? (!selfInline && !isSkipped(child))) {
         childBlockish = true;
         break;
       }
     }
-    const isBlockish = el === root || !inline(el) || childBlockish;
+    const isBlockish = !selfInline || childBlockish;
     blockish.set(el, isBlockish);
     if (!isBlockish) continue;
 
@@ -114,7 +117,10 @@ export async function discoverUnits(root: Element, options: DiscoverOptions): Pr
     for (const child of el.childNodes) {
       if (child.nodeType === Node.ELEMENT_NODE) {
         const childEl = child as Element;
-        if (blockish.get(childEl) || (isSkipped(childEl) && !inline(childEl))) {
+        if (
+          (blockish.get(childEl) ?? !isSkipped(childEl)) ||
+          (isSkipped(childEl) && !inline(childEl))
+        ) {
           flush();
           continue;
         }

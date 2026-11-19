@@ -44,7 +44,7 @@ CI：新增 `e2e` job，`needs: check`，下载 check job 上传的构建产物�
 文档：`docs/plans/e2e-smoke.md`（本方案与实施记录）、README 双语（命令表、CI 说明、本地验收引用 e2e）、CHANGELOG、HANDOFF。
 
 ## PR2：P1 + 面板桩 + 设为阻断
-实施记录（2026-11-18，分支 `feat/e2e-smoke-pr2`，已合并 #48）：修掉面板用例的偶发失败（等待条件弱于断言，等到 blocked 文案即可）；新增 10 条用例（第 9 到 14、16、21、22、23 条），e2e 现为 10 个文件、33 通过、2 跳过，约 37 秒；CI 能标出重试过的用例（`::warning::` 注解、首次失败的错误、重试产物另存）。harness 680 行，不再以行数为退出条件。第 15 条另开小 PR（已完成，分支 `feat/e2e-reload-extension`，已合并 #51，加入后 e2e 现为 11 个文件、38 通过、2 跳过），第 19 条随 M3d PR-B，第 20 条单测已覆盖、不做。「设为必过」待 CI 上积累未经重试的全绿记录后由用户操作。细节见 [`docs/plans/e2e-smoke-pr2.md`](e2e-smoke-pr2.md)。
+实施记录（2026-11-18，分支 `feat/e2e-smoke-pr2`，已合并 #48）：修掉面板用例的偶发失败（等待条件弱于断言，等到 blocked 文案即可）；新增 10 条用例（第 9 到 14、16、21、22、23 条），e2e 现为 10 个文件、33 通过、2 跳过，约 37 秒；CI 能标出重试过的用例（`::warning::` 注解、首次失败的错误、重试产物另存）。harness 680 行，不再以行数为退出条件。第 15 条另开小 PR（已完成，分支 `feat/e2e-reload-extension`，已合并 #51，加入后 e2e 现为 11 个文件、38 通过、2 跳过），第 19 条已随 M3d PR-B2（#55）启用，第 20 条单测已覆盖、不做。「设为必过」待 CI 上积累未经重试的全绿记录后由用户操作。细节见 [`docs/plans/e2e-smoke-pr2.md`](e2e-smoke-pr2.md)。
 9. 「仅看译文」布局：沿用 `tests/fixtures/translation-only-layout.html` 各用例，切换前后译文根元素宽度与左边界不塌陷、不偏移，切回双语后原文布局复原（`getBoundingClientRect`，容差 0.5px）。
 10. 动态内容：翻译后插入新段落，新段落被翻译。
 11. 总是翻译此站：从 options 页发 `site.setAlways` 后重新加载页面，自动开始翻译。
@@ -56,7 +56,7 @@ CI：新增 `e2e` job，`needs: check`，下载 check job 上传的构建产物�
 PR2 增补（2026-11-18 用户同意，开工时随 PR2 方案一起审查）：
 17. 整页动态重扫：编辑区（contenteditable、textarea 附近的富文本编辑器）里的文字始终不出现在翻译请求里（Codex 评审第 1 条，P1 修复的回归用例）。已在 P1 修复 PR（`fix/rescan-protected-areas`）中提前完成。
 18. 网站在翻译期间主动修改的行内样式，退出「仅看译文」后保留（Codex 第 2 条）。已在样式精确恢复修复 PR（`fix/translation-only-style-restore`）中提前完成。
-19. 初扫期间插入的内容也被翻译（Codex 第 4 条，随 M3d PR-B 修复后启用）。
+19. 初扫期间插入的内容也被翻译（Codex 第 4 条，已随 M3d PR-B2（#55）启用）。
 20. 灵岛：连续改变视口宽度时小点始终贴着窗口边缘（#36 的回归）。
 21. 「仅看译文」下 Google 丢标记退回纯文本的段落，原文不再露出（与第 14 条合测）。
 22. 快速「停止 → 再开始」：最终处于翻译中且无错误。
