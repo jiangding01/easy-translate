@@ -323,8 +323,8 @@
 }
 
 .footer {
-  height: 42px;
-  padding: 0 6px 0 8px;
+  min-height: 42px;
+  padding: 8px 6px 8px 8px;
   border-top: 1px solid var(--et-color-border);
   display: flex;
   align-items: center;

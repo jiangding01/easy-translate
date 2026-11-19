@@ -476,6 +476,10 @@
   font-family: var(--et-font-mono);
   font-size: var(--et-fs-page-sm);
 }
+/* Placeholders are prose, not code. */
+.mono::placeholder {
+  font-family: var(--et-font-sans);
+}
 .fieldError {
   font-size: var(--et-fs-page-xs);
   color: var(--et-color-warn);
@@ -1121,6 +1125,9 @@ fieldset.chips {
 .styleOption:has(:focus-visible) {
   outline: 2px solid var(--et-color-focus);
   outline-offset: 2px;
+}
+.styleOption > .sample {
+  flex-grow: 1;
 }
 .styleName {
   display: flex;

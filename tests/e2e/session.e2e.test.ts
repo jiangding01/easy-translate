@@ -334,4 +334,40 @@ describe('session', () => {
     });
     h.assertNoErrors();
   });
+
+  it('keeps a status note on one line, inline after a long run and beside text in a flex box', async () => {
+    await h.openPage('e2e-article.html');
+    await h.evaluate(`(() => {
+      const box = 'width:300px;font:10px/12px monospace;';
+      document.body.innerHTML = '<div id="flexbox" style="display:flex;' + box + '">'
+        + 'word '.repeat(1200) + '</div>'
+        + '<div id="run" style="' + box + '">' + 'word '.repeat(1200) + 'y'.repeat(40)
+        + '<div>A block child that ends the run.</div></div>';
+    })()`);
+    await h.tell('page.toggle');
+    await waitFor(async () => (await state()).skipped === 2, {
+      message: 'both long texts to be counted',
+    });
+    await waitFor(
+      () =>
+        h.evaluate<boolean>(
+          `document.querySelectorAll('et-tr[data-et-state="skipped"]').length === 2`,
+        ),
+      { message: 'both notes to be written' },
+    );
+    // Every line box of a note shares one top, so the note takes a single line.
+    const tops = await h.evaluate<Record<string, number[]>>(`(() => {
+      const out = {};
+      for (const id of ['flexbox', 'run']) {
+        const tr = document.querySelector('#' + id + ' > et-tr[data-et-state="skipped"]');
+        const range = document.createRange();
+        range.selectNodeContents(tr);
+        out[id] = [...new Set([...range.getClientRects()].map((r) => Math.round(r.top)))];
+      }
+      return out;
+    })()`);
+    expect(tops.flexbox).toHaveLength(1);
+    expect(tops.run).toHaveLength(1);
+    h.assertNoErrors();
+  });
 });

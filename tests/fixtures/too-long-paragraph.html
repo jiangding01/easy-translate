@@ -148,8 +148,9 @@
         <button id="again" type="button" translate="no">Add a long paragraph</button>
       </p>
       <p class="note" translate="no">
-        Starts with one long paragraph (counts 1). <b>Expected:</b> after <b>Shorten</b> its
-        note goes away, the paragraph is translated and the total becomes 5. After <b>Add a
+        Starts with one long paragraph (counts 1). <b>Shorten</b> only changes that first
+        paragraph and can be clicked again; added paragraphs stay long. <b>Expected:</b> after
+        <b>Shorten</b> its note goes away, the paragraph is translated and the total becomes 5. After <b>Add a
         long paragraph</b> there is one more note and the total becomes 6; adding sends no
         request, so the translation stays "done". The panel does not refresh itself: close
         and reopen it to read the new count (known limit, see docs/plans/skipped-count.md).
@@ -172,9 +173,8 @@
 
       const body = document.getElementById('dynamic-body');
       document.getElementById('shorten').addEventListener('click', () => {
-        for (const p of body.querySelectorAll('p.dyn')) {
-          p.textContent = 'This paragraph is short now, so it is translated as usual.';
-        }
+        const first = body.querySelector('p.dyn');
+        first.textContent = 'This paragraph is short now, so it is translated as usual.';
       });
       document.getElementById('again').addEventListener('click', () => {
         const p = document.createElement('p');

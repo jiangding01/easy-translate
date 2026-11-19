@@ -17,6 +17,8 @@
 
 body {
   margin: 0;
+  /* Chrome injects `body { font-size: 75% }` into extension pages; take the root's back. */
+  font: inherit;
 }
 
 button,
