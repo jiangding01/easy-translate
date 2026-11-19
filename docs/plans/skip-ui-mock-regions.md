@@ -1,6 +1,6 @@
 # M3d PR-D：跳过界面示意区域与代码块工具栏
 
-> 状态：已合并（#PRNUM，2026-11-19）。方案经 Opus 对抗式审查后修订，用户批准。总方案见 `docs/plans/m3d.md`（D 行，决定 5、8）；问题来源 `HANDOFF.md` 整页翻译待处理第 1、5 条（:114-130）。
+> 状态：已合并（#56，2026-11-19）。方案经 Opus 对抗式审查后修订，用户批准。总方案见 `docs/plans/m3d.md`（D 行，决定 5、8）；问题来源 `HANDOFF.md` 整页翻译待处理第 1、5 条（:114-130）。
 
 ## 问题（行号为 main `c54728e`）
 1. **界面示意图被译乱**：claude.dev 博客 `spending-your-effort` 的 `figure.efx-fig` 是用 DOM 画的终端设置界面（等宽字体、flex 行、短标签），被翻译后标题变成「Settings设置」，标签行在末尾追加译文被挤出容器。实抓服务端 HTML 确认：`.efx-fig` 里没有 `role=img` 也没有 `figcaption`，4 个 `div.efx-slot[role=group]` 在服务端是空的，由客户端懒加载填充。通用启发式救不了它，只能靠站点规则；而且懒加载的内容走 rescan，rescan 的根可能已在 `.efx-fig` 里面，`discover` 不查根的祖先，只有 `session.ts:610` 的 `protectedAncestor` 能拦住，所以规则必须进 `isProtected`（`dom-rules.ts:139-151`）。
