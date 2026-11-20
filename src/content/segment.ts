@@ -19,6 +19,8 @@ export interface Segment {
   marks: Marked[];
   /** Plain source text (tags removed), for digests and fallbacks. */
   plain: string;
+  /** `plain` without verbatim and role=img content: what decides whether the unit is worth sending. */
+  prose: string;
   digest: string;
   /** The single inline element wrapping all of the unit's text, if any (e.g. a title link). */
   soleWrapper?: Element;
@@ -27,6 +29,58 @@ export interface Segment {
 /** Cloned whole, never translated: verbatim tags, plus role=img (skipped, but an inline emoji must survive). */
 function isVerbatim(el: Element): boolean {
   return VERBATIM_TAGS.has(el.tagName) || el.getAttribute('role') === 'img';
+}
+
+/** Pure separators (bullets, breadcrumb chevrons, pipes); symbols that may carry meaning (✓ ★ → -) stay. */
+const SEPARATORS = '•·‧∙◦‣›»▸▹|';
+const LEADING_SEPARATORS = new RegExp(`^\\s*[${SEPARATORS}]+(?=\\s|$)`);
+const trailingSeparators = (separators: string) => new RegExp(`(^|\\s)[${separators}]+\\s*$`);
+
+type Leaf = Text | 'atom';
+
+/** Text nodes in document order, with verbatim elements as atoms; mirrors what `segment` visits. */
+function collectLeaves(nodes: readonly Node[]): Leaf[] {
+  const leaves: Leaf[] = [];
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      leaves.push(node as Text);
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as Element;
+      if (isVerbatim(el)) leaves.push('atom');
+      else if (!isSkipped(el)) for (const child of el.childNodes) walk(child);
+    }
+  };
+  for (const node of nodes) walk(node);
+  return leaves;
+}
+
+/**
+ * Replacement texts for the text nodes that start or end the unit with separators set apart
+ * from the words (by whitespace or an element boundary). `a›b` is left alone. The source
+ * nodes are never changed.
+ */
+function separatorTrims(nodes: readonly Node[]): Map<Node, string> {
+  const trims = new Map<Node, string>();
+  const leaves = collectLeaves(nodes);
+  const textOf = (leaf: Text) => trims.get(leaf) ?? leaf.nodeValue ?? '';
+  const strip = (order: Leaf[], pattern: RegExp, replacement: string) => {
+    for (const leaf of order) {
+      if (leaf === 'atom') return;
+      const before = textOf(leaf);
+      let rest = before;
+      while (pattern.test(rest)) rest = rest.replace(pattern, replacement);
+      if (rest !== before) trims.set(leaf, rest);
+      if (rest.trim() !== '') return;
+    }
+  };
+  strip(leaves, LEADING_SEPARATORS, '');
+  // A closing » / › that pairs with an opening « / ‹ in the unit is punctuation, not a chevron.
+  const allText = leaves.map((leaf) => (leaf === 'atom' ? '' : textOf(leaf))).join('');
+  let trailing = SEPARATORS;
+  if (allText.includes('«')) trailing = trailing.replace('»', '');
+  if (allText.includes('‹')) trailing = trailing.replace('›', '');
+  strip([...leaves].reverse(), trailingSeparators(trailing), '$1');
+  return trims;
 }
 
 function sourceHasPrefix(source: string, prefix: string): boolean {
@@ -40,12 +94,20 @@ export function segment(nodes: readonly Node[]): Segment {
   const marks: Marked[] = [];
   const out: string[] = [];
   const plainOut: string[] = [];
+  const proseOut: string[] = [];
+  const trims = separatorTrims(nodes);
+  const textOf = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return trims.get(node) ?? node.nodeValue ?? '';
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    return [...node.childNodes].map(textOf).join('');
+  };
 
   const visit = (node: Node, tagged: boolean) => {
     if (node.nodeType === Node.TEXT_NODE) {
-      const value = node.nodeValue ?? '';
+      const value = trims.get(node) ?? node.nodeValue ?? '';
       out.push(value);
       plainOut.push(value);
+      proseOut.push(value);
       return;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
@@ -59,9 +121,10 @@ export function segment(nodes: readonly Node[]): Segment {
         out.push(el.textContent ?? '');
       }
       plainOut.push(el.tagName === 'BR' ? ' ' : (el.textContent ?? ''));
+      if (el.tagName === 'BR') proseOut.push(' ');
       return;
     }
-    if (!tagged || !(el.textContent ?? '').trim()) {
+    if (!tagged || !(trims.size > 0 ? textOf(el) : (el.textContent ?? '')).trim()) {
       for (const child of el.childNodes) visit(child, tagged);
       return;
     }
@@ -83,14 +146,24 @@ export function segment(nodes: readonly Node[]): Segment {
     prefix: marks.length > 0 && prefix ? prefix : '',
     marks: marks.length > 0 ? marks : [],
     plain,
+    prose: collapseWhitespace(proseOut.join('')).trim(),
     digest: digest(text),
-    soleWrapper: findSoleWrapper(nodes),
+    soleWrapper: findSoleWrapper(nodes, trims),
   };
 }
 
-function findSoleWrapper(nodes: readonly Node[]): Element | undefined {
-  const meaningful = nodes.filter(
-    (node) => node.nodeType === Node.ELEMENT_NODE || (node.nodeValue ?? '').trim() !== '',
+function findSoleWrapper(nodes: readonly Node[], trims: Map<Node, string>): Element | undefined {
+  const textOf = (node: Node): string =>
+    node.nodeType === Node.TEXT_NODE
+      ? (trims.get(node) ?? node.nodeValue ?? '')
+      : node.nodeType === Node.ELEMENT_NODE
+        ? [...node.childNodes].map(textOf).join('')
+        : '';
+  // An element left empty only because its separators were stripped does not count.
+  const meaningful = nodes.filter((node) =>
+    node.nodeType === Node.ELEMENT_NODE
+      ? trims.size === 0 || textOf(node).trim() !== '' || (node.textContent ?? '').trim() === ''
+      : textOf(node).trim() !== '',
   );
   if (meaningful.length !== 1) return undefined;
   const only = meaningful[0];

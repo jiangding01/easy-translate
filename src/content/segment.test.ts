@@ -126,3 +126,61 @@ describe('fallbacks and sanitizing', () => {
     );
   });
 });
+
+describe('separator stripping', () => {
+  it('drops leading separators that sit apart from the text', () => {
+    expect(segment(nodesOf('•› Model')).text).toBe('Model');
+    expect(segment(nodesOf('| Model')).plain).toBe('Model');
+  });
+
+  it('drops trailing separators', () => {
+    expect(segment(nodesOf('Home ›')).text).toBe('Home');
+    expect(segment(nodesOf('Home <span>›</span>')).text).toBe('Home');
+  });
+
+  it('keeps closing guillemets that pair with an opening one', () => {
+    expect(segment(nodesOf('« Bonjour »')).text).toBe('« Bonjour »');
+    expect(segment(nodesOf('‹ Bonjour ›')).text).toBe('‹ Bonjour ›');
+    expect(segment(nodesOf('Accueil »')).text).toBe('Accueil');
+    expect(segment(nodesOf('Home ›')).text).toBe('Home');
+  });
+
+  it('leaves meaningful symbols and glued separators alone', () => {
+    expect(segment(nodesOf('✓ Free shipping')).text).toBe('✓ Free shipping');
+    expect(segment(nodesOf('a›b')).text).toBe('a›b');
+    expect(segment(nodesOf('❤️ Love it')).text).toBe('❤️ Love it');
+    expect(segment(nodesOf('→ Next')).text).toBe('→ Next');
+  });
+
+  it('excludes whole leading elements made only of separators, keeping tags consecutive', () => {
+    const seg = segment(
+      nodesOf('<span>•</span><span>›</span> <a href="/m">Model</a> and <b>more</b>'),
+    );
+    expect(seg.text).toBe('<t0>Model</t0> and <t1>more</t1>');
+    expect(seg.marks).toHaveLength(2);
+    expect(seg.soleWrapper).toBeUndefined();
+    const fragment = restoreTranslation('<t0>型号</t0>和<t1>更多</t1>', seg, document);
+    expect(fragment && html(fragment)).toBe('<a href="/m">型号</a>和<b>更多</b>');
+  });
+
+  it('keeps a lone wrapper after the separator elements go', () => {
+    const seg = segment(nodesOf('<span>•</span> <a href="/m">Model</a>'));
+    expect(seg.text).toBe('<t0>Model</t0>');
+    expect(seg.soleWrapper?.tagName).toBe('A');
+  });
+
+  it('does not touch the source nodes, and the digest follows the stripped text', () => {
+    const nodes = nodesOf('•› Model');
+    const seg = segment(nodes);
+    expect(nodes[0]?.nodeValue).toBe('•› Model');
+    expect(seg.digest).toBe(segment(nodesOf('Model')).digest);
+  });
+});
+
+describe('prose', () => {
+  it('leaves out verbatim and role=img content', () => {
+    expect(segment(nodesOf('Read <code>npm i</code> now')).prose).toBe('Read now');
+    expect(segment(nodesOf('<code>npm i</code>')).prose).toBe('');
+    expect(segment(nodesOf('<span role="img" aria-label="x">Go</span> A')).prose).toBe('A');
+  });
+});
