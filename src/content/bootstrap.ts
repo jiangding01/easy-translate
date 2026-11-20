@@ -59,8 +59,8 @@ export interface Bootstrap {
   /** Removes the dot; does nothing when the selection runtime was never loaded. */
   hideDot(): void;
   /**
-   * Ctrl was held over this viewport point: toggles the paragraph there, but only inside a
-   * running page session. Never loads the page runtime.
+   * Ctrl was held over this viewport point: toggles the paragraph there. With no session,
+   * loads the page runtime, which then translates held paragraphs only.
    */
   holdToggle(point: { x: number; y: number }): void;
 }
@@ -215,10 +215,9 @@ export function createBootstrap(deps: BootstrapDeps): Bootstrap {
     hideDot,
     holdToggle(point) {
       if (isContextLost()) return;
-      sessionPromise
-        ?.then((session) => {
-          const { phase, halted } = session.state();
-          if (phase !== 'idle' && !halted) return session.toggleAt(point);
+      load()
+        .then((session) => {
+          if (!session.state().halted) return session.toggleAt(point);
         })
         .catch(() => {
           // A failed load was already reported; a toggle is a convenience.

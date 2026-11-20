@@ -119,7 +119,7 @@ const TIP_GAP = 6;
 const TIP_EDGE = 8;
 
 function isActive(state: PageState): boolean {
-  return state.phase !== 'idle' && !state.halted;
+  return state.phase !== 'idle' && !state.halted && state.scope !== 'units';
 }
 
 /** Failed paragraphs or an engine-level error: the dot turns coral and "Retry" shows. */

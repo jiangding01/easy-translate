@@ -420,6 +420,18 @@ describe('mounting', () => {
     expect(t.clip()).toContain('round 4px');
   });
 
+  it('stays away while only held paragraphs are translated, and comes once the page is', async () => {
+    const t = await setup();
+    await t.start({ scope: 'units' });
+    expect(t.host()).toBeNull();
+    t.emit({ phase: 'done' });
+    await t.settle();
+    expect(t.host()).toBeNull();
+    t.emit({ phase: 'running', scope: undefined });
+    await t.settle();
+    expect(t.host()).not.toBeNull();
+  });
+
   it('leaves when the session halts', async () => {
     const t = await setup();
     await t.start();

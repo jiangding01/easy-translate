@@ -2,14 +2,37 @@ import { describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { i18n } from '#i18n';
 import { appError } from '@/lib/errors';
+import type { PageState } from '@/lib/messaging/protocol';
 import { createGetMessage, loadLocales } from '../../../scripts/i18n-messages.mjs';
-import { failedText, pausedReason, skippedText } from './page-session';
+import { failedText, pageActive, pausedReason, skippedText } from './page-session';
 
 /** Switches the getMessage stub to the en copy (vitest.setup puts zh_CN back before each test). */
 async function useEnglish() {
   const getMessage = createGetMessage(await loadLocales(), 'en');
   fakeBrowser.i18n.getMessage = getMessage as typeof fakeBrowser.i18n.getMessage;
 }
+
+describe('pageActive', () => {
+  const state = (patch: Partial<PageState>): PageState => ({
+    phase: 'running',
+    mode: 'bilingual',
+    translated: 0,
+    failed: 0,
+    ...patch,
+  });
+
+  it('counts a page session, running or done, as active', () => {
+    expect(pageActive(state({}))).toBe(true);
+    expect(pageActive(state({ phase: 'done' }))).toBe(true);
+  });
+
+  it('counts no session, an idle one and held paragraphs only as not active', () => {
+    expect(pageActive(undefined)).toBe(false);
+    expect(pageActive(state({ phase: 'idle' }))).toBe(false);
+    expect(pageActive(state({ scope: 'units' }))).toBe(false);
+    expect(pageActive(state({ phase: 'done', scope: 'units' }))).toBe(false);
+  });
+});
 
 describe('pausedReason', () => {
   it('gives a short reason per engine-level error', () => {
