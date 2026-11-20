@@ -34,6 +34,7 @@ const createPageRuntime: PageRuntimeFactory = (deps) => {
         return false;
       }
     },
+    detectLanguage: (text) => browser.i18n.detectLanguage(text),
     createReadStyle: () => createStyleReader(window),
     createViewport: createIntersectionViewport,
   });

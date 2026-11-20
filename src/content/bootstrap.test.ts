@@ -30,6 +30,10 @@ function fakeSession() {
       phase = 'idle';
       return snapshot();
     }),
+    autoStart: vi.fn(async () => {
+      events.push('autoStart');
+      return snapshot();
+    }),
     toggle: vi.fn(async () => {
       events.push('toggle');
       phase = phase === 'idle' ? 'running' : 'idle';
@@ -238,7 +242,7 @@ describe('bootstrap while loading', () => {
       await gate;
       return create;
     });
-    const auto = t.bootstrap.startIfIdle();
+    const auto = t.bootstrap.autoStart();
     const user = t.send('page.start');
     release();
     await Promise.all([auto, user]);
@@ -247,14 +251,13 @@ describe('bootstrap while loading', () => {
   });
 });
 
-describe('startIfIdle', () => {
-  it('starts an idle session and leaves a running one alone', async () => {
-    const { bootstrap, session, send } = setup();
-    await bootstrap.startIfIdle();
-    expect(session.start).toHaveBeenCalledOnce();
-    await bootstrap.startIfIdle();
-    expect(session.start).toHaveBeenCalledOnce();
-    expect(await send('page.getState')).toMatchObject({ data: { phase: 'running' } });
+describe('autoStart', () => {
+  it('loads the runtime and delegates to the session', async () => {
+    const { bootstrap, session, load } = setup();
+    await bootstrap.autoStart();
+    expect(load).toHaveBeenCalledOnce();
+    expect(session.autoStart).toHaveBeenCalledOnce();
+    expect(session.start).not.toHaveBeenCalled();
   });
 });
 
@@ -318,7 +321,7 @@ describe('bootstrap when loading fails', () => {
     const t = setup(async () => {
       throw new Error('x');
     });
-    await expect(t.bootstrap.startIfIdle()).rejects.toMatchObject({
+    await expect(t.bootstrap.autoStart()).rejects.toMatchObject({
       code: 'network/page-unreachable',
     });
   });

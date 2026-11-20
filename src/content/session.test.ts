@@ -113,6 +113,7 @@ function setup(
       };
     },
     reportStatus: (status) => statuses.push(status),
+    detectLanguage: async () => ({ isReliable: true, languages: [] }),
     createReadStyle: () => readStyle,
     createViewport: (onChange) => {
       notify = onChange;
@@ -2181,5 +2182,64 @@ describe('page session: single-line layouts', () => {
     for (const id of ['nav', 'row', 'title']) {
       expect(document.querySelector(`#${id} et-tr`)).toBeNull();
     }
+  });
+});
+
+describe('page session: autoStart', () => {
+  const english = '<p>Hello there, this is a paragraph.</p>';
+
+  it('does nothing when the page already declares the target language', async () => {
+    const { session, statuses, port } = setup(english);
+    document.documentElement.lang = 'zh-CN';
+    try {
+      expect(await session.autoStart()).toEqual(IDLE_PAGE_STATE);
+      expect(statuses).toEqual([]);
+      expect(port.calls).toHaveLength(0);
+      expect(session.state().phase).toBe('idle');
+    } finally {
+      document.documentElement.lang = '';
+    }
+  });
+
+  it('starts on a page in another language', async () => {
+    const { session, statuses } = setup(english);
+    document.documentElement.lang = 'en';
+    try {
+      const state = await session.autoStart();
+      expect(state.phase).not.toBe('idle');
+      expect(statuses[0]).toBe('running');
+    } finally {
+      document.documentElement.lang = '';
+    }
+  });
+
+  it('does not start twice when the user starts during language detection', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const detectLanguage = vi.fn(async () => {
+      await gate;
+      return { isReliable: true, languages: [{ language: 'en', percentage: 99 }] };
+    });
+    const { session, statuses } = setup(english, undefined, { detectLanguage });
+    const auto = session.autoStart();
+    await wait(5);
+    expect(detectLanguage).toHaveBeenCalledOnce();
+    await session.start();
+    release();
+    await auto;
+    expect(statuses.filter((status) => status === 'running')).toHaveLength(1);
+  });
+
+  it('has no effect on a session that is already running', async () => {
+    const detectLanguage = vi.fn();
+    const { session, statuses } = setup(english, undefined, { detectLanguage });
+    await session.start();
+    const before = statuses.length;
+    const state = await session.autoStart();
+    expect(state.phase).not.toBe('idle');
+    expect(statuses).toHaveLength(before);
+    expect(detectLanguage).not.toHaveBeenCalled();
   });
 });
