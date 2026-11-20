@@ -219,7 +219,11 @@ export function createSelectionWatch(deps: SelectionWatchDeps): SelectionWatch {
         return config;
       } catch {
         // Unsubscribed: what was pushed may go stale, so the next check reads again.
-        unwatchConfig?.();
+        try {
+          unwatchConfig?.();
+        } catch {
+          // Extension reloaded: even unsubscribing throws.
+        }
         unwatchConfig = undefined;
         configRead = undefined;
         config = undefined;
@@ -306,7 +310,11 @@ export function createSelectionWatch(deps: SelectionWatchDeps): SelectionWatch {
       clearTimeout(clearTimer);
       checkTimer = undefined;
       clearTimer = undefined;
-      unwatchConfig?.();
+      try {
+        unwatchConfig?.();
+      } catch {
+        // Extension reloaded: even unsubscribing throws ("Extension context invalidated").
+      }
       unwatchConfig = undefined;
       configRead = undefined;
       config = undefined;

@@ -17,6 +17,10 @@ export type PageMode = (typeof PAGE_MODES)[number];
 export const ISLE_DOCKS = ['right', 'left', 'bottom'] as const;
 export type IsleDock = (typeof ISLE_DOCKS)[number];
 
+/** The modifier held over a paragraph to toggle it (M3b), or `off`. No Shift: see the plan. */
+export const HOLD_KEYS = ['ctrl', 'alt', 'off'] as const;
+export type HoldKey = (typeof HOLD_KEYS)[number];
+
 export const BUILTIN_ENGINES = ['google', 'openai', 'deepseek', 'gemini'] as const;
 export type BuiltinEngine = (typeof BUILTIN_ENGINES)[number];
 
@@ -62,7 +66,7 @@ export interface ConfigV1 {
   ui: { theme: Theme };
   language: { target: LanguageCode; source: 'auto' | LanguageCode };
   translation: { engine: Engine };
-  page: { style: PageStyle; mode: PageMode; isleDock: IsleDock };
+  page: { style: PageStyle; mode: PageMode; isleDock: IsleDock; holdKey: HoldKey };
   /** Selection translation (M3a): the dot shown after selecting foreign text. */
   selection: { showDot: boolean };
   providers: {

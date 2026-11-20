@@ -95,11 +95,14 @@ export default defineContentScript({
     });
     selectionWatch.start();
 
-    // Holding Ctrl over a paragraph toggles it; with no page session, it translates the
-    // held paragraphs alone (the page runtime loads on the first hold).
+    // Holding Ctrl (or the key set in `page.holdKey`) over a paragraph toggles it; with no
+    // page session, it translates the held paragraphs alone (the page runtime loads on the
+    // first hold).
     const holdWatch = createHoldWatch({
       doc: document,
       onHold: (point) => bootstrap.holdToggle(point),
+      getConfig,
+      watchConfig: watchData,
     });
     holdWatch.start();
 

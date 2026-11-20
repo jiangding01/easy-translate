@@ -19,9 +19,11 @@ afterAll(() => h?.close());
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 const state = async () => (await h.tell<Ok<PageState>>('page.getState')).data;
-/** CDP modifier bit for Ctrl. */
+/** CDP modifier bits for Alt and Ctrl. */
+const ALT = 1;
 const CTRL = 2;
 const CONTROL = { key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17 };
+const ALT_KEY = { key: 'Alt', code: 'AltLeft', windowsVirtualKeyCode: 18 };
 
 /** Translations directly inside the block (not loading dots). */
 const translationsIn = (selector: string) =>
@@ -40,24 +42,28 @@ const pointOn = (selector: string) =>
 
 const move = (point: { x: number; y: number }, modifiers = 0) =>
   h.input('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point, button: 'none', modifiers });
-const ctrl = (type: 'rawKeyDown' | 'keyUp') =>
+type KeyStep = (type: 'rawKeyDown' | 'keyUp') => Promise<unknown>;
+const ctrl: KeyStep = (type) =>
   h.input('Input.dispatchKeyEvent', { type, ...CONTROL, modifiers: type === 'keyUp' ? 0 : CTRL });
+const alt: KeyStep = (type) =>
+  h.input('Input.dispatchKeyEvent', { type, ...ALT_KEY, modifiers: type === 'keyUp' ? 0 : ALT });
 
 /**
- * The pointer rests on the paragraph and Ctrl is held until the paragraph shows `count`
- * translations (at most 3 s), then released: no fixed hold length to race against.
+ * The pointer rests on the paragraph and the key (Ctrl by default) is held until the
+ * paragraph shows `count` translations (at most 3 s), then released: no fixed hold length
+ * to race against.
  */
-async function hold(selector: string, count: number) {
+async function hold(selector: string, count: number, key = ctrl) {
   await move(await pointOn(selector));
-  await ctrl('rawKeyDown');
+  await key('rawKeyDown');
   try {
     await waitFor(async () => (await translationsIn(selector)) === count, {
       timeout: 3000,
       interval: 50,
-      message: `${selector} to show ${count} translation(s) while Ctrl is held`,
+      message: `${selector} to show ${count} translation(s) while the key is held`,
     });
   } finally {
-    await ctrl('keyUp');
+    await key('keyUp');
   }
 }
 
@@ -161,5 +167,36 @@ describe('hold Ctrl with no page session', () => {
     await heldIntro();
     expect(await h.tell<Ok<PageState>>('page.start', {})).toMatchObject({ ok: true });
     await grown();
+  });
+});
+
+describe('the hold key setting', () => {
+  async function setHoldKey(value: 'ctrl' | 'alt' | 'off') {
+    const options = await h.extPage('options.html');
+    expect(await options.send('config.patch', [{ path: 'page.holdKey', value }])).toMatchObject({
+      ok: true,
+    });
+    await options.close();
+    // The page hears of it through storage.onChanged: no sign of it to wait for.
+    await sleep(300);
+  }
+
+  it('ignores Ctrl when off, then follows Alt once Alt is chosen', async () => {
+    await h.openPage('e2e-article.html');
+    try {
+      await setHoldKey('off');
+      await move(await pointOn('#intro'));
+      await ctrl('rawKeyDown');
+      await sleep(1200);
+      await ctrl('keyUp');
+      expect(await h.evaluate<number>(`document.querySelectorAll('et-tr').length`)).toBe(0);
+
+      await setHoldKey('alt');
+      await hold('#intro', 1, alt);
+      expect(await translationsIn('#linked')).toBe(0);
+      h.assertNoErrors();
+    } finally {
+      await setHoldKey('ctrl');
+    }
   });
 });

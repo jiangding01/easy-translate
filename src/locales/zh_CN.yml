@@ -177,6 +177,7 @@ options:
     dockBottom: 底部
     dotOn: 开
     dotOff: 关
+    holdOff: 关
     hostLight: 浅色网页
     hostDark: 深色网页
     translationTitle: 译文
@@ -190,6 +191,8 @@ options:
     dockHint: 翻译时贴在网页边缘的控制条，正在翻译的页面立即生效
     dot: 划词小点
     dotHint: 选中外文后在末尾显示翻译小点
+    hold: 按住翻译段落
+    holdHint: 指针停在段落上，按住所选按键片刻，即可翻译或还原这一段
   services:
     engines: 引擎
     enginesHint: 圆点选中的是默认引擎，点一行查看和修改配置

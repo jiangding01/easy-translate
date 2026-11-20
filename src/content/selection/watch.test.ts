@@ -190,6 +190,25 @@ describe('when a check runs', () => {
   });
 });
 
+describe('stopping', () => {
+  it('stop does not throw when unsubscribing throws (extension reloaded), and resets', async () => {
+    const t = start();
+    select(para('Hello world, again'));
+    await release();
+    expect(t.watchConfig).toHaveBeenCalledOnce();
+    t.unwatch.mockImplementation(() => {
+      throw new Error('Extension context invalidated.');
+    });
+    expect(() => t.watch.stop()).not.toThrow();
+    expect(t.unwatch).toHaveBeenCalledOnce();
+    // Started again, it subscribes afresh instead of keeping the old cache.
+    t.unwatch.mockReset();
+    t.watch.start();
+    await release();
+    expect(t.watchConfig).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('the candidate', () => {
   it('carries the normalized text, the rectangle and the bottom right of the last character', async () => {
     const t = start();
@@ -527,6 +546,39 @@ describe('the setting', () => {
 });
 
 describe('an invalidated extension context', () => {
+  it('recovers when the read fails and unsubscribing throws too', async () => {
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      let attempt = 0;
+      const t = start({
+        getConfig: async () => {
+          attempt += 1;
+          if (attempt === 1) throw new Error('Extension context invalidated.');
+          return createDefaultConfig('zh-CN');
+        },
+      });
+      t.unwatch.mockImplementationOnce(() => {
+        throw new Error('Extension context invalidated.');
+      });
+      select(para('Hello world, again'));
+      await release();
+      await vi.advanceTimersByTimeAsync(0);
+      await new Promise((resolve) => process.nextTick(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(t.onCandidate).not.toHaveBeenCalled();
+      expect(t.unwatch).toHaveBeenCalledOnce();
+      // The cache was reset: the next check subscribes and reads again.
+      document.dispatchEvent(new Event('keyup'));
+      await vi.advanceTimersByTimeAsync(KEY_DELAY_MS);
+      expect(t.watchConfig).toHaveBeenCalledTimes(2);
+      expect(t.getConfig).toHaveBeenCalledTimes(2);
+      expect(t.onCandidate).toHaveBeenCalledOnce();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
   it('ends the check quietly when subscribing throws, and tries again next time', async () => {
     const unhandled = vi.fn();
     process.on('unhandledRejection', unhandled);
