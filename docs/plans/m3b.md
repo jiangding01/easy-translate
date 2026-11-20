@@ -156,6 +156,7 @@ M3b 收敛为 6 个独立可合并的小 PR：先修两类版面问题，再给�
   2. 局部会话建立期间（配置读取中）的第二次按住会被丢弃。
   3. 在 body 上空白处按住且全页原文不超过 2 万字时，会多做一次扫描（不留痕迹）。
   4. PR6 加开关前，任何网站按住 Ctrl 0.6 秒都会翻译该段。
+  5. 与其他翻译扩展同时开启时会互相干扰（2026-11-20 用户真机发现，coco-translate）：对方也响应 Ctrl+悬停，按一次两边同时翻译；对方插入的 `display:block` 包裹元素（`cc-notranslate`，非标准 `notranslate`）让 discover 把段落当成混合块，我们的译文变成行内追加。关掉对方后恢复正常；不做兼容。
 
 ### 6. 设置项（`feat/hold-toggle-setting`）
 - 配置：`page.holdKey: 'ctrl' | 'alt' | 'off'`，默认 `'ctrl'`。在 `schema.ts`、`defaults.ts` 追加，并改 `src/lib/config/client.ts` 的 `normalizeConfig` 逐字段枚举校验；不升 `schemaVersion`。常驻层读配置，`off` 时不挂监听；配置变化时挂上或撤下。

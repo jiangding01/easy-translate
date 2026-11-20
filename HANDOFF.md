@@ -135,6 +135,7 @@
         3. 在 body 上空白处按住且全页原文不超过 2 万字时，会多做一次扫描（不留痕迹）。
         4. PR6 加开关前，任何网站按住 Ctrl 0.6 秒都会翻译该段。
         5. 局部状态下没有一键清除入口：用户 2026-11-20 决定不加面板「还原 N 段」，清除靠在该段再按住一次或刷新页面。
+        6. 与其他翻译扩展同时开启（2026-11-20 用户真机发现，coco-translate）：对方也用 Ctrl+悬停，按一次会两边同时翻译（两份译文、对方的绿色 loading）；对方往段落里插入的 `display:block` 包裹元素（类名 `cc-notranslate`，非标准 `notranslate`）会让我们把该段当成混合块，译文变成行内追加。关掉对方后恢复正常。不做兼容（需要维护各家私有类名）。
       - **现象**：claude.dev 博客 `spending-your-effort` 页「Lightly specified design task」小节的示意图（`figure.efx-fig` 里用 DOM 画的终端设置界面：等宽字体、flex 行、短标签，并且由 `efx-slot` 懒加载）被翻译后排版拥挤。标题变成「Settings设置」；标签页一行在原有标签后面追加了「常规 显示 输…」，挤出容器被裁掉；每行在标签后面追加译文，比如「Model› 模型」「Default (recommended)默认（推荐）」。
       - **DOM 已确认**（用户在 DevTools 里截图）：`figure.art-fig.viz.efx-fig[aria-label="The Claude Code /config redesign at each effort level"] > .efx-view > .efx-rail > .efx-slot[role=group][aria-label="Low effort config screen"] > .efc-low > .stage(grid) > .term[tabindex=0][aria-label="Interactive config mock"](可滚动)`。标签页那一行是 `div.efc-low-row.tabs`，里面是一串行内 `span`，整行被当成一个单元，`<et-tr>` 以行内方式追加在这一行的末尾，被挤出容器后裁掉。
       - **顺带发现两处**：
