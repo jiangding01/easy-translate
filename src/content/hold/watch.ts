@@ -5,8 +5,12 @@ import { deepActiveElement, isOwnNode } from '../selection/watch';
 // and the key state are kept here; nothing reads the page or loads anything. The whole
 // trigger rule lives in this file so it can be replaced on its own.
 
-/** How long Ctrl must be held with the pointer at rest. */
-export const HOLD_MS = 400;
+/**
+ * How long Ctrl must be held with the pointer at rest. 400 ms (the plan's first value)
+ * proved easy to trigger by accident on a real Mac (2026-11-20); 600 ms is the plan's
+ * fallback. Next step if that is still too eager: a double press of the modifier.
+ */
+export const HOLD_MS = 600;
 /** Pointer travel (summed) while held that restarts the count. */
 export const STILL_PX = 6;
 

@@ -127,7 +127,7 @@
         2. 页面框架替换段落根元素（虚拟列表、keyed 重挂载）后，「不翻译此段」失效。
         3. 焦点在同页 iframe 时顶层收不到按键，需先点回主页面。
         4. 显示加载点的段按住视为取消（按「看到的状态取反」统一规则）。
-        5. 按住修饰键 400 ms 的阈值待用户真机验证：⌃Space、慢速 Ctrl+C、按住 Ctrl 再点链接、Ctrl+滚轮。
+        5. 按住阈值：首版 400 ms 经用户真机验证容易误触（2026-11-20），已按方案预留的退路调到 600 ms（`src/content/hold/watch.ts` 的 `HOLD_MS`）；若仍嫌灵敏，下一步改为双击修饰键。
         6. 未开整页翻译时手势不起作用，由 PR5 支持。
       - **现象**：claude.dev 博客 `spending-your-effort` 页「Lightly specified design task」小节的示意图（`figure.efx-fig` 里用 DOM 画的终端设置界面：等宽字体、flex 行、短标签，并且由 `efx-slot` 懒加载）被翻译后排版拥挤。标题变成「Settings设置」；标签页一行在原有标签后面追加了「常规 显示 输…」，挤出容器被裁掉；每行在标签后面追加译文，比如「Model› 模型」「Default (recommended)默认（推荐）」。
       - **DOM 已确认**（用户在 DevTools 里截图）：`figure.art-fig.viz.efx-fig[aria-label="The Claude Code /config redesign at each effort level"] > .efx-view > .efx-rail > .efx-slot[role=group][aria-label="Low effort config screen"] > .efc-low > .stage(grid) > .term[tabindex=0][aria-label="Interactive config mock"](可滚动)`。标签页那一行是 `div.efc-low-row.tabs`，里面是一串行内 `span`，整行被当成一个单元，`<et-tr>` 以行内方式追加在这一行的末尾，被挤出容器后裁掉。

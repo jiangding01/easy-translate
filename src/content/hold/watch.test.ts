@@ -283,7 +283,7 @@ describe('hold watch', () => {
 
   it('restarts the count when the pointer travels more than 6 px, not for a jitter', () => {
     ctrlDown();
-    vi.advanceTimersByTime(300);
+    vi.advanceTimersByTime(HOLD_MS - 100);
     // 3 + 3 px: still at rest.
     move(103, 200);
     move(100, 200);
