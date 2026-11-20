@@ -96,7 +96,7 @@
     - **PR1 按需加载与首屏瘦身**：已合并（PR #8）；check Deep 审查完成（方案附录 C）。自动验收 8 条通过，第 6 条和版面观感由用户手动确认通过（方案附录 D），待提交并开 PR。
     - **PR2 灵岛**：原型已确认（Design artifact 的 `IsleM2` 页），方案见第 9 节；已实现，check Deep 审查完成（附录 F）；自动验收和用户真机验收通过（附录 G）；真机验收后，按新原型把底部停靠改为右下角，并补上横幅抬升、避让对齐、提示框淡出和小点暗边的修复，已经过增量审查（附录 H），用户复验通过，已提交并开 PR。分支 `feat/m2b-isle`。新增配置 `page.isleDock`、后台只读消息 `engine.options`、会话的 `subscribe`，以及 `src/content/isle/`、`src/styles/tokens-isle.css`。
     - **已知限制**：WXT 内容脚本包装层仍会在 `document` 上派发带扩展 ID 的 CustomEvent，已知 ID 的网页可以借它确认扩展存在；`postMessage` 广播已关闭。带 `CSP: sandbox` 头的本地页面实测能正常加载按需模块并翻译，没有回归。
-    - **另开事项**：`src/lib/translate/cache.test.ts` 的「keeps serving reads while a large eviction runs in batches」是时序敏感用例，全量跑时偶发失败。
+    - **另开事项（2026-11-20 已解决，见进度日志）**：`src/lib/translate/cache.test.ts` 的「keeps serving reads while a large eviction runs in batches」全量跑时偶发超时。根因是测试数据量：6000 条记录在 fake-indexeddb 里填充加淘汰单独跑就要约 1.3s，全量并行时 3–3.7s，偶尔超过 5s；`cache.ts` 的淘汰耗时与记录数线性相关，没有缺陷。现用 `evictBatchSize: 5` 把数据量缩到 1/100，批次结构不变。
   - **审查留下的结构建议（不阻塞）**：内容脚本的装配可抽成 `src/content/runtime.ts`，供 M3 划词共用 Port 与配置；`PageState` 与 `PageStatus` 可合并成一份；设置页预览引用了 `src/content/styles.ts`，样式常量可移到 `src/lib`；`site-memory.ts` 可拆读写两侧，给内容脚本减重。
   - **图标**：已完成「暗岛微光」（PR #5）：暖黑超椭圆底板，一条暖白长线（原文）加一条琥珀短药丸（译文），右下角给状态点留位置；16/32/48 各自按像素网格绘制，128 四周留 16px。PNG 与 `docs/assets/icon/` 的 SVG 都由 `scripts/build-icons.mjs` 生成（`npm run build:icons`）；状态点的底图读 `icon/16.png` 和 `icon/32.png`。
 - **M3**（2026-11-16 用户拍板）：拆成 M3a 划词 → M3d 动态页与站点规则 → M3b 段落级交互 → M3c 指令台与灵岛键盘 → M3e Chrome 内置本地引擎。词典态推迟到 M5，与生词本一起做；朗读用 `speechSynthesis`。竞品机制参考 [`docs/reviews/2026-11-16-fluentread-m3-research.md`](docs/reviews/2026-11-16-fluentread-m3-research.md)（本地 FluentRead 调研，只借鉴思路）。
