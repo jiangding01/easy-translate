@@ -1,12 +1,14 @@
+import type { ConfigV1, HoldKey } from '@/lib/config/types';
 import { deepActiveElement, isOwnNode } from '../selection/watch';
 
-// The always-loaded half of hold-to-toggle (M3b plan, section 4): holding Ctrl with the
-// pointer at rest asks for the paragraph under it to be toggled. Only the pointer position
-// and the key state are kept here; nothing reads the page or loads anything. The whole
-// trigger rule lives in this file so it can be replaced on its own.
+// The always-loaded half of hold-to-toggle (M3b plan, sections 4 and 6): holding the chosen
+// modifier (Ctrl or Alt, `page.holdKey`) with the pointer at rest asks for the paragraph
+// under it to be toggled. Only the pointer position and the key state are kept here;
+// nothing reads the page or loads anything. The whole trigger rule lives in this file so it
+// can be replaced on its own.
 
 /**
- * How long Ctrl must be held with the pointer at rest. 400 ms (the plan's first value)
+ * How long the key (Ctrl or Alt) must be held with the pointer at rest. 400 ms (the plan's first value)
  * proved easy to trigger by accident on a real Mac (2026-11-20); 600 ms is the plan's
  * fallback. Next step if that is still too eager: a double press of the modifier.
  */
@@ -17,7 +19,7 @@ export const STILL_PX = 6;
 const TEXT_INPUT = /^(text|search|email|url|tel|password|number)$/;
 
 /**
- * Focus where Ctrl starts a text shortcut (Ctrl+A, Ctrl+←): a text field or editable
+ * Focus where the key starts a text shortcut (Ctrl+A, Ctrl+←, ⌥←): a text field or editable
  * content. A focused checkbox, slider or button takes no typing, so it does not count.
  */
 function isTypingFocus(doc: Document): boolean {
@@ -30,8 +32,14 @@ function isTypingFocus(doc: Document): boolean {
 
 export interface HoldWatchDeps {
   doc: Document;
-  /** Ctrl was held still at this viewport point; called once per press. */
+  /** The key was held still at this viewport point; called once per press. */
   onHold(point: { x: number; y: number }): void;
+  /**
+   * `page.holdKey` decides the key; nothing is listened to until it is read, or when off.
+   * If the read fails, nothing is listened to until a change is pushed.
+   */
+  getConfig(): Promise<ConfigV1>;
+  watchConfig(callback: (config: ConfigV1) => void): () => void;
   /**
    * Whether an event came from the user; page scripts can forge the rest. Defaults to
    * `event.isTrusted` (test DOMs dispatch only untrusted events).
@@ -47,6 +55,8 @@ export interface HoldWatch {
 export function createHoldWatch({
   doc,
   onHold,
+  getConfig,
+  watchConfig,
   isTrusted = (event) => event.isTrusted,
 }: HoldWatchDeps): HoldWatch {
   const win = doc.defaultView;
@@ -56,11 +66,14 @@ export function createHoldWatch({
   let buttons = 0;
   /** What the pointer last moved over; looked at only when it matters. */
   let over: EventTarget | null = null;
-  /** `done`: fired or voided; nothing more until Ctrl is released. */
-  let press: 'up' | 'timing' | 'done' = 'up';
+  /** `fired` or `done` (voided): nothing more until the key is released. */
+  let press: 'up' | 'timing' | 'fired' | 'done' = 'up';
   let moved = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let running = false;
+  /** The key listened to (Alt when true, Ctrl when false); undefined while not listening. */
+  let alt: boolean | undefined;
+  let unwatch: (() => void) | undefined;
 
   const end = (next: typeof press) => {
     clearTimeout(timer);
@@ -76,22 +89,23 @@ export function createHoldWatch({
     clearTimeout(timer);
     moved = 0;
     timer = setTimeout(() => {
-      end('done');
-      if (point && !busy()) onHold(point);
+      const at = busy() ? undefined : point;
+      end(at ? 'fired' : 'done');
+      if (at) onHold(at);
     }, HOLD_MS);
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (!isTrusted(event)) return;
-    if (event.key !== 'Control') return voidPress();
-    // A repeat is Ctrl held from before (Ctrl+Tab back to this tab): not a new press.
+    if (event.key !== (alt ? 'Alt' : 'Control')) return voidPress();
+    // A repeat is the key held from before (Ctrl+Tab back to this tab): not a new press.
     if (press !== 'up' || event.repeat) return;
     if (
       !point ||
       buttons !== 0 ||
-      // Ctrl joining other modifiers (⌃⌘Space, ⌃⇧⌘4, Shift then Ctrl+Tab): a shortcut.
+      // Joining other modifiers (⌃⌘Space, ⌃⇧⌘4, Shift then Ctrl+Tab): a shortcut.
       event.shiftKey ||
-      event.altKey ||
+      (alt ? event.ctrlKey : event.altKey) ||
       event.metaKey ||
       event.isComposing ||
       event.keyCode === 229 ||
@@ -104,7 +118,10 @@ export function createHoldWatch({
     count();
   };
   const onKeyUp = (event: KeyboardEvent) => {
-    if (event.key === 'Control') end('up');
+    if (event.key !== (alt ? 'Alt' : 'Control')) return;
+    // Windows moves focus to Chrome's menu button when a lone Alt is released.
+    if (alt && press === 'fired') event.preventDefault();
+    end('up');
   };
   const onMove = (event: PointerEvent) => {
     if (!isTrusted(event)) return;
@@ -112,8 +129,8 @@ export function createHoldWatch({
     over = event.target;
     if (point) moved += Math.hypot(event.clientX - point.x, event.clientY - point.y);
     point = { x: event.clientX, y: event.clientY };
-    // Ctrl is not down after all: its keyup was lost.
-    if (!event.ctrlKey) end('up');
+    // The key is not down after all: its keyup was lost.
+    if (!(alt ? event.altKey : event.ctrlKey)) end('up');
     else if (press === 'timing' && moved > STILL_PX) count();
   };
   const onDown = (event: PointerEvent) => {
@@ -137,7 +154,6 @@ export function createHoldWatch({
   const listen = { capture: true, passive: true } as const;
   const docEvents = [
     ['keydown', onKeyDown],
-    ['keyup', onKeyUp],
     ['pointermove', onMove],
     ['pointerdown', onDown],
     ['pointerup', onUp],
@@ -145,20 +161,55 @@ export function createHoldWatch({
     ['wheel', voidPress],
     ['visibilitychange', onLost],
   ] as [string, EventListener][];
+  /** Listens to the key `holdKey` names, switching or detaching as it changes. */
+  const use = (holdKey: HoldKey) => {
+    const next = holdKey === 'off' ? undefined : holdKey === 'alt';
+    if (next === alt) return;
+    const method = next === undefined ? 'removeEventListener' : 'addEventListener';
+    // Attach when starting to listen, detach when stopping; a key switch keeps them.
+    if ((alt === undefined) !== (next === undefined)) {
+      for (const [type, listener] of docEvents) doc[method](type, listener, listen);
+      // Not passive: a fired press's keyup is prevented.
+      doc[method]('keyup', onKeyUp as EventListener, true);
+      win?.[method]('blur', onLost, listen);
+    }
+    alt = next;
+    point = undefined;
+    end('up');
+  };
+
   return {
     start() {
       if (running) return;
       running = true;
-      for (const [type, listener] of docEvents) doc.addEventListener(type, listener, listen);
-      win?.addEventListener('blur', onLost, listen);
+      let pushed = false;
+      try {
+        // Subscribe first so a change between the read and the subscription is not lost.
+        unwatch = watchConfig((config) => {
+          pushed = true;
+          if (running) use(config.page.holdKey);
+        });
+      } catch {
+        // Extension context already gone: the read below fails too.
+      }
+      getConfig().then(
+        // A setting pushed while the read was out is newer than the read.
+        (config) => running && !pushed && use(config.page.holdKey),
+        // Unread: stay detached until a change is pushed.
+        () => {},
+      );
     },
     stop() {
       if (!running) return;
       running = false;
-      for (const [type, listener] of docEvents) doc.removeEventListener(type, listener, listen);
-      win?.removeEventListener('blur', onLost, listen);
-      point = undefined;
-      end('up');
+      // Detach first: once the extension is reloaded, unsubscribing throws.
+      use('off');
+      try {
+        unwatch?.();
+      } catch {
+        // Nothing left to unsubscribe from.
+      }
+      unwatch = undefined;
     },
   };
 }

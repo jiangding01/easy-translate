@@ -63,6 +63,27 @@ describe('readConfig', () => {
     expect((await readConfig()).data.page.isleDock).toBe('bottom');
   });
 
+  it('fills the hold key for a config stored before it existed, and guards it', async () => {
+    await fakeBrowser.storage.local.set({
+      config: { schemaVersion: 1, data: { page: { style: 'plain', mode: 'bilingual' } } },
+    });
+    expect((await readConfig()).data.page.holdKey).toBe('ctrl');
+    await fakeBrowser.storage.local.set({
+      config: { schemaVersion: 1, data: { page: { holdKey: 'shift' } } },
+    });
+    expect((await readConfig()).data.page.holdKey).toBe('ctrl');
+    await fakeBrowser.storage.local.set({
+      config: { schemaVersion: 1, data: { page: { holdKey: ['alt'] } } },
+    });
+    expect((await readConfig()).data.page.holdKey).toBe('ctrl');
+    for (const holdKey of ['alt', 'off'] as const) {
+      await fakeBrowser.storage.local.set({
+        config: { schemaVersion: 1, data: { page: { holdKey } } },
+      });
+      expect((await readConfig()).data.page.holdKey).toBe(holdKey);
+    }
+  });
+
   it('guards the selection dot flag and keeps a valid one', async () => {
     await fakeBrowser.storage.local.set({
       config: { schemaVersion: 1, data: { selection: { showDot: 'no' } } },

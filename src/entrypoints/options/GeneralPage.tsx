@@ -5,6 +5,8 @@ import { injectStyles, removeStyles } from '@/content/styles';
 import {
   type ConfigChange,
   type ConfigV1,
+  HOLD_KEYS,
+  type HoldKey,
   ISLE_DOCKS,
   type IsleDock,
   PAGE_MODES,
@@ -56,6 +58,11 @@ const DOT_OPTIONS = [
   { value: true, label: 'options.general.dotOn' },
   { value: false, label: 'options.general.dotOff' },
 ] as const;
+/** Key names as printed on the keys (not translated): Windows and Linux, then macOS. */
+const HOLD_KEY_NAMES = {
+  ctrl: ['Ctrl', '⌃ Control'],
+  alt: ['Alt', '⌥ Option'],
+} as const;
 const HOSTS = ['light', 'dark'] as const;
 const HOST_LABELS = {
   light: 'options.general.hostLight',
@@ -100,6 +107,59 @@ function Translation({
       className,
     },
     children,
+  );
+}
+
+/** macOS labels the modifiers ⌃ Control and ⌥ Option. */
+export function isMac(nav: Pick<Navigator, 'platform'> = navigator): boolean {
+  return nav.platform.startsWith('Mac');
+}
+
+export function holdKeyLabel(key: HoldKey, mac: boolean): string {
+  return key === 'off' ? i18n.t('options.general.holdOff') : HOLD_KEY_NAMES[key][mac ? 1 : 0];
+}
+
+/** Which modifier, held over a paragraph, toggles it (`page.holdKey`). */
+export function HoldKeyRow({
+  holdKey,
+  mac,
+  change,
+}: {
+  holdKey: HoldKey;
+  mac: boolean;
+  change: (next: ConfigChange) => unknown;
+}) {
+  return (
+    <div className={styles.settingRow}>
+      <div className={styles.settingText}>
+        <span id="hold-label" className={styles.settingName}>
+          {i18n.t('options.general.hold')}
+        </span>
+        <span className={styles.settingHint}>{i18n.t('options.general.holdHint')}</span>
+      </div>
+      <fieldset
+        aria-labelledby="hold-label"
+        className={styles.segmented}
+        style={{ '--index': HOLD_KEYS.indexOf(holdKey) } as React.CSSProperties}
+      >
+        <span aria-hidden="true" className={styles.segmentThumb} />
+        {HOLD_KEYS.map((item) => {
+          const label = holdKeyLabel(item, mac);
+          return (
+            <label key={item} className={styles.segment} data-label={label}>
+              <input
+                type="radio"
+                name="hold-key"
+                className={styles.radioInput}
+                checked={holdKey === item}
+                onChange={() => void change({ path: 'page.holdKey', value: item })}
+              />
+              {label}
+            </label>
+          );
+        })}
+      </fieldset>
+    </div>
   );
 }
 
@@ -378,6 +438,7 @@ function TranslationSection({
             ))}
           </fieldset>
         </div>
+        <HoldKeyRow holdKey={config.page.holdKey} mac={isMac()} change={change} />
       </div>
     </section>
   );

@@ -14,6 +14,7 @@ import {
   type ConfigV1,
   CUSTOM_PROVIDER_ID_PATTERN,
   type CustomProvider,
+  HOLD_KEYS,
   ISLE_DOCKS,
   isBuiltinEngine,
   isCustomProviderId,
@@ -92,6 +93,7 @@ export function normalizeConfig(raw: unknown, uiLanguage: string): ConfigSnapsho
         style: oneOf(PAGE_STYLES, page.style) ?? defaults.data.page.style,
         mode: oneOf(PAGE_MODES, page.mode) ?? defaults.data.page.mode,
         isleDock: oneOf(ISLE_DOCKS, page.isleDock) ?? defaults.data.page.isleDock,
+        holdKey: oneOf(HOLD_KEYS, page.holdKey) ?? defaults.data.page.holdKey,
       },
       selection: {
         ...selection,

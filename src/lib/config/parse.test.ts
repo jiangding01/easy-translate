@@ -26,7 +26,7 @@ describe('parseStoredConfig', () => {
       ui: { theme: 'dark' },
       language: { target: 'ko', source: 'ja' },
       translation: { engine: 'openai' },
-      page: { style: 'highlight', mode: 'translation', isleDock: 'left' },
+      page: { style: 'highlight', mode: 'translation', isleDock: 'left', holdKey: 'alt' },
       selection: { showDot: false },
       providers: { ...EXTRA_DEFAULTS.providers, gemini: { model: 'm' } },
       customProviders: {},
@@ -107,6 +107,15 @@ describe('parseStoredConfig', () => {
     const { isleDock: _omitted, ...rest } = defaults.page;
     const missing = parse(stored({ ...defaults, page: rest }));
     expect(missing.snapshot.data.page.isleDock).toBe('right');
+  });
+
+  it('repairs an unknown hold key to the default and fills it when missing', () => {
+    const broken = parse(stored({ ...defaults, page: { ...defaults.page, holdKey: 'shift' } }));
+    expect(broken.resetPaths).toContain('page.holdKey');
+    expect(broken.snapshot.data.page.holdKey).toBe('ctrl');
+    const { holdKey: _omitted, ...rest } = defaults.page;
+    const missing = parse(stored({ ...defaults, page: rest }));
+    expect(missing.snapshot.data.page.holdKey).toBe('ctrl');
   });
 
   it('repairs a non-boolean selection dot flag and fills it when missing', () => {

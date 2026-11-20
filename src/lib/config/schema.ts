@@ -5,6 +5,7 @@ import {
   CUSTOM_PROVIDER_ID_PATTERN,
   CUSTOM_PROVIDER_LIMITS,
   type Engine,
+  HOLD_KEYS,
   ISLE_DOCKS,
   isBuiltinEngine,
   isEngineId,
@@ -39,6 +40,7 @@ export const configSchema = z
       style: z.enum(PAGE_STYLES),
       mode: z.enum(PAGE_MODES),
       isleDock: z.enum(ISLE_DOCKS),
+      holdKey: z.enum(HOLD_KEYS),
     }),
     selection: z.looseObject({
       showDot: z.boolean(),

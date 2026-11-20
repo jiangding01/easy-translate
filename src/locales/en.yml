@@ -184,6 +184,7 @@ options:
     dockBottom: Bottom
     dotOn: "On"
     dotOff: "Off"
+    holdOff: "Off"
     hostLight: Light pages
     hostDark: Dark pages
     translationTitle: Translation
@@ -197,6 +198,8 @@ options:
     dockHint: The bar docked to the page edge while translating. Pages being translated update immediately
     dot: Selection dot
     dotHint: Show a translate dot after text you select in a foreign language
+    hold: Hold to translate
+    holdHint: Rest the pointer on a paragraph and hold the key for a moment to translate or restore it
   services:
     engines: Engines
     enginesHint: The selected dot marks the default engine. Click a row to view and edit its settings
