@@ -1,6 +1,6 @@
 # M3b 段落级交互：范围与拆分
 
-> 状态：**2026-11-20 用户批准第 3 稿**，含体积预算（content 7.5 KB 于 PR4 生效，page-runtime 27 KB）。进度：PR1 已完成（`#61`）。第 1 稿经 Opus 对抗式审查（阻断 2 项、重要 7 项），第 2 稿经增量审查（阻断 0 项、重要 6 项），两轮结论都是「改后可批准」，均已逐条处理，处理记录见文末附录 A、B。各 PR 的方案与实施记录各自成文，本文只记范围、拆分与决定。
+> 状态：**2026-11-20 用户批准第 3 稿**，含体积预算（content 7.5 KB 于 PR4 生效，page-runtime 27 KB）。进度：PR1 已合并（`#61`），PR2 已完成（`#PR2`）。第 1 稿经 Opus 对抗式审查（阻断 2 项、重要 7 项），第 2 稿经增量审查（阻断 0 项、重要 6 项），两轮结论都是「改后可批准」，均已逐条处理，处理记录见文末附录 A、B。各 PR 的方案与实施记录各自成文，本文只记范围、拆分与决定。
 
 ## 结论
 M3b 收敛为 6 个独立可合并的小 PR：先修两类版面问题，再给常驻层瘦身，然后分两步做「按住修饰键切换段落」（先只在整页会话内生效，再支持不开整页的局部翻译），最后接设置项。**仅译选区不做**，**区域选择器（翻译 / 不翻译此区域）移到 M3c**，右键菜单不加项。
@@ -60,6 +60,14 @@ M3b 收敛为 6 个独立可合并的小 PR：先修两类版面问题，再给�
 2. **判定位置**：在会话把单元排进请求队列（`want`）之前判断，**请求不发出、不计费**。样式读取器（`dom-rules.ts:227-290`，现只读 `display` / `position` / `float`）补读 `whiteSpace`、`textOverflow`，测试用的假读取器同步扩充。不需要额外集合：每次 want 都重新判断，样式读取有缓存。
 3. 其余块级单元不受影响（原有的 line-clamp 解除照旧）。用户按住修饰键切换（PR4）时，被版面安全跳过的段照常翻译：这是用户明确要求，再按住一次即可还原。
 4. **测试**：新增 fixture `tests/fixtures/layout-safety.html`，含 `nowrap` 导航、`truncate` 标题（弹性行内的 span），以及两个反例：Tailwind 风格的 `.rounded-xl.overflow-hidden` 卡片内 `<li class="flex gap-2"><svg/>Unlimited projects</li>`，和只有 `text-overflow: ellipsis`、没有 `nowrap` 的段落，两者都必须照常翻译。render 与 session 单测各补先红后绿用例；e2e 加 1 条。
+
+**实施记录（PR2）**：
+- 判定收窄：作者把单元锁成单行时不翻译。(1) 译文要行内追加的单元（行内 run 或弹性 / 网格根），根元素计算样式 `white-space` 为 `nowrap` 或 `pre`；(2) 任何单元（含块级），`text-overflow: ellipsis` 且 `white-space` 为 `nowrap` / `pre`（Tailwind `truncate`）。只看根元素自身样式（`white-space` 会继承）。
+- 与上文方案原文的差异：第 1 点第 2 条原写「`ellipsis` 配 `nowrap` 或 line-clamp」，实施时不含 line-clamp：现有渲染会解除 line-clamp 照常显示译文（M2a 决定），算进来会与之冲突。
+- 实现：`dom-rules.ts` 的 `LayoutStyle` 补 `whiteSpace`、`textOverflow`，新增纯函数 `isSingleLineLocked(unit, readStyle)`，与 `want` 解耦（PR4 用户按住修饰键时绕过它）；`session.ts` 的 `want` 在 skipped 判断后调用。口径与 render 判断 inline 一致（同一个样式读取器、同样的 `isFlexOrGrid`）。被跳过的单元不发请求、不计费、不显示加载点、不计入任何计数。
+- 反例照常翻译：只有 `ellipsis` 没有 `nowrap` 的段落；带 `overflow:hidden` 的卡片内 flex 列表项；普通 `nowrap` 的块级段落。
+- 测试与体积：单测 1671 个（77 个文件，较 PR1 新增 12 个），e2e 新增 1 条，新增手工验收页 `tests/fixtures/layout-safety.html`；page-runtime 实测约 24.56 / 25 KB，预算未调。
+- check 审查：无问题；建议级一条：超过 5000 字且 `nowrap` 的段落仍会追加「过长」提示（过长判断排在前），极少见，未处理。
 
 ### 3. 常驻层瘦身（`refactor/content-slim`）
 - **实测**（审查者在临时副本上测得）：去掉 `sampleText` 与 `pageIsInLanguage`，content 从 6.99 KB 降到 6.58 KB，省 0.41 KB。

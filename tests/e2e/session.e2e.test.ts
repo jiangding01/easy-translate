@@ -294,6 +294,30 @@ describe('session', () => {
     h.assertNoErrors();
   });
 
+  it('adds no translation where the author pinned one line, and translates the rest', async () => {
+    await h.openPage('layout-safety.html');
+    await h.tell('page.toggle');
+    await waitFor(
+      () => h.evaluate<boolean>(`!!document.querySelector('#feature et-tr[data-et-s]')`),
+      { message: 'the card feature to be translated' },
+    );
+    await waitFor(
+      () =>
+        h.evaluate<boolean>(
+          `!!document.querySelector('#ellipsis et-tr[data-et-s]') && !!document.querySelector('#plain et-tr[data-et-s]')`,
+        ),
+      { message: 'the two ordinary paragraphs to be translated' },
+    );
+    // Quiet period: a request for a locked unit would have gone out with the rest.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(await h.evaluate<boolean>(`!!document.querySelector('#nav > et-tr')`)).toBe(false);
+    expect(await h.evaluate<boolean>(`!!document.querySelector('#title et-tr')`)).toBe(false);
+    for (const locked of ['Pricing and plans', 'Quarterly subscription']) {
+      expect(h.google.texts.some((text) => text.includes(locked))).toBe(false);
+    }
+    h.assertNoErrors();
+  });
+
   it('marks a paragraph too long to translate, counts it, and never sends its text', async () => {
     await h.openPage('e2e-article.html');
     const marker = 'zeppelinmarker';

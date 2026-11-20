@@ -228,6 +228,8 @@ export interface LayoutStyle {
   display: string;
   position?: string;
   float?: string;
+  whiteSpace?: string;
+  textOverflow?: string;
 }
 
 export type StyleReader = (el: Element) => LayoutStyle | undefined;
@@ -280,6 +282,27 @@ export function isFlexOrGrid(el: Element, readStyle: StyleReader): boolean {
   return !!display && FLEX_OR_GRID.test(display);
 }
 
+const NO_WRAP = /^(nowrap|pre)$/;
+
+/**
+ * Whether the author pinned the unit's root to one line, so a translation must not be
+ * added to it (it would push the layout or be cut off). Reads only the root's own computed
+ * style: `white-space` is inherited, so it is already resolved there.
+ * - Appended inline (a run, or a flex / grid root, matching how render decides): `nowrap`
+ *   or `pre` locks it.
+ * - Any unit: `text-overflow: ellipsis` together with `nowrap` or `pre` (Tailwind `truncate`).
+ * A line-clamp does not count (render lifts it), nor does `ellipsis` alone.
+ */
+export function isSingleLineLocked(
+  unit: { kind: 'block' | 'run'; root: Element },
+  readStyle: StyleReader,
+): boolean {
+  const style = readStyle(unit.root);
+  if (!style?.whiteSpace || !NO_WRAP.test(style.whiteSpace)) return false;
+  const appendedInline = unit.kind === 'run' || isFlexOrGrid(unit.root, readStyle);
+  return appendedInline || style.textOverflow === 'ellipsis';
+}
+
 /** A cached getComputedStyle: one read per element per pass. */
 export function createStyleReader(view: Window = window): StyleReader {
   const cache = new WeakMap<Element, LayoutStyle>();
@@ -287,7 +310,13 @@ export function createStyleReader(view: Window = window): StyleReader {
     let style = cache.get(el);
     if (!style) {
       const computed = view.getComputedStyle(el);
-      style = { display: computed.display, position: computed.position, float: computed.cssFloat };
+      style = {
+        display: computed.display,
+        position: computed.position,
+        float: computed.cssFloat,
+        whiteSpace: computed.whiteSpace,
+        textOverflow: computed.textOverflow,
+      };
       cache.set(el, style);
     }
     return style;

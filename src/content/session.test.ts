@@ -2137,3 +2137,49 @@ describe('page session: too-long paragraphs', () => {
     await t.session.stop();
   });
 });
+
+describe('page session: single-line layouts', () => {
+  const style = (el: Element) => (el as HTMLElement).style;
+  const fakeStyles: StyleReader = (el) => {
+    const own = style(el);
+    const display =
+      own.display || (el.tagName === 'DIV' || el.tagName === 'BODY' ? 'block' : 'inline');
+    return {
+      display,
+      whiteSpace: own.whiteSpace || 'normal',
+      textOverflow: own.textOverflow || 'clip',
+    };
+  };
+  const MARKUP =
+    '<div id="c">' +
+    '<div id="nav" style="white-space:nowrap">Pricing Plans Overview <a>Docs</a><div>Nested block</div></div>' +
+    '<div id="row" style="display:flex;white-space:nowrap">Locked flex row text</div>' +
+    '<div class="card" style="overflow:hidden">' +
+    '<div id="title" style="white-space:nowrap;text-overflow:ellipsis;overflow:hidden">Truncated card title</div>' +
+    '<div id="feature" style="display:flex;gap:8px"><svg></svg>Unlimited projects</div>' +
+    '</div>' +
+    '<p id="ellipsis" style="text-overflow:ellipsis">Only ellipsis here, free to wrap.</p>' +
+    '<p id="plain" style="white-space:nowrap">Plain nowrap block paragraph.</p>' +
+    '</div>';
+
+  it('sends nothing for locked units and translates the ordinary ones', async () => {
+    const t = setup(MARKUP, undefined, { createReadStyle: () => fakeStyles });
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls.length).toBeGreaterThan(0));
+    await wait(80);
+    const sent = t.sentTexts().join('\n');
+    expect(sent).not.toContain('Pricing Plans');
+    expect(sent).not.toContain('Locked flex row');
+    expect(sent).not.toContain('Truncated card title');
+    expect(sent).toContain('Nested block');
+    expect(sent).toContain('Unlimited projects');
+    expect(sent).toContain('Only ellipsis here');
+    expect(sent).toContain('Plain nowrap block');
+    expect(t.session.state()).toMatchObject({ failed: 0 });
+    expect(t.session.state().skipped ?? 0).toBe(0);
+    for (const id of ['nav', 'row', 'title']) {
+      expect(document.querySelector(`#${id} et-tr`)).toBeNull();
+    }
+  });
+});

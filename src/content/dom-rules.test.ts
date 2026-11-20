@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { isProtected, protectedAncestor } from './dom-rules';
+import { isProtected, isSingleLineLocked, protectedAncestor, type StyleReader } from './dom-rules';
 
 /** happy-dom's own handle on the window; the page's hostname follows its URL. */
 const setURL = (url: string) =>
@@ -159,5 +159,33 @@ describe('site skips', () => {
   ])('on %s the mock-up is protected: %s', (url, expected) => {
     setURL(url);
     expect(isProtected(figure())).toBe(expected);
+  });
+});
+
+describe('isSingleLineLocked', () => {
+  const root = document.createElement('div');
+  const read =
+    (style: Record<string, string>): StyleReader =>
+    () => ({ display: 'block', ...style });
+
+  it.each([
+    ['a run with nowrap', 'run', { whiteSpace: 'nowrap' }, true],
+    ['a run with pre', 'run', { whiteSpace: 'pre' }, true],
+    ['a flex root with nowrap', 'block', { display: 'flex', whiteSpace: 'nowrap' }, true],
+    ['a grid root with pre', 'block', { display: 'inline-grid', whiteSpace: 'pre' }, true],
+    [
+      'a block with nowrap and ellipsis',
+      'block',
+      { whiteSpace: 'nowrap', textOverflow: 'ellipsis' },
+      true,
+    ],
+    ['a block with only nowrap', 'block', { whiteSpace: 'nowrap' }, false],
+    ['a block with only ellipsis', 'block', { textOverflow: 'ellipsis' }, false],
+    ['a run with pre-wrap', 'run', { whiteSpace: 'pre-wrap' }, false],
+    ['a run with normal white-space', 'run', { whiteSpace: 'normal' }, false],
+    ['a flex root that wraps normally', 'block', { display: 'flex', whiteSpace: 'normal' }, false],
+    ['a run with no white-space known', 'run', {}, false],
+  ] as const)('%s: %s', (_name, kind, style, expected) => {
+    expect(isSingleLineLocked({ kind, root }, read(style))).toBe(expected);
   });
 });
