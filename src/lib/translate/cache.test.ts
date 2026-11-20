@@ -180,8 +180,12 @@ describe('translation cache: hardening', () => {
   it('keeps serving reads while a large eviction runs in batches', async () => {
     const name = `test-${dbName++}`;
     const filler = createTranslationCache({ open: open(name), now: () => 1 });
+    // Batches of 5 instead of 500 keep the shape (many full batches, then a
+    // partial one) at 1/100 of the records. With 6000 records the test spent
+    // over 1s in fake-indexeddb alone and hit the 5s timeout under the parallel
+    // full suite.
     await filler.put(
-      Array.from({ length: 6000 }, (_, i) => ({
+      Array.from({ length: 65 }, (_, i) => ({
         key: `k${String(i).padStart(4, '0')}`,
         text: 'x',
       })),
@@ -190,11 +194,11 @@ describe('translation cache: hardening', () => {
     const cache = createTranslationCache({
       open: openDb,
       now: () => 2,
-      maxBytes: 30_000,
-      targetBytes: 600,
-      // What this test checks is transaction order, asserted below. A short
-      // wall-clock timeout made it flaky: one 500-record batch in
-      // fake-indexeddb can take over 100ms when the whole suite runs in parallel.
+      maxBytes: 300,
+      targetBytes: 60,
+      evictBatchSize: 5,
+      // What this test checks is transaction order, asserted below, so a slow
+      // run must not turn the read into a timed-out miss.
       readTimeoutMs: 60_000,
     });
     await cache.getMany(['warm-up']);
@@ -224,10 +228,11 @@ describe('translation cache: hardening', () => {
     expect(writes.filter((write) => write.done)).toHaveLength(2);
     expect(putSettled).toBe(false);
     await evicting;
-    // 6001 entries of 6 bytes down to 600 bytes, 500 per batch: 12 batches.
+    // 66 entries of 6 bytes down to 60 bytes: 56 go, 5 per batch, so 11 full
+    // batches and a last one of 1.
     expect(writes).toHaveLength(13);
     const stats = await cache.stats();
-    expect(stats.totalBytes).toBeLessThanOrEqual(600);
+    expect(stats.totalBytes).toBeLessThanOrEqual(60);
     expect(stats.totalBytes).toBe(stats.count * 6); // every entry is 6 bytes
   });
 
@@ -347,7 +352,7 @@ describe('translation cache: expired sweep', () => {
     await seed(
       name,
       1,
-      Array.from({ length: 1300 }, (_, i) => ({
+      Array.from({ length: 13 }, (_, i) => ({
         key: `k${String(i).padStart(4, '0')}`,
         text: 'x',
       })),
@@ -358,6 +363,7 @@ describe('translation cache: expired sweep', () => {
       now: () => 1 + 100 * DAY + 1,
       ttlMs: 100 * DAY,
       readTimeoutMs: 60_000,
+      sweepBatchSize: 5, // small batches keep fake-indexeddb fast
     });
     let writes = 0;
     state.onReadwrite = () => {
@@ -365,7 +371,7 @@ describe('translation cache: expired sweep', () => {
     };
     await cache.sweepExpired();
     expect(await cache.stats()).toEqual({ count: 0, totalBytes: 0 });
-    expect(writes).toBe(3); // 500 + 500 + 300
+    expect(writes).toBe(3); // 5 + 5 + 3
   });
 
   it('does not sweep again within 24 hours', async () => {
@@ -397,7 +403,7 @@ describe('translation cache: expired sweep', () => {
     await seed(
       name,
       1,
-      Array.from({ length: 700 }, (_, i) => ({ key: `k${String(i).padStart(4, '0')}`, text: 'x' })),
+      Array.from({ length: 7 }, (_, i) => ({ key: `k${String(i).padStart(4, '0')}`, text: 'x' })),
     );
     const { state, open: openDb } = instrumented(name);
     const time = 1 + 100 * DAY + 1;
@@ -406,6 +412,7 @@ describe('translation cache: expired sweep', () => {
       now: () => time,
       ttlMs: 100 * DAY,
       readTimeoutMs: 60_000,
+      sweepBatchSize: 5, // small batches keep fake-indexeddb fast
     });
     state.failNext = 'InvalidStateError';
     state.failSkip = 1; // first batch goes through, second fails
@@ -413,7 +420,7 @@ describe('translation cache: expired sweep', () => {
     expect(state.failNext).toBeUndefined();
     const db = await openCacheDb(name);
     expect(await db.get('meta', 'sweptAt')).toBeUndefined();
-    expect(await db.count('translations')).toBe(200);
+    expect(await db.count('translations')).toBe(2);
     db.close();
     await cache.sweepExpired(); // retried, not throttled
     expect((await cache.stats()).count).toBe(0);
