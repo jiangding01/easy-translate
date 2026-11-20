@@ -1,5 +1,6 @@
 import type { ConfigV1, Engine, PageMode } from '@/lib/config/types';
 import type { AppError } from '@/lib/errors';
+import type { DetectedLanguages } from '@/lib/languages';
 import type { PortClient, PortRequest } from '@/lib/messaging/port';
 import type {
   PageState,
@@ -20,6 +21,7 @@ import {
 } from './dom-rules';
 import { errorText } from './error-text';
 import { routeKeyOf, watchMutations } from './mutations';
+import { pageIsInLanguage, sampleText } from './page-language';
 import { createRenderer, inViewport, type Renderer } from './render';
 import { injectStyles, removeStyles } from './styles';
 
@@ -47,6 +49,8 @@ export interface SessionDeps {
    * page), the session halts at its next notification; no port error is needed.
    */
   alive?(): boolean;
+  /** `i18n.detectLanguage` for the auto-start language check; rejects when unavailable. */
+  detectLanguage(text: string): Promise<DetectedLanguages>;
   createReadStyle(): StyleReader;
   /** IntersectionObserver with rootMargin 1000px; injectable for tests. */
   createViewport(onChange: (targets: Element[], visible: boolean[]) => void): ViewportObserver;
@@ -66,6 +70,11 @@ export interface SessionDeps {
 
 export interface PageSession {
   start(options?: { engine?: Engine }): Promise<PageState>;
+  /**
+   * "总是翻译此站": starts unless a session is already running or the page is already in
+   * the target language (then nothing starts and nothing is reported).
+   */
+  autoStart(): Promise<PageState>;
   stop(): Promise<PageState>;
   toggle(): Promise<PageState>;
   setMode(mode: PageMode): Promise<PageState>;
@@ -905,6 +914,18 @@ export function createPageSession(deps: SessionDeps): PageSession {
   return {
     start,
     stop,
+    async autoStart() {
+      if (phase !== 'idle') return state();
+      const { language } = await deps.getConfig();
+      const inTarget = await pageIsInLanguage(language.target, {
+        declared: doc.documentElement.lang,
+        sample: () => sampleText(doc.body),
+        detect: deps.detectLanguage,
+      });
+      // Detection is async: the user may have started the page meanwhile.
+      if (inTarget || phase !== 'idle') return state();
+      return start();
+    },
     toggle: () => (phase === 'idle' ? start() : stop()),
     async setMode(mode) {
       if (!renderer || phase === 'idle') return state();

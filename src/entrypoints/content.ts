@@ -1,6 +1,6 @@
 import { browser } from 'wxt/browser';
 import { defineContentScript } from 'wxt/utils/define-content-script';
-import { sampleText, startIfRemembered } from '@/content/auto-start';
+import { startIfRemembered } from '@/content/auto-start';
 import { createBootstrap } from '@/content/bootstrap';
 import { loadRuntime } from '@/content/loader';
 import {
@@ -94,11 +94,7 @@ export default defineContentScript({
     startIfRemembered({
       origin: location.origin,
       readMemory: async () => (await browser.storage.local.get(SITE_MEMORY_KEY))[SITE_MEMORY_KEY],
-      getConfig,
-      declared: document.documentElement.lang,
-      sample: () => sampleText(document.body),
-      detect: (text) => browser.i18n.detectLanguage(text),
-      start: () => bootstrap.startIfIdle(),
+      start: () => bootstrap.autoStart(),
     }).catch(() => {
       // Storage unavailable, extension reloaded or runtime failed to load: stay untouched.
     });

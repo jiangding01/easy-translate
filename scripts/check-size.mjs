@@ -46,7 +46,9 @@ const entries = [
     // `userMessage`), so the old headroom would hide it creeping back. Raise explicitly,
     // never quietly. Raised to 25KB (2026-11-19, user approved, pre-release polish) when the
     // status-note layout rule (one line, not squeezed in a flex box) took it to 24.03KB.
-    budget: 25 * KB,
+    // Raised to 27KB (2026-11-20, user approved, M3b plan): the auto-start language check
+    // moved here from the content script, then the in-page shortcuts follow.
+    budget: 27 * KB,
     files: runtimeFiles('page-runtime'),
   },
   {

@@ -49,8 +49,11 @@ export interface BootstrapDeps {
 const CONTEXT_INVALIDATED = /context invalidated/i;
 
 export interface Bootstrap {
-  /** Starts a session unless one is already running; the auto-start entry point. */
-  startIfIdle(): Promise<void>;
+  /**
+   * Loads the page runtime and lets it start unless the page is already in the target
+   * language or a session is already running; the auto-start entry point.
+   */
+  autoStart(): Promise<void>;
   /** Shows the selection dot, loading the selection runtime on first use; never throws. */
   showDot(selection: SelectionSnapshot): void;
   /** Removes the dot; does nothing when the selection runtime was never loaded. */
@@ -205,9 +208,8 @@ export function createBootstrap(deps: BootstrapDeps): Bootstrap {
         });
     },
     hideDot,
-    async startIfIdle() {
-      const session = await load();
-      if (session.state().phase === 'idle') await session.start();
+    async autoStart() {
+      await (await load()).autoStart();
     },
   };
 }

@@ -62,7 +62,7 @@ PR2 增补（2026-11-18 用户同意，开工时随 PR2 方案一起审查）：
 22. 快速「停止 → 再开始」：最终处于翻译中且无错误。
 23. Google 200 但部分句子原样回显：自动重试并拿到译文。
 24. 段落加载态（随 `feat/paragraph-loading` 提前完成）：新增 `tests/e2e/loading.e2e.test.ts` 4 条（慢回包出现加载点后换成译文；失败后重试立即出现加载点；视口上方插入不移动视口内段落；圆点不改变一行段落高度）；`harness.ts` 的 Google mock 支持返回 Promise，用来延迟回包。e2e 现为 24 通过、2 跳过（macOS）。方案见 `docs/plans/paragraph-loading.md`。
-然后把 e2e job 设为必过。
+然后把 e2e job 设为必过（已完成，2026-11-20）。
 
 ## 留给单测或手工（不进 e2e）
 - 单测：429 后自动放慢（依赖真实退避计时）、设置页繁体预览示例。
@@ -113,6 +113,6 @@ revert 整个 PR；不改扩展源码，不涉及数据。
 ### CI 首跑需确认
 - `setup-chrome` 装的必须是 Chrome for Testing（158.0.8127.36），品牌版 Chrome 137 起忽略 `--load-extension`。
 - 首跑还要确认 Linux 下 `--no-sandbox` 与两条 `--lang` 回退用例能跑通。两条 `--lang` 用例同时设置了 `LANGUAGE` 环境变量（Linux 版 Chrome 可能按环境变量而不是 `--lang` 取界面语言），本机 macOS 跳过这两条，未实测。
-- 设为必过的条件：偶发失败修复后，e2e 连续约 10 次未经重试全绿（以 CI 的 `::warning::` 注解为准），由用户在 `main` 规则集的 required status checks 中加入 `e2e`。
+- 设为必过的条件：偶发失败修复后，e2e 连续约 10 次未经重试全绿（以 CI 的 `::warning::` 注解为准），由用户在 `main` 规则集的 required status checks 中加入 `e2e`。**已完成**：2026-11-20 经用户授权加入（此前 CI 连续 13 次完成运行 e2e 全绿且无重试告警），现必过 check、dependency-review、analyze、e2e。
 
 相关评审核实见 [`docs/reviews/2026-11-18-codex-review-verification.md`](../reviews/2026-11-18-codex-review-verification.md)。

@@ -69,7 +69,7 @@ jobs:
           retention-days: 7
 
   # Smoke e2e: the built extension in a real Chrome for Testing (docs/plans/e2e-smoke.md).
-  # To be made required in the main ruleset after about 10 consecutive green runs with no retries.
+  # Required in the main ruleset since 2026-11-20 (13 consecutive green runs with no retries).
   e2e:
     needs: check
     runs-on: ubuntu-latest

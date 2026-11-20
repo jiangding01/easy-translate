@@ -32,6 +32,7 @@ function fakeSession() {
   const listeners = new Set<(state: PageState) => void>();
   const session = {
     start: vi.fn(async () => state),
+    autoStart: vi.fn(async () => state),
     stop: vi.fn(async () => state),
     toggle: vi.fn(async () => state),
     setMode: vi.fn(async () => state),
