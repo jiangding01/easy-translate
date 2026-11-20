@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Layout safety fixture</title>
+    <!--
+      Manual check for the single-line layout guard (docs/plans/m3b.md, section 2). Content
+      scripts run on http(s) only, so serve this folder:
+        python3 -m http.server 8765 --directory tests/fixtures
+      then open http://localhost:8765/layout-safety.html with the dev build loaded.
+      Translate the page: the nowrap navigation row and the truncated card title stay as they
+      are (no translation added); the card feature, the ellipsis-only paragraph and the plain
+      nowrap paragraph are translated as usual.
+    -->
+    <style>
+      body {
+        margin: 0;
+        padding: 24px 16px 64px;
+        font: 16px/1.6 system-ui, -apple-system, sans-serif;
+        color: #222;
+      }
+      .nav {
+        white-space: nowrap;
+      }
+      .rounded-xl {
+        border-radius: 12px;
+        border: 1px solid #ccc;
+        padding: 12px;
+        width: 260px;
+        overflow: hidden;
+      }
+      .truncate {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .features {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .features li {
+        display: flex;
+        gap: 8px;
+      }
+      .ellipsis-only {
+        text-overflow: ellipsis;
+      }
+      .nowrap-block {
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="nav" id="nav">Pricing and plans overview <a href="#">Documentation</a><div>Navigation sub heading text</div></nav>
+    <div class="rounded-xl">
+      <div class="truncate" id="title">Quarterly subscription title that is long</div>
+      <ul class="features">
+        <li id="feature"><svg width="12" height="12" aria-hidden="true"></svg>Unlimited projects</li>
+      </ul>
+    </div>
+    <p class="ellipsis-only" id="ellipsis">This paragraph has an ellipsis style only, so it wraps normally.</p>
+    <p class="nowrap-block" id="plain">This plain paragraph has nowrap but no ellipsis.</p>
+  </body>
+</html>

@@ -12,6 +12,7 @@ import { createPacer, discoverUnits, type Unit } from './discover';
 import {
   ISLE_TAG,
   isInlineElement,
+  isSingleLineLocked,
   OWN_TAG,
   protectedAncestor,
   SELECTION_TAG,
@@ -318,6 +319,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
   function want(unit: Unit): boolean {
     // Too long: counted and marked in the page, never sent (before any cache lookup).
     if (unit.skipped) return false;
+    // The author pinned it to one line: no request, no loading dots, no count.
+    if (isSingleLineLocked(unit, readStyle)) return false;
     if (
       queued.has(unit) ||
       sent.has(unit) ||
