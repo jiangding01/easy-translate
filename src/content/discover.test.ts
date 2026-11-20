@@ -345,4 +345,14 @@ describe('oversized paragraphs', () => {
     expect(unit?.skipped).toBeUndefined();
     expect(unit?.seg.text.length).toBeLessThan(100);
   });
+
+  it('skips blocks without prose once code and icons are left out', async () => {
+    expect(await units('<p><code>npm install</code></p>')).toEqual([]);
+    expect(await units('<p><span role="img" aria-label="rocket">Rocket</span> 3</p>')).toEqual([]);
+    expect(await units('<p><code>x</code> <code>y</code></p>')).toEqual([]);
+  });
+
+  it('sends the text without leading separators', async () => {
+    expect(await units('<p>•› Model</p>')).toEqual([{ kind: 'block', root: 'P', text: 'Model' }]);
+  });
 });

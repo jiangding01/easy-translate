@@ -52,7 +52,7 @@ function defaultYield(): Promise<void> {
 function makeUnit(kind: Unit['kind'], root: Element, nodes: Node[]): Unit | undefined {
   if (nodes.length === 0) return undefined;
   const seg = segment(nodes);
-  const verdict = classifyText(seg.plain, seg.text.length);
+  const verdict = classifyText(seg.prose, seg.text.length);
   if (verdict === 'noise') return undefined;
   return verdict === 'long'
     ? { kind, root, nodes, seg, skipped: 'long' }

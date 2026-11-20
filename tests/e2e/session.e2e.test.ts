@@ -277,6 +277,23 @@ describe('session', () => {
     h.assertNoErrors();
   });
 
+  it('sends nothing for a block that holds only code', async () => {
+    await h.openPage('e2e-article.html');
+    await h.evaluate(`(() => {
+      document.body.innerHTML = '<div id="box">'
+        + '<p id="code"><code>zeppelincode --flag</code></p>'
+        + '<p id="plain">A short ordinary paragraph about the harbour.</p>'
+        + '</div>';
+    })()`);
+    await h.tell('page.toggle');
+    await waitFor(async () => (await state()).translated >= 1, {
+      message: 'the ordinary paragraph to be translated',
+    });
+    expect(h.google.texts.some((text) => text.includes('zeppelincode'))).toBe(false);
+    expect(await h.evaluate<boolean>(`!!document.querySelector('#code > et-tr')`)).toBe(false);
+    h.assertNoErrors();
+  });
+
   it('marks a paragraph too long to translate, counts it, and never sends its text', async () => {
     await h.openPage('e2e-article.html');
     const marker = 'zeppelinmarker';
