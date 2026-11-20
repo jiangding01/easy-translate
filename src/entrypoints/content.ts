@@ -2,6 +2,7 @@ import { browser } from 'wxt/browser';
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import { startIfRemembered } from '@/content/auto-start';
 import { createBootstrap } from '@/content/bootstrap';
+import { createHoldWatch } from '@/content/hold/watch';
 import { loadRuntime } from '@/content/loader';
 import {
   PAGE_RUNTIME_KEY,
@@ -15,9 +16,9 @@ import type { ConfigV1 } from '@/lib/config/types';
 import { onMessage, sendMessage } from '@/lib/messaging/protocol';
 import { SITE_MEMORY_KEY } from '@/lib/site-memory';
 
-// Runs on every page. The resident part is only the selection watcher (a few listeners
-// and cheap checks, content/selection/watch): until a dot or card is wanted it builds no
-// Port and writes no DOM. The page runtime (session, scanner, renderer) and the selection
+// Runs on every page. The resident part is only the selection and hold-key watchers (a few
+// listeners and cheap checks, content/selection/watch and content/hold/watch): until a dot,
+// a card or a toggle is wanted it builds no Port and writes no DOM. The page runtime (session, scanner, renderer) and the selection
 // runtime (dot, card) are separate files imported on first use; this entry only routes
 // messages (content/bootstrap).
 
@@ -78,7 +79,10 @@ export default defineContentScript({
         hasFocus: () => document.hasFocus(),
         // `runtime.id` is unset once the extension is updated or reloaded.
         alive: () => browser.runtime?.id !== undefined,
-        onContextLost: () => selectionWatch.stop(),
+        onContextLost: () => {
+          selectionWatch.stop();
+          holdWatch.stop();
+        },
       },
     });
 
@@ -90,6 +94,13 @@ export default defineContentScript({
       onClear: () => bootstrap.hideDot(),
     });
     selectionWatch.start();
+
+    // Holding Ctrl over a paragraph toggles it, inside a running page session only.
+    const holdWatch = createHoldWatch({
+      doc: document,
+      onHold: (point) => bootstrap.holdToggle(point),
+    });
+    holdWatch.start();
 
     startIfRemembered({
       origin: location.origin,

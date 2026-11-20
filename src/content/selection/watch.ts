@@ -37,7 +37,8 @@ export interface SelectionWatchDeps {
   onClear(): void;
 }
 
-function isOwnNode(node: Node | null): boolean {
+/** Inside the page isle or the selection card (shared with the hold watch). */
+export function isOwnNode(node: Node | null): boolean {
   for (let current = node; current; current = current.parentNode) {
     if (current.nodeName === ISLE_TAG || current.nodeName === SELECTION_TAG) return true;
   }
@@ -45,7 +46,7 @@ function isOwnNode(node: Node | null): boolean {
 }
 
 /** The focused element, looked for inside open shadow roots (closed ones stop at the host). */
-function deepActiveElement(doc: Document): Element | null {
+export function deepActiveElement(doc: Document): Element | null {
   let active = doc.activeElement;
   for (
     let inner = active?.shadowRoot?.activeElement;

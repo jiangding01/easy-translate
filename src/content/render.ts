@@ -66,6 +66,8 @@ export interface Renderer {
   isFailed(unit: Unit): boolean;
   /** The unit's source is still in the page with the same text (it may be hidden for now). */
   isCurrent(unit: Unit): boolean;
+  /** The unit whose translation or note `el` is. */
+  unitOf(el: Element): Unit | undefined;
   /** Units whose translation is no longer in the page (framework re-render). */
   detached(): Unit[];
   /** A translation this renderer took out of the page itself: not a change to react to. */
@@ -499,6 +501,7 @@ export function createRenderer(options: RenderOptions): Renderer {
     has,
     isFailed: (unit) => rendered.get(unit)?.failed === true,
     isCurrent: (unit) => stillSame(unit),
+    unitOf: (el) => [...rendered.values()].find((record) => record.el === el)?.unit,
 
     removedByUs: (node) => removedOurselves.has(node),
 

@@ -14,6 +14,7 @@ import {
   ISLE_TAG,
   isInlineElement,
   isSingleLineLocked,
+  isSkipped,
   OWN_TAG,
   protectedAncestor,
   SELECTION_TAG,
@@ -79,6 +80,12 @@ export interface PageSession {
   toggle(): Promise<PageState>;
   setMode(mode: PageMode): Promise<PageState>;
   retryFailed(): PageState;
+  /**
+   * Hold-to-toggle: the paragraph at this viewport point is restored (and left alone until
+   * the user stops) if translated, else translated at once, a failed one retried. Ignored
+   * outside a running session and until the first scan is registered.
+   */
+  toggleAt(point: { x: number; y: number }): Promise<void>;
   state(): PageState;
   /**
    * Called with the current state at most once per frame after anything visible changed.
@@ -99,6 +106,8 @@ const LOOP_LIMIT = 3;
 const VIEWPORT_CHUNK = 500;
 const LOADING_DELAY_MS = 600;
 const LOADING_SCAN_MS = 300;
+/** A held paragraph's block is not scanned past this much text. */
+const HOLD_BLOCK_CHARS = 20_000;
 
 /** Engine-level problems: shown once, the session pauses instead of failing every paragraph. */
 export function isEngineLevel(error: AppError): boolean {
@@ -146,6 +155,14 @@ export function createPageSession(deps: SessionDeps): PageSession {
   let nextId = 0;
   let inFlight = 0;
   let stopping: Promise<unknown> | undefined;
+  /** Elements changed during the first scan, held until it is registered; undefined after. */
+  let held: Element[] | undefined;
+  /**
+   * "Not this paragraph" (hold-to-toggle): source texts by unit root, since a rescan makes
+   * new Unit objects. Kept across rescans; a user stop forgets them.
+   */
+  let excluded = new WeakMap<Element, Set<string>>();
+  const isExcluded = (unit: Unit) => excluded.get(unit.root)?.has(unit.seg.text) === true;
 
   const unitsByRoot = new Map<Element, Unit[]>();
   const ids = new Map<Unit, string>();
@@ -324,12 +341,15 @@ export function createPageSession(deps: SessionDeps): PageSession {
     scheduleRender();
   }
 
-  /** A unit came into range: render from memory, or queue it for the network. */
-  function want(unit: Unit): boolean {
+  /**
+   * A unit came into range (or the reader held Ctrl over it: `chosen` skips the single-line
+   * rule): render from memory, or queue it for the network.
+   */
+  function want(unit: Unit, chosen = false): boolean {
     // Too long: counted and marked in the page, never sent (before any cache lookup).
-    if (unit.skipped) return false;
+    if (unit.skipped || isExcluded(unit)) return false;
     // The author pinned it to one line: no request, no loading dots, no count.
-    if (isSingleLineLocked(unit, readStyle)) return false;
+    if (!chosen && isSingleLineLocked(unit, readStyle)) return false;
     if (
       queued.has(unit) ||
       sent.has(unit) ||
@@ -340,9 +360,9 @@ export function createPageSession(deps: SessionDeps): PageSession {
     ) {
       return false;
     }
-    const known = translations.get(unit.seg.text);
-    if (known !== undefined) {
-      queueRender(unit, known);
+    const cached = translations.get(unit.seg.text);
+    if (cached !== undefined) {
+      queueRender(unit, cached);
       return false;
     }
     if (pending.has(unit)) return false;
@@ -378,8 +398,10 @@ export function createPageSession(deps: SessionDeps): PageSession {
       if (current !== epoch || !renderer) return;
       const batch = toRender.splice(0);
       for (const { unit } of batch) queued.delete(unit);
-      if (batch.length === 0) return;
-      void renderer.insert(batch).then((stale) => {
+      // Held away while it waited: the translation stays in memory only.
+      const ready = batch.filter(({ unit }) => !isExcluded(unit));
+      if (ready.length === 0) return;
+      void renderer.insert(ready).then((stale) => {
         if (current !== epoch) return;
         for (const unit of stale) {
           forget(unit);
@@ -498,6 +520,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
         if (!unit) return;
         sent.delete(unit);
         if ('error' in chunk) {
+          // Held away while it was out: nothing to show, nothing to resend.
+          if (isExcluded(unit)) return;
           if (isEngineLevel(chunk.error)) engineFailed(chunk.error, [unit], used);
           else markFailed(unit, chunk.error);
           return;
@@ -604,20 +628,46 @@ export function createPageSession(deps: SessionDeps): PageSession {
     report();
   }
 
+  /** The reader just asked for it (retry, hold): its dot shows at once, not after the delay. */
+  function showNow(unit: Unit) {
+    if (renderer && !engineError && !shown.has(unit)) {
+      shown.add(unit);
+      void renderer.showLoading(unit);
+    }
+  }
+
   function retry(units: Unit[]) {
     if (halted) return;
     for (const unit of units) {
       failed.delete(unit);
       pending.add(unit);
       if (!wantedAt.has(unit)) wantedAt.set(unit, now());
-      // The reader just pressed the button: feedback at once, the failure note swaps for the dot.
-      if (renderer && !engineError && !shown.has(unit)) {
-        shown.add(unit);
-        void renderer.showLoading(unit);
-      }
+      // The failure note swaps for the dot.
+      showNow(unit);
     }
     ensureScan();
     scheduleFlush(true);
+  }
+
+  /** The nearest block: a rescan's area, or a held paragraph's. */
+  function blockOf(element: Element): Element | null {
+    let el: Element | null = element;
+    while (el && el !== doc.body && isInlineElement(el, readStyle)) el = el.parentElement;
+    return el;
+  }
+
+  /**
+   * The registered unit a freshly discovered one stands for (same root, shape and text,
+   * still in the page), so its translation and state carry over; `kept` ones are taken.
+   */
+  function known(unit: Unit, kept?: Set<Unit>): Unit | undefined {
+    return (unitsByRoot.get(unit.root) ?? []).find(
+      (other) =>
+        !kept?.has(other) &&
+        other.kind === unit.kind &&
+        other.seg.text === unit.seg.text &&
+        renderer?.isCurrent(other) === true,
+    );
   }
 
   /** Re-discovers changed areas; keeps units whose text and nodes are unchanged. */
@@ -629,8 +679,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
       // Drafts only enter units through discovery, so blocking here is enough; existing
       // units are left alone so the editor's DOM is not touched while the user types.
       if (protectedAncestor(element, doc.body)) continue;
-      let el: Element | null = element;
-      while (el && el !== doc.body && isInlineElement(el, readStyle)) el = el.parentElement;
+      const el = blockOf(element);
       if (el?.isConnected) roots.add(el);
     }
     for (const root of roots) {
@@ -644,13 +693,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
       const kept = new Set<Unit>();
       const fresh: Unit[] = [];
       for (const unit of found) {
-        const existing = (unitsByRoot.get(unit.root) ?? []).find(
-          (known) =>
-            !kept.has(known) &&
-            known.kind === unit.kind &&
-            known.seg.text === unit.seg.text &&
-            renderer?.isCurrent(known) === true,
-        );
+        const existing = known(unit, kept);
         if (existing) kept.add(existing);
         else fresh.push(unit);
       }
@@ -835,7 +878,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
       // a container it has already passed would otherwise be seen by nobody. Dirty
       // elements are held until the scan is registered, then rescanned in one go
       // (rescanning during the scan would register the same text twice).
-      let held: Element[] | undefined = [];
+      held = [];
       stopWatching = watch({
         root: doc.body,
         isOwn,
@@ -862,7 +905,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
       // checks) rather than rescan or flush with an extension that is gone.
       notify();
       if (current !== epoch) return state();
-      const dirty = held;
+      const dirty = held ?? [];
       held = undefined;
       if (dirty.length > 0) {
         readStyle = deps.createReadStyle();
@@ -896,6 +939,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
     const sheetToRemove = sheet;
     sheet = undefined;
     clearState();
+    excluded = new WeakMap();
     phase = 'idle';
     engine = undefined;
     deps.reportStatus('idle');
@@ -911,9 +955,78 @@ export function createPageSession(deps: SessionDeps): PageSession {
     return state();
   }
 
+  async function toggleAt({ x, y }: { x: number; y: number }) {
+    if (!renderer || phase === 'idle' || halted || held) return;
+    const current = epoch;
+    const range = doc.caretRangeFromPoint(x, y);
+    let hit = range?.startContainer;
+    // Between an element's children (a mixed block): the child at the caret.
+    if (range && hit?.nodeType === 1) {
+      hit = hit.childNodes[range.startOffset] ?? hit.lastChild ?? hit;
+    }
+    const el = hit?.nodeType === 1 ? (hit as Element) : hit?.parentElement;
+    if (!hit || !el || !doc.body.contains(el)) return;
+    const contains = (unit: Unit) => unit.nodes.some((node) => node.contains(hit));
+    /** The registered unit holding the point (an unchanged one, or any). */
+    const holder = (unchanged: boolean) => {
+      for (let node: Element | null = el; node; node = node.parentElement) {
+        const found = unitsByRoot
+          .get(node)
+          ?.find((it) => contains(it) && (!unchanged || renderer?.isCurrent(it)));
+        if (found) return found;
+      }
+    };
+    // On a translation (or failure note): the unit it belongs to.
+    const own = el.closest(OWN_TAG);
+    let unit = own ? renderer.unitOf(own) : undefined;
+    /** Registered just now by the catch-up rescan: pending there is not "on its way". */
+    let fresh = false;
+    if (!own) {
+      // The whole-page scan's rules, so a held paragraph is one the scan could find.
+      for (let node: Element | null = el; node && node !== doc.body; node = node.parentElement) {
+        if (isSkipped(node)) return;
+      }
+      // That unit, whatever the layout says now (a span may have become a block since).
+      unit = holder(true);
+      if (!unit) {
+        const block = blockOf(el);
+        if (!block) return;
+        // Source text only: translations would double a translated block's length.
+        let size = block.textContent?.length ?? 0;
+        for (const tr of block.querySelectorAll(OWN_TAG)) size -= tr.textContent?.length ?? 0;
+        if (size > HOLD_BLOCK_CHARS) return;
+        // The page changed since the last rescan: catch up (the same reconciliation, old
+        // units go and new ones register), then take the unit that holds the point now.
+        await rescan([block]);
+        if (current !== epoch) return;
+        unit = holder(false);
+        fresh = true;
+      }
+    }
+    if (!unit) return;
+    const { root, seg } = unit;
+    if (renderer.has(unit) || queued.has(unit) || (!fresh && unfinished(unit))) {
+      // Translated, about to be, or on its way: restore it and leave it alone.
+      for (const set of [pending, sent, waiting, queued]) set.delete(unit);
+      release(unit);
+      renderer.drop(unit);
+      excluded.set(root, (excluded.get(root) ?? new Set()).add(seg.text));
+    } else if (failed.has(unit)) retry([unit]);
+    else {
+      excluded.get(root)?.delete(seg.text);
+      // Pending already when the catch-up rescan found it in range.
+      if (want(unit, true) || pending.has(unit)) {
+        showNow(unit);
+        scheduleFlush(true);
+      }
+    }
+    report();
+  }
+
   return {
     start,
     stop,
+    toggleAt,
     async autoStart() {
       if (phase !== 'idle') return state();
       const { language } = await deps.getConfig();

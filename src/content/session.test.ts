@@ -2243,3 +2243,361 @@ describe('page session: autoStart', () => {
     expect(detectLanguage).not.toHaveBeenCalled();
   });
 });
+
+describe('page session: toggleAt (hold Ctrl over a paragraph)', () => {
+  const POINT = { x: 10, y: 10 };
+  const doc = document as unknown as { caretRangeFromPoint?: (x: number, y: number) => unknown };
+  /** happy-dom has no layout: the "point" resolves to the given node. */
+  const pointAt = (node: Node | null | undefined, startOffset = 0) => {
+    doc.caretRangeFromPoint = () => (node ? { startContainer: node, startOffset } : null);
+  };
+  /** A framework re-render: the element's first text node swapped for a new one. */
+  const replaceFirstText = (selector: string, data?: string) => {
+    const el = document.querySelector(selector) as Element;
+    const old = el.firstChild as Text;
+    const fresh = document.createTextNode(data ?? old.data);
+    el.replaceChild(fresh, old);
+    return fresh;
+  };
+  /** Answers every request as it comes until `count` translations are in the page. */
+  async function answerAll(t: ReturnType<typeof setup>, count: number) {
+    const answered = new Set<Call>();
+    await vi.waitFor(() => {
+      for (const call of t.port.calls) {
+        if (answered.has(call)) continue;
+        answered.add(call);
+        call.answer();
+      }
+      expect(translations()).toHaveLength(count);
+    });
+  }
+  const MIXED =
+    '<div id="d">Run text before the box. <div id="inner">Inner block text here.</div></div>';
+  const textOf = (selector: string) => document.querySelector(selector)?.firstChild;
+  const loadingDots = () => document.querySelectorAll('et-tr[data-et-state="loading"]').length;
+
+  afterEach(() => {
+    delete doc.caretRangeFromPoint;
+    vi.restoreAllMocks();
+  });
+
+  async function translated(markup: string, extra: Partial<SessionDeps> = {}) {
+    const t = setup(markup, undefined, extra);
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    t.port.calls[0]?.answer();
+    await vi.waitFor(() => expect(translations().length).toBeGreaterThan(0));
+    return t;
+  }
+
+  it('removes a translation, and neither the viewport nor a rescan brings it back', async () => {
+    const t = await translated('<p id="a">First paragraph text.</p><p>Second paragraph text.</p>');
+    pointAt(textOf('#a'));
+    await t.session.toggleAt(POINT);
+    expect(translations()).toEqual(['译:Second paragraph text.']);
+    expect(t.session.state().translated).toBe(1);
+    // In range again, and the page changes around it: rescanned, still left alone.
+    t.show();
+    document.body.insertAdjacentHTML('beforeend', '<p>Third paragraph text.</p>');
+    await vi.waitFor(() => expect(t.observed.length).toBeGreaterThan(2));
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(2));
+    expect(t.port.calls[1]?.payload.items.map((item) => item.text)).toEqual([
+      'Third paragraph text.',
+    ]);
+    t.port.calls[1]?.answer();
+    await vi.waitFor(() => expect(translations()).toHaveLength(2));
+    await wait();
+    expect(translations()).toEqual(['译:Second paragraph text.', '译:Third paragraph text.']);
+    expect(document.querySelector('#a et-tr')).toBeNull();
+  });
+
+  it('brings a removed paragraph back on the next hold, from memory', async () => {
+    const t = await translated('<p id="a">First paragraph text.</p>');
+    pointAt(textOf('#a'));
+    await t.session.toggleAt(POINT);
+    expect(translations()).toEqual([]);
+    await t.session.toggleAt(POINT);
+    await vi.waitFor(() => expect(translations()).toEqual(['译:First paragraph text.']));
+    expect(t.port.calls).toHaveLength(1);
+    expect(t.session.state().translated).toBe(1);
+  });
+
+  it('treats a hold on the translation like a hold on its source', async () => {
+    const t = await translated('<p id="a">First paragraph text.</p>');
+    pointAt(document.querySelector('#a et-tr')?.firstChild ?? document.querySelector('#a et-tr'));
+    await t.session.toggleAt(POINT);
+    expect(translations()).toEqual([]);
+    expect(t.session.state().translated).toBe(0);
+  });
+
+  it('retries a failed paragraph at once', async () => {
+    const t = setup('<p id="a">Fails once paragraph.</p>');
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    const call = t.port.calls[0] as Call;
+    call.onChunk?.({
+      id: call.payload.items[0]?.id ?? '',
+      error: appError('provider', 'provider/bad-response', 'bad'),
+    });
+    call.finish({ status: 'done', data: { total: 1, failed: 1 } });
+    await vi.waitFor(() =>
+      expect(document.querySelector('et-tr[data-et-state="error"]')).not.toBeNull(),
+    );
+    pointAt(textOf('#a'));
+    await t.session.toggleAt(POINT);
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(2));
+    expect(t.session.state().failed).toBe(0);
+    t.port.calls[1]?.answer();
+    await vi.waitFor(() => expect(translations()).toEqual(['译:Fails once paragraph.']));
+  });
+
+  it('translates a paragraph the viewport has not reached yet, with its dot at once', async () => {
+    const t = setup('<p>First paragraph text.</p><p id="b">Far below paragraph.</p>');
+    await t.session.start();
+    t.show(t.observed.slice(0, 1));
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    pointAt(textOf('#b'));
+    await t.session.toggleAt(POINT);
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(2));
+    expect(t.port.calls[1]?.payload.items.map((item) => item.text)).toEqual([
+      'Far below paragraph.',
+    ]);
+    // Not after the 600 ms delay, and not only for paragraphs the observer reported.
+    await vi.waitFor(
+      () => expect(document.querySelector('#b et-tr[data-et-state]')).not.toBeNull(),
+      {
+        timeout: 300,
+      },
+    );
+    expect(loadingDots()).toBe(1);
+  });
+
+  it('translates a paragraph the single-line rule skipped', async () => {
+    const styles: StyleReader = (el) => ({
+      display: (el as HTMLElement).style.display || (el.tagName === 'DIV' ? 'block' : 'inline'),
+      whiteSpace: (el as HTMLElement).style.whiteSpace || 'normal',
+      textOverflow: (el as HTMLElement).style.textOverflow || 'clip',
+    });
+    const t = setup(
+      '<p>Ordinary paragraph text.</p>' +
+        '<div id="row" style="display:flex;white-space:nowrap">Locked flex row text</div>',
+      undefined,
+      { createReadStyle: () => styles },
+    );
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    expect(t.sentTexts()).toEqual(['Ordinary paragraph text.']);
+    pointAt(textOf('#row'));
+    await t.session.toggleAt(POINT);
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(2));
+    expect(t.port.calls[1]?.payload.items.map((item) => item.text)).toEqual([
+      'Locked flex row text',
+    ]);
+  });
+
+  it('leaves a too-long paragraph alone', async () => {
+    const t = setup(`<p id="long">${'word '.repeat(1100)}</p>`);
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() =>
+      expect(document.querySelector('et-tr[data-et-state="skipped"]')).not.toBeNull(),
+    );
+    pointAt(textOf('#long'));
+    await t.session.toggleAt(POINT);
+    await wait();
+    expect(t.port.calls).toHaveLength(0);
+    expect(loadingDots()).toBe(0);
+    expect(document.querySelector('et-tr[data-et-state="skipped"]')).not.toBeNull();
+  });
+
+  it('does nothing in a protected area', async () => {
+    const t = setup(
+      '<p>Ordinary paragraph text.</p>' +
+        '<div class="notranslate"><p id="kept">Protected paragraph text.</p></div>' +
+        '<div translate="no"><div><p id="no">Another protected text.</p></div></div>',
+    );
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    for (const selector of ['#kept', '#no']) {
+      pointAt(textOf(selector));
+      await t.session.toggleAt(POINT);
+    }
+    await wait();
+    expect(t.port.calls).toHaveLength(1);
+    expect(loadingDots()).toBe(0);
+  });
+
+  it('ignores holds while the first scan is still registering units', async () => {
+    // A first scan that stalls at its first yield until the test lets it go on.
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => {
+      clock += 100;
+      return clock;
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal('scheduler', { yield: () => gate });
+    try {
+      const filler = '<span>x</span>'.repeat(200);
+      const t = setup(`<p id="a">Held during the scan.</p><div>${filler}</div>`);
+      const started = t.session.start();
+      await vi.waitFor(() => expect(document.querySelector('style[data-et]')).not.toBeNull());
+      await wait(20);
+      pointAt(textOf('#a'));
+      await t.session.toggleAt(POINT);
+      release();
+      await started;
+      await wait();
+      // Nothing sent before the viewport reports: the hold registered nothing of its own.
+      expect(t.port.calls).toHaveLength(0);
+      t.show();
+      await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+      expect(t.sentTexts().filter((text) => text === 'Held during the scan.')).toHaveLength(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does nothing when the session is not running', async () => {
+    const t = setup('<p id="a">First paragraph text.</p>');
+    pointAt(textOf('#a'));
+    await t.session.toggleAt(POINT);
+    expect(t.port.calls).toHaveLength(0);
+    expect(document.querySelector('et-tr')).toBeNull();
+  });
+
+  it('forgets removed paragraphs on stop: a new start translates them again', async () => {
+    const t = await translated('<p id="a">First paragraph text.</p>');
+    pointAt(textOf('#a'));
+    await t.session.toggleAt(POINT);
+    expect(translations()).toEqual([]);
+    await t.session.stop();
+    await t.session.start();
+    t.show();
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(2));
+    t.port.calls[1]?.answer();
+    await vi.waitFor(() => expect(translations()).toEqual(['译:First paragraph text.']));
+  });
+
+  it('a span that became a block since the scan: no second translation', async () => {
+    const displays = new Map<Element, string>();
+    const styles: StyleReader = (el) => ({
+      display:
+        displays.get(el) ?? (el.tagName === 'DIV' || el.tagName === 'BODY' ? 'block' : 'inline'),
+    });
+    const t = await translated(
+      '<div id="d">Text before <span id="s">the inner span text</span> and after.</div>',
+      { createReadStyle: () => styles },
+    );
+    // A stylesheet change: no mutation, only the computed display differs now.
+    displays.set(document.getElementById('s') as Element, 'block');
+    pointAt(textOf('#s'));
+    for (let round = 0; round < 2; round += 1) {
+      await t.session.toggleAt(POINT);
+      await wait();
+      expect(document.querySelectorAll('et-tr:not([data-et-state])').length).toBeLessThanOrEqual(1);
+    }
+    expect(t.port.calls).toHaveLength(1);
+  });
+
+  it('cancels a paragraph whose request is out: its reply is not shown', async () => {
+    const t = setup('<p>First paragraph text.</p><p id="b">Far below paragraph.</p>');
+    await t.session.start();
+    t.show(t.observed.slice(0, 1));
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(1));
+    pointAt(textOf('#b'));
+    await t.session.toggleAt(POINT);
+    await vi.waitFor(() => expect(t.port.calls).toHaveLength(2));
+    await vi.waitFor(() => expect(loadingDots()).toBe(1));
+    await t.session.toggleAt(POINT);
+    expect(loadingDots()).toBe(0);
+    t.port.calls[1]?.answer();
+    await wait();
+    expect(document.querySelector('#b et-tr')).toBeNull();
+    expect(t.session.state()).toMatchObject({ translated: 0, failed: 0 });
+  });
+
+  it('cancels a re-rendered run that is about to come back from memory', async () => {
+    const t = await translated(MIXED);
+    await vi.waitFor(() => expect(translations()).toHaveLength(2));
+    // The framework swaps the run's text node; the hold comes before the page's own rescan.
+    pointAt(replaceFirstText('#d'));
+    await t.session.toggleAt(POINT);
+    await wait(100);
+    expect(document.querySelector('#d > et-tr')).toBeNull();
+    expect(translations()).toEqual(['译:Inner block text here.']);
+  });
+
+  it('keeps a restored run untranslated after the framework swaps its text node', async () => {
+    const t = await translated(MIXED);
+    await vi.waitFor(() => expect(translations()).toHaveLength(2));
+    pointAt(textOf('#d'));
+    await t.session.toggleAt(POINT);
+    expect(document.querySelector('#d > et-tr')).toBeNull();
+    const rounds = t.dirtyRounds.length;
+    replaceFirstText('#d');
+    await vi.waitFor(() => expect(t.dirtyRounds.length).toBeGreaterThan(rounds));
+    await wait(100);
+    // Keyed by root and text, not by Unit: the rescan's new unit is left alone too.
+    expect(document.querySelector('#d > et-tr')).toBeNull();
+    expect(t.port.calls).toHaveLength(1);
+  });
+
+  it('takes the child at the caret when the caret is between children of a mixed block', async () => {
+    const t = setup(
+      '<div id="d">First run text here. <div>Inner block text here.</div> Second run text here.</div>',
+    );
+    await t.session.start();
+    t.show();
+    await answerAll(t, 3);
+    const second = () => translations().some((text) => text?.includes('Second run'));
+    const d = document.getElementById('d') as Element;
+    // The caret sits before the second run's text node (translations count as children too).
+    pointAt(d, [...d.childNodes].indexOf(d.lastChild?.previousSibling as ChildNode));
+    await t.session.toggleAt(POINT);
+    expect(second()).toBe(false);
+    expect(translations().some((text) => text?.includes('First run'))).toBe(true);
+    // Past the last child: the last one.
+    pointAt(d, 99);
+    await t.session.toggleAt(POINT);
+    await vi.waitFor(() => expect(second()).toBe(true));
+  });
+
+  it('shows the dot at once for new text the catch-up rescan already queued', async () => {
+    const t = await translated(MIXED);
+    await vi.waitFor(() => expect(translations()).toHaveLength(2));
+    // New text in a root already in range: the catch-up rescan makes it pending itself.
+    const added = document.createTextNode(' A second run text now.');
+    document.getElementById('d')?.append(added);
+    pointAt(added);
+    await t.session.toggleAt(POINT);
+    await vi.waitFor(
+      () => expect(document.querySelector('#d > et-tr[data-et-state="loading"]')).not.toBeNull(),
+      { timeout: 300 },
+    );
+    await vi.waitFor(() => expect(t.sentTexts()).toContain('A second run text now.'));
+  });
+
+  it('counts only the source text toward the block limit, not its translations', async () => {
+    const big = (word: string) => `<p>${`${word} `.repeat(600)}</p>`;
+    const t = setup(
+      `<div id="d">Run text before the box. ${big('alpha')}${big('beta')}${big('gamma')}</div>`,
+    );
+    await t.session.start();
+    t.show();
+    await answerAll(t, 4);
+    // Source about 15 000 characters, with translations over 30 000.
+    expect(document.getElementById('d')?.textContent?.length).toBeGreaterThan(20_000);
+    pointAt(replaceFirstText('#d'));
+    await t.session.toggleAt(POINT);
+    await wait(100);
+    expect(document.querySelector('#d > et-tr')).toBeNull();
+  });
+});

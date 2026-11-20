@@ -38,8 +38,8 @@ export interface BootstrapDeps {
      */
     alive?(): boolean;
     /**
-     * The context is gone for good: stop watching the selection. Called once; a loaded
-     * selection runtime is then told to hide its dot.
+     * The context is gone for good: stop watching the selection and the hold key. Called
+     * once; a loaded selection runtime is then told to hide its dot.
      */
     onContextLost?(): void;
   };
@@ -58,6 +58,11 @@ export interface Bootstrap {
   showDot(selection: SelectionSnapshot): void;
   /** Removes the dot; does nothing when the selection runtime was never loaded. */
   hideDot(): void;
+  /**
+   * Ctrl was held over this viewport point: toggles the paragraph there, but only inside a
+   * running page session. Never loads the page runtime.
+   */
+  holdToggle(point: { x: number; y: number }): void;
 }
 
 export function createBootstrap(deps: BootstrapDeps): Bootstrap {
@@ -208,6 +213,17 @@ export function createBootstrap(deps: BootstrapDeps): Bootstrap {
         });
     },
     hideDot,
+    holdToggle(point) {
+      if (isContextLost()) return;
+      sessionPromise
+        ?.then((session) => {
+          const { phase, halted } = session.state();
+          if (phase !== 'idle' && !halted) return session.toggleAt(point);
+        })
+        .catch(() => {
+          // A failed load was already reported; a toggle is a convenience.
+        });
+    },
     async autoStart() {
       await (await load()).autoStart();
     },

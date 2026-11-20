@@ -36,7 +36,8 @@ const entries = [
     name: 'content',
     // First-screen bootstrap and selection watcher; the session and the card live in the
     // on-demand modules below. Raised from 6KB in M3a (selection watch, approved).
-    budget: 7 * KB,
+    // Raised to 7.5KB (2026-11-20, user approved, M3b plan): the hold-to-toggle watch.
+    budget: 7.5 * KB,
     files: manifest.content_scripts?.flatMap((script) => script.js ?? []) ?? [],
   },
   {
