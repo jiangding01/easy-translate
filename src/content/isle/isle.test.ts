@@ -37,6 +37,7 @@ function fakeSession() {
     toggle: vi.fn(async () => state),
     setMode: vi.fn(async () => state),
     retryFailed: vi.fn(() => state),
+    toggleAt: vi.fn(async () => {}),
     state: () => state,
     subscribe(listener: (state: PageState) => void) {
       listeners.add(listener);

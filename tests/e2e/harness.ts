@@ -123,6 +123,8 @@ export interface Harness {
   reloadExtension(): Promise<void>;
   /** A trusted click (CDP input) at a selector's centre or at viewport coordinates. */
   trustedClick(target: string | Point): Promise<void>;
+  /** A raw trusted input event (CDP `Input.dispatchKeyEvent` / `Input.dispatchMouseEvent`). */
+  input(method: 'Input.dispatchKeyEvent' | 'Input.dispatchMouseEvent', params: Json): Promise<void>;
   errors: string[];
   unmocked: string[];
   assertNoErrors(): void;
@@ -705,6 +707,9 @@ async function start(
           page(),
         );
       }
+    },
+    async input(method, params) {
+      await cdp.send(method, params, page());
     },
     assertNoErrors() {
       const problems = [...errors, ...unmocked.map((url) => `unmocked request: ${url}`)];

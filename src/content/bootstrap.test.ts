@@ -17,8 +17,15 @@ type Handler = (message: { data?: unknown }) => Promise<Result<unknown>>;
 
 function fakeSession() {
   let phase: PageState['phase'] = 'idle';
+  let halted = false;
   const events: string[] = [];
-  const snapshot = (): PageState => ({ phase, mode: 'bilingual', translated: 0, failed: 0 });
+  const snapshot = (): PageState => ({
+    phase,
+    mode: 'bilingual',
+    translated: 0,
+    failed: 0,
+    ...(halted ? { halted: true as const } : {}),
+  });
   const session: PageSession = {
     start: vi.fn(async () => {
       events.push('start');
@@ -41,10 +48,19 @@ function fakeSession() {
     }),
     setMode: vi.fn(async (mode) => ({ ...snapshot(), mode })),
     retryFailed: vi.fn(snapshot),
+    toggleAt: vi.fn(async () => {
+      events.push('toggleAt');
+    }),
     state: vi.fn(snapshot),
     subscribe: vi.fn(() => () => {}),
   };
-  return { session, events };
+  return {
+    session,
+    events,
+    halt: () => {
+      halted = true;
+    },
+  };
 }
 
 const runtime: PageRuntimeDeps = {
@@ -258,6 +274,59 @@ describe('autoStart', () => {
     expect(load).toHaveBeenCalledOnce();
     expect(session.autoStart).toHaveBeenCalledOnce();
     expect(session.start).not.toHaveBeenCalled();
+  });
+});
+
+describe('holdToggle', () => {
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const point = { x: 12, y: 34 };
+
+  it('without a session does not load the runtime', async () => {
+    const { bootstrap, load, session } = setup();
+    bootstrap.holdToggle(point);
+    await flush();
+    expect(load).not.toHaveBeenCalled();
+    expect(session.toggleAt).not.toHaveBeenCalled();
+  });
+
+  it('with an idle session (stopped) does nothing', async () => {
+    const { bootstrap, send, session, load } = setup();
+    await send('page.start');
+    await send('page.stop');
+    bootstrap.holdToggle(point);
+    await flush();
+    expect(session.toggleAt).not.toHaveBeenCalled();
+    expect(load).toHaveBeenCalledOnce();
+  });
+
+  it('with a halted session does nothing', async () => {
+    const { bootstrap, send, session, halt } = setup();
+    await send('page.start');
+    halt();
+    bootstrap.holdToggle(point);
+    await flush();
+    expect(session.toggleAt).not.toHaveBeenCalled();
+  });
+
+  it('with a running session toggles at the point', async () => {
+    const { bootstrap, send, session, load } = setup();
+    await send('page.start');
+    bootstrap.holdToggle(point);
+    await flush();
+    expect(session.toggleAt).toHaveBeenCalledWith(point);
+    expect(load).toHaveBeenCalledOnce();
+  });
+
+  it('once the extension context is gone, stops the watches and does nothing', async () => {
+    const onContextLost = vi.fn();
+    let alive = true;
+    const { bootstrap, send, session } = setup(undefined, { alive: () => alive, onContextLost });
+    await send('page.start');
+    alive = false;
+    bootstrap.holdToggle(point);
+    await flush();
+    expect(onContextLost).toHaveBeenCalledOnce();
+    expect(session.toggleAt).not.toHaveBeenCalled();
   });
 });
 
