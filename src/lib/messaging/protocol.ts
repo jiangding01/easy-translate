@@ -59,6 +59,11 @@ export interface PageState {
   engine?: Engine;
   /** Set once the session stopped for good (extension context invalidated); absent otherwise. */
   halted?: true;
+  /**
+   * Only paragraphs the reader held Ctrl over are translated: no isle, no status dot, the
+   * panel still offers to translate the page. Absent for a whole-page session and when idle.
+   */
+  scope?: 'units';
 }
 
 /** One row of the page isle's engine list. A whitelist: no key material, URL or model. */

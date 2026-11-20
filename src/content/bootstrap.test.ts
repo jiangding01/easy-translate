@@ -281,21 +281,55 @@ describe('holdToggle', () => {
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
   const point = { x: 12, y: 34 };
 
-  it('without a session does not load the runtime', async () => {
+  it('without a session loads the runtime and toggles at the point (held paragraphs only)', async () => {
     const { bootstrap, load, session } = setup();
     bootstrap.holdToggle(point);
-    await flush();
-    expect(load).not.toHaveBeenCalled();
-    expect(session.toggleAt).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(session.toggleAt).toHaveBeenCalledWith(point));
+    expect(load).toHaveBeenCalledOnce();
   });
 
-  it('with an idle session (stopped) does nothing', async () => {
+  it('two holds while the runtime loads: one load, both reach the session, nothing thrown', async () => {
+    let finish!: (create: PageRuntimeFactory) => void;
+    const { bootstrap, load, session } = setup(
+      () =>
+        new Promise<PageRuntimeFactory>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    bootstrap.holdToggle(point);
+    bootstrap.holdToggle(point);
+    await flush();
+    expect(load).toHaveBeenCalledOnce();
+    finish(() => session);
+    await vi.waitFor(() => expect(session.toggleAt).toHaveBeenCalledTimes(2));
+    expect(load).toHaveBeenCalledOnce();
+  });
+
+  it('a failed load throws nothing, and the next hold loads again', async () => {
+    let attempt = 0;
+    const holder: { session?: PageSession } = {};
+    const { bootstrap, load, session } = setup(async () => {
+      attempt += 1;
+      if (attempt === 1) throw new Error('Failed to fetch');
+      return () => holder.session as PageSession;
+    });
+    holder.session = session;
+    bootstrap.holdToggle(point);
+    await vi.waitFor(() => expect(load).toHaveBeenCalledOnce());
+    await flush();
+    expect(session.toggleAt).not.toHaveBeenCalled();
+    bootstrap.holdToggle(point);
+    await vi.waitFor(() => expect(session.toggleAt).toHaveBeenCalledWith(point));
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('with an idle session (stopped) toggles at the point too', async () => {
     const { bootstrap, send, session, load } = setup();
     await send('page.start');
     await send('page.stop');
     bootstrap.holdToggle(point);
     await flush();
-    expect(session.toggleAt).not.toHaveBeenCalled();
+    expect(session.toggleAt).toHaveBeenCalledWith(point);
     expect(load).toHaveBeenCalledOnce();
   });
 

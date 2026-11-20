@@ -2,8 +2,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type Harness, launch, trackTests, waitFor } from './harness';
 import { type Ok, type PageState, prepare } from './support';
 
-// M3b PR4: holding Ctrl over a paragraph of a translated page toggles that paragraph. Real
-// key and mouse events through CDP; the gesture's finer rules are unit-tested (hold/watch).
+// M3b PR4: holding Ctrl over a paragraph of a translated page toggles that paragraph; PR5:
+// with no page session it translates the held paragraph alone. Real key and mouse events
+// through CDP; the gesture's finer rules are unit-tested (hold/watch).
 
 let h: Harness;
 trackTests(() => h);
@@ -113,5 +114,52 @@ describe('hold Ctrl to toggle a paragraph', () => {
     expect(await translationsIn('#intro')).toBe(0);
     expect(await translationsIn('#linked')).toBe(1);
     h.assertNoErrors();
+  });
+});
+
+describe('hold Ctrl with no page session', () => {
+  const isle = () => h.evaluate<boolean>(`!!document.documentElement.querySelector('et-isle')`);
+  /** Whether #intro still has the very translation node marked before growing. */
+  const sameIntroTranslation = () =>
+    h.evaluate<boolean>(`(() => {
+      const copies = document.querySelectorAll('#intro > et-tr:not([data-et-state])');
+      return copies.length === 1 && copies[0].getAttribute('data-e2e-mark') === '1';
+    })()`);
+
+  /** Holds over #intro with no session: that paragraph alone, no isle. */
+  async function heldIntro() {
+    await h.openPage('e2e-article.html');
+    await hold('#intro', 1);
+    await sleep(300);
+    expect(await translationsIn('#linked')).toBe(0);
+    expect(await h.evaluate<number>(`document.querySelectorAll('et-tr').length`)).toBe(1);
+    expect(await isle()).toBe(false);
+    expect(await state()).toMatchObject({ phase: 'done', translated: 1, scope: 'units' });
+    await h.evaluate(`document.querySelector('#intro > et-tr').setAttribute('data-e2e-mark', '1')`);
+  }
+
+  async function grown() {
+    await waitFor(
+      async () => (await state()).translated >= 8 && (await translationsIn('#linked')),
+      {
+        message: 'the first screen to be translated',
+      },
+    );
+    expect(await sameIntroTranslation()).toBe(true);
+    expect((await state()).scope).toBeUndefined();
+    await waitFor(isle, { message: 'the isle once the whole page is translated' });
+    h.assertNoErrors();
+  }
+
+  it('translates the held paragraph alone, with no isle; the page shortcut then grows it', async () => {
+    await heldIntro();
+    await h.tell('page.toggle');
+    await grown();
+  });
+
+  it('grows the same way from the panel\'s "translate this page" (page.start)', async () => {
+    await heldIntro();
+    expect(await h.tell<Ok<PageState>>('page.start', {})).toMatchObject({ ok: true });
+    await grown();
   });
 });

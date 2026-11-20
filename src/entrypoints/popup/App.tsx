@@ -30,6 +30,7 @@ import { useTheme } from '@/styles/theme';
 import { type ActivePage, inspectActivePage } from './inspect-page';
 import {
   failedText,
+  pageActive,
   pausedReason,
   skippedText,
   usePageSession,
@@ -108,7 +109,7 @@ export function App() {
   const start = async (engine?: Engine) => {
     if (report(await session.start(engine))) window.close();
   };
-  const active = session.state !== undefined && session.state.phase !== 'idle';
+  const active = pageActive(session.state);
   const canAlways =
     page?.origin !== undefined && view.kind !== 'native' && (active || view.kind === 'foreign');
 

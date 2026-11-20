@@ -22,6 +22,8 @@ export interface PageState {
   skipped?: number;
   /** Set while the session is paused on an engine-level error. */
   engineError?: { code: string };
+  /** 'units' while only held paragraphs are translated. */
+  scope?: string;
 }
 
 /** What a page message resolves to when it worked. */

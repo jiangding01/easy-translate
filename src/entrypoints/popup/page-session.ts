@@ -39,6 +39,11 @@ export function skippedText(count: number): string {
   return i18n.t('common.skippedCount', count, [count.toLocaleString(uiLocale())]);
 }
 
+/** A whole-page session is on; held paragraphs alone ('units') still offer "翻译此页". */
+export function pageActive(state: PageState | undefined): state is PageState {
+  return state !== undefined && state.phase !== 'idle' && state.scope !== 'units';
+}
+
 export interface PageSessionControls {
   state: PageState | undefined;
   start(engine?: Engine): Promise<Result<PageState>>;
@@ -72,7 +77,7 @@ export function usePageSession(tabId: number | undefined): PageSessionControls {
   }, [run]);
 
   // While translating, follow progress; stops by itself once done or closed.
-  const running = state?.phase === 'running';
+  const running = pageActive(state) && state.phase === 'running';
   useEffect(() => {
     if (!running) return;
     const timer = setInterval(() => {

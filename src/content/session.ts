@@ -82,8 +82,9 @@ export interface PageSession {
   retryFailed(): PageState;
   /**
    * Hold-to-toggle: the paragraph at this viewport point is restored (and left alone until
-   * the user stops) if translated, else translated at once, a failed one retried. Ignored
-   * outside a running session and until the first scan is registered.
+   * the user stops) if translated, else translated at once, a failed one retried. With no
+   * session it starts one for held paragraphs only (`scope: 'units'`). Ignored once halted
+   * and until a page session's first scan is registered.
    */
   toggleAt(point: { x: number; y: number }): Promise<void>;
   state(): PageState;
@@ -137,6 +138,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
 
   let epoch = 0;
   let phase: PageState['phase'] = 'idle';
+  /** 'units': held paragraphs only, no page scan; a start or toggle grows it into the page. */
+  let scope: 'units' | 'page' = 'page';
   let halted = false;
   let engine: Engine | undefined;
   let engineError: AppError | undefined;
@@ -230,7 +233,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
     ensureScan();
     if (phase === 'idle' || halted) return;
     phase = pending.size > 0 || inFlight > 0 || waiting.size > 0 ? 'running' : 'done';
-    deps.reportStatus(status());
+    // Held paragraphs alone leave the toolbar dot off.
+    if (scope === 'page') deps.reportStatus(status());
   }
 
   function state(): PageState {
@@ -251,6 +255,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
       engine,
       ...(skipped > 0 ? { skipped } : {}),
       ...(halted ? { halted: true as const } : {}),
+      ...(scope === 'units' ? { scope } : {}),
     };
   }
 
@@ -375,7 +380,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
   function register(units: Unit[]) {
     let added = false;
     for (const unit of units) {
-      if (abandoned.has(unit.seg.text)) continue;
+      // Held paragraphs alone: a too-long one is not marked (the page scan does that).
+      if (abandoned.has(unit.seg.text) || (unit.skipped && scope === 'units')) continue;
       const list = unitsByRoot.get(unit.root);
       if (list) list.push(unit);
       else {
@@ -396,10 +402,11 @@ export function createPageSession(deps: SessionDeps): PageSession {
     renderTimer = setTimeout(() => {
       renderTimer = undefined;
       if (current !== epoch || !renderer) return;
-      const batch = toRender.splice(0);
-      for (const { unit } of batch) queued.delete(unit);
-      // Held away while it waited: the translation stays in memory only.
-      const ready = batch.filter(({ unit }) => !isExcluded(unit));
+      // Held away while it waited: the translation stays in memory only. Forgotten
+      // meanwhile (no longer queued): its source changed, nothing goes in.
+      const ready = toRender
+        .splice(0)
+        .filter(({ unit }) => queued.delete(unit) && !isExcluded(unit));
       if (ready.length === 0) return;
       void renderer.insert(ready).then((stale) => {
         if (current !== epoch) return;
@@ -621,6 +628,11 @@ export function createPageSession(deps: SessionDeps): PageSession {
   }
 
   function pause(error: AppError, units: Unit[]) {
+    // Held paragraphs alone have no island to say it: each paragraph's failure note does.
+    if (scope === 'units') {
+      for (const unit of units) markFailed(unit, error);
+      return;
+    }
     if (!engineError) engineError = error;
     for (const unit of units) pending.add(unit);
     // No reply is coming and the island shows the error: no dots until the pause is lifted.
@@ -670,6 +682,33 @@ export function createPageSession(deps: SessionDeps): PageSession {
     );
   }
 
+  /**
+   * Units found again in `root` keep their registered selves (and translations); the rest
+   * of the area's old units go, new ones register. Old units in this area that were not
+   * found again: their text changed, their shape changed (a run became a block), or they
+   * left. Only a root that was not rediscovered at all may be merely hidden (a dialog marks
+   * the page aria-hidden or inert for a while): its still-present, unchanged units are kept.
+   */
+  function settle(root: Element, found: Unit[]) {
+    const kept = new Set<Unit>();
+    const fresh = found.filter((unit) => {
+      const existing = known(unit, kept);
+      if (existing) kept.add(existing);
+      return !existing;
+    });
+    const foundRoots = new Set(found.map((unit) => unit.root));
+    for (const [unitRoot, units] of [...unitsByRoot]) {
+      if (unitRoot.isConnected && !root.contains(unitRoot)) continue;
+      const mayBeHidden = unitRoot.isConnected && !foundRoots.has(unitRoot);
+      for (const unit of [...units]) {
+        if (kept.has(unit)) continue;
+        if (mayBeHidden && renderer?.isCurrent(unit)) continue;
+        forget(unit);
+      }
+    }
+    register(fresh);
+  }
+
   /** Re-discovers changed areas; keeps units whose text and nodes are unchanged. */
   async function rescan(elements: Element[]) {
     if (!renderer || phase === 'idle' || halted) return;
@@ -690,28 +729,7 @@ export function createPageSession(deps: SessionDeps): PageSession {
         cancelled: () => current !== epoch,
       });
       if (current !== epoch) return;
-      const kept = new Set<Unit>();
-      const fresh: Unit[] = [];
-      for (const unit of found) {
-        const existing = known(unit, kept);
-        if (existing) kept.add(existing);
-        else fresh.push(unit);
-      }
-      // Old units in this area that were not found again: their text changed, their
-      // shape changed (a run became a block), or they left. Only a root that was not
-      // rediscovered at all may be merely hidden (a dialog marks the page aria-hidden
-      // or inert for a while): its still-present, unchanged units are kept.
-      const foundRoots = new Set(found.map((unit) => unit.root));
-      for (const [unitRoot, units] of [...unitsByRoot]) {
-        if (unitRoot.isConnected && !root.contains(unitRoot)) continue;
-        const mayBeHidden = unitRoot.isConnected && !foundRoots.has(unitRoot);
-        for (const unit of [...units]) {
-          if (kept.has(unit)) continue;
-          if (mayBeHidden && renderer.isCurrent(unit)) continue;
-          forget(unit);
-        }
-      }
-      register(fresh);
+      settle(root, found);
     }
     // Translations a framework threw away come back from memory, a few times at most.
     for (const unit of renderer.detached()) {
@@ -812,8 +830,11 @@ export function createPageSession(deps: SessionDeps): PageSession {
     return begin(options);
   }
 
-  async function begin(options: { engine?: Engine }): Promise<PageState> {
+  async function begin(options: { engine?: Engine }, units = false): Promise<PageState> {
     if (halted) return state();
+    // Held paragraphs alone grow into the page in place: their translations and
+    // requests carry on (no clearState, no new epoch).
+    const grow = phase !== 'idle' && scope === 'units' && !units;
     if (
       options.engine !== undefined &&
       phase !== 'idle' &&
@@ -826,14 +847,37 @@ export function createPageSession(deps: SessionDeps): PageSession {
       retry([...failed]);
       scheduleFlush(true);
       notify();
-      return state();
+      if (!grow) return state();
     }
-    if (phase !== 'idle') return state();
-    epoch += 1;
+    if (phase !== 'idle' && !grow) return state();
+    if (!grow) epoch += 1;
     const current = epoch;
     // A failed start (config unreadable) leaves nothing behind, but only its own: a
     // stale start failing late must not stop the session that replaced it.
     try {
+      if (grow) {
+        // Running from this moment: the isle and the dot must not take it for done.
+        scope = 'page';
+        phase = 'running';
+        held = [];
+        notify();
+        deps.reportStatus('running');
+        const { language } = await deps.getConfig();
+        if (current !== epoch) return state();
+        // Other languages since (or the held session is still setting up): the held
+        // translations go, the page starts anew.
+        if (
+          !stopWatching ||
+          language.target !== config?.language.target ||
+          language.source !== config.language.source
+        ) {
+          await stop();
+          return await begin(options);
+        }
+        readStyle = deps.createReadStyle();
+        return await scan(current);
+      }
+      scope = units ? 'units' : 'page';
       clearState();
       phase = 'running';
       notify();
@@ -841,14 +885,25 @@ export function createPageSession(deps: SessionDeps): PageSession {
       if (stopping) await stopping;
       if (current !== epoch) return state();
       engine = options.engine;
-      deps.reportStatus('running');
+      if (!units) deps.reportStatus('running');
       // Subscribe before reading: a change made while the config loads or the page is
       // scanned must not be lost. Only the style follows the setting live; language and
       // engine stay fixed for the session so one page never mixes two target languages.
       // Until the renderer exists a new style is only remembered.
       let style: ConfigV1['page']['style'] | undefined;
       stopWatchingConfig = deps.watchConfig?.((next) => {
-        if (current !== epoch || next.page.style === style) return;
+        if (current !== epoch) return;
+        // Held paragraphs alone follow the settings: other languages end them, another
+        // default engine takes the next requests.
+        if (scope === 'units' && config) {
+          const { target, source } = next.language;
+          if (target !== config.language.target || source !== config.language.source) {
+            void stop();
+            return;
+          }
+          engine = next.translation.engine;
+        }
+        if (next.page.style === style) return;
         style = next.page.style;
         renderer?.setStyle(style);
       });
@@ -872,13 +927,13 @@ export function createPageSession(deps: SessionDeps): PageSession {
       if (current !== epoch) return state();
       // The mode now comes from the config, not the default: push it right away.
       notify();
-      viewport = deps.createViewport(onViewportChunked);
       win.addEventListener('scroll', onScroll, { capture: true, passive: true });
       // Watch before the initial scan: the scan yields to the page, and content added to
       // a container it has already passed would otherwise be seen by nobody. Dirty
       // elements are held until the scan is registered, then rescanned in one go
       // (rescanning during the scan would register the same text twice).
-      held = [];
+      // A start that came while this one was setting up scans the page: hold for it.
+      held = scope === 'page' ? [] : undefined;
       stopWatching = watch({
         root: doc.body,
         isOwn,
@@ -891,32 +946,51 @@ export function createPageSession(deps: SessionDeps): PageSession {
           }
           // Fresh computed styles for each round: cached ones go stale on live pages.
           readStyle = deps.createReadStyle();
-          void rescan(elements);
+          // Held paragraphs alone: nothing new is found, changed ones lose their translation.
+          if (scope === 'units') prune();
+          else void rescan(elements);
         },
       });
-      const units = await discoverUnits(doc.body, {
-        readStyle,
-        pace: createPacer(),
-        cancelled: () => current !== epoch,
-      });
-      if (current !== epoch) return state();
-      register(units);
-      // The extension may have gone while the page was being scanned: halt now (notify
-      // checks) rather than rescan or flush with an extension that is gone.
-      notify();
-      if (current !== epoch) return state();
-      const dirty = held ?? [];
-      held = undefined;
-      if (dirty.length > 0) {
-        readStyle = deps.createReadStyle();
-        void rescan(dirty);
-      }
-      scheduleFlush(true);
-      return state();
+      return units ? state() : await scan(current);
     } catch (error) {
       if (current === epoch) await stop();
       throw error;
     }
+  }
+
+  /** The page scan: every unit registers, and held paragraphs keep their translation. */
+  async function scan(current: number): Promise<PageState> {
+    viewport = deps.createViewport(onViewportChunked);
+    for (const root of unitsByRoot.keys()) viewport.observe(root);
+    const found = await discoverUnits(doc.body, {
+      readStyle,
+      pace: createPacer(),
+      cancelled: () => current !== epoch,
+    });
+    if (current !== epoch) return state();
+    settle(doc.body, found);
+    // The extension may have gone while the page was being scanned: halt now (notify
+    // checks) rather than rescan or flush with an extension that is gone.
+    notify();
+    if (current !== epoch) return state();
+    const dirty = held ?? [];
+    held = undefined;
+    if (dirty.length > 0) {
+      readStyle = deps.createReadStyle();
+      void rescan(dirty);
+    }
+    scheduleFlush(true);
+    return state();
+  }
+
+  /** Held paragraphs alone: a translation whose source changed or was thrown away goes. */
+  function prune() {
+    if (!renderer || halted) return;
+    for (const units of [...unitsByRoot.values()]) {
+      for (const unit of [...units]) if (!renderer.isCurrent(unit)) forget(unit);
+    }
+    for (const unit of renderer.detached()) forget(unit);
+    report();
   }
 
   async function stop(): Promise<PageState> {
@@ -942,7 +1016,9 @@ export function createPageSession(deps: SessionDeps): PageSession {
     excluded = new WeakMap();
     phase = 'idle';
     engine = undefined;
-    deps.reportStatus('idle');
+    // Held paragraphs alone never lit the dot.
+    if (scope === 'page') deps.reportStatus('idle');
+    scope = 'page';
     renderer = undefined;
     notify();
     const done = (async () => {
@@ -955,9 +1031,18 @@ export function createPageSession(deps: SessionDeps): PageSession {
     return state();
   }
 
+  /** The block a held paragraph is looked for in, unless it holds too much source text. */
+  function holdBlock(el: Element): Element | undefined {
+    const block = blockOf(el);
+    if (!block) return;
+    // Source text only: translations would double a translated block's length.
+    let size = block.textContent?.length ?? 0;
+    for (const tr of block.querySelectorAll(OWN_TAG)) size -= tr.textContent?.length ?? 0;
+    if (size <= HOLD_BLOCK_CHARS) return block;
+  }
+
   async function toggleAt({ x, y }: { x: number; y: number }) {
-    if (!renderer || phase === 'idle' || halted || held) return;
-    const current = epoch;
+    if (halted) return;
     const range = doc.caretRangeFromPoint(x, y);
     let hit = range?.startContainer;
     // Between an element's children (a mixed block): the child at the caret.
@@ -966,6 +1051,22 @@ export function createPageSession(deps: SessionDeps): PageSession {
     }
     const el = hit?.nodeType === 1 ? (hit as Element) : hit?.parentElement;
     if (!hit || !el || !doc.body.contains(el)) return;
+    // On a translation (or failure note): the unit it belongs to.
+    const own = el.closest(OWN_TAG);
+    if (!own) {
+      // The whole-page scan's rules, so a held paragraph is one the scan could find.
+      for (let node: Element | null = el; node && node !== doc.body; node = node.parentElement) {
+        if (isSkipped(node)) return;
+      }
+    }
+    // No session yet: one for held paragraphs only, if there is a paragraph to look for.
+    const began = phase === 'idle';
+    if (began) {
+      if (own || !holdBlock(el)) return;
+      await begin({}, true);
+    }
+    if (!renderer || phase === 'idle' || halted || held) return;
+    const current = epoch;
     const contains = (unit: Unit) => unit.nodes.some((node) => node.contains(hit));
     /** The registered unit holding the point (an unchanged one, or any). */
     const holder = (unchanged: boolean) => {
@@ -976,25 +1077,15 @@ export function createPageSession(deps: SessionDeps): PageSession {
         if (found) return found;
       }
     };
-    // On a translation (or failure note): the unit it belongs to.
-    const own = el.closest(OWN_TAG);
     let unit = own ? renderer.unitOf(own) : undefined;
     /** Registered just now by the catch-up rescan: pending there is not "on its way". */
     let fresh = false;
     if (!own) {
-      // The whole-page scan's rules, so a held paragraph is one the scan could find.
-      for (let node: Element | null = el; node && node !== doc.body; node = node.parentElement) {
-        if (isSkipped(node)) return;
-      }
       // That unit, whatever the layout says now (a span may have become a block since).
       unit = holder(true);
       if (!unit) {
-        const block = blockOf(el);
+        const block = holdBlock(el);
         if (!block) return;
-        // Source text only: translations would double a translated block's length.
-        let size = block.textContent?.length ?? 0;
-        for (const tr of block.querySelectorAll(OWN_TAG)) size -= tr.textContent?.length ?? 0;
-        if (size > HOLD_BLOCK_CHARS) return;
         // The page changed since the last rescan: catch up (the same reconciliation, old
         // units go and new ones register), then take the unit that holds the point now.
         await rescan([block]);
@@ -1003,7 +1094,11 @@ export function createPageSession(deps: SessionDeps): PageSession {
         fresh = true;
       }
     }
-    if (!unit) return;
+    if (!unit) {
+      // Begun for nothing (a too-long paragraph, say): leave no trace.
+      if (began) await stop();
+      return;
+    }
     const { root, seg } = unit;
     if (renderer.has(unit) || queued.has(unit) || (!fresh && unfinished(unit))) {
       // Translated, about to be, or on its way: restore it and leave it alone.
@@ -1028,7 +1123,8 @@ export function createPageSession(deps: SessionDeps): PageSession {
     stop,
     toggleAt,
     async autoStart() {
-      if (phase !== 'idle') return state();
+      // Held paragraphs alone grow into the page like a start.
+      if (phase !== 'idle' && scope !== 'units') return state();
       const { language } = await deps.getConfig();
       const inTarget = await pageIsInLanguage(language.target, {
         declared: doc.documentElement.lang,
@@ -1036,10 +1132,11 @@ export function createPageSession(deps: SessionDeps): PageSession {
         detect: deps.detectLanguage,
       });
       // Detection is async: the user may have started the page meanwhile.
-      if (inTarget || phase !== 'idle') return state();
+      if (inTarget || (phase !== 'idle' && scope !== 'units')) return state();
       return start();
     },
-    toggle: () => (phase === 'idle' ? start() : stop()),
+    // Held paragraphs alone: the page shortcut or menu grows them into the page.
+    toggle: () => (phase === 'idle' || scope === 'units' ? start() : stop()),
     async setMode(mode) {
       if (!renderer || phase === 'idle') return state();
       await renderer.setMode(mode);
